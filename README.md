@@ -264,6 +264,7 @@ npm install
 | `instances.js` | Extra SillyTavern servers (free port, start/stop), the read-only filter and in-page shim, a browser session per instance |
 | `fonts/` | Bundled pixel fonts (Pixelify Sans, VT323) with their OFL licenses |
 | `icon.ico` / `icon.png` | App icon (`.ico` is used by Windows and the build; `.png` is the source image) |
+| `splash.bmp` | Shown by the portable exe while it unpacks itself (build resource, not part of the app) |
 | `package.json` | App metadata and electron-builder config |
 
 ### Gotchas (read before changing things)
@@ -274,6 +275,9 @@ npm install
 - **Stopping the server on Windows** needs `taskkill /PID <pid> /T /F` to also kill the processes SillyTavern starts.
 - **The SillyTavern window is a `BaseWindow` with views**, not a `BrowserWindow`. Views aren't owned by the window: close their `webContents` when it closes (see `shell.js`).
 - **Tabs take over the page Electron prepared for `window.open`** (`createWindow` in `lockToServer`, then `adoptTab` in `shell.js`). A fresh page would break `window.opener`, and extensions write into the `about:blank` page they open. Tabs also set `outlivesOpener: true`; by default Electron closes opened pages together with their opener.
+- **The portable exe unpacks itself on every launch** (that's most of its startup time; the app itself starts in about half a second). Keep the build small: `electronLanguages` drops Chromium's other translations, and `splash.bmp` shows while it unpacks.
+- **Links leaving SillyTavern go through `openExternalSafe`** in `main.js`: only `http`, `https` and `mailto` are handed to Windows. Other protocols (`file:`, `ms-…:`, `search-ms:`) could start programs.
+- **Server output is split into lines with `onLines`** (`maintenance.js`): chunks can end in the middle of a line or of an emoji.
 - **SillyTavern's session cookie is named after the PC, not the port**, and cookies ignore ports. Two servers on `127.0.0.1` in one browser session overwrite each other's login/CSRF session, so every extra instance gets its own session (`partitionFor()` in `instances.js`).
 - **Read-only = allow-list.** `READ_POSTS` lists the POST routes SillyTavern uses to read; anything else that isn't a GET is blocked, including routes SillyTavern adds later. If a read breaks in read-only tabs after a SillyTavern update, add its route there.
 - **`isFullScreen()` lags behind the `enter-full-screen` event** on Windows; `shell.js` tracks full screen from the events instead.

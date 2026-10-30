@@ -68,8 +68,10 @@ function loadSettings() {
         return { ...DEFAULT_SETTINGS };
     }
 }
+// Write then rename: a crash mid-write must not wipe the settings.
 function saveSettings(s) {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 4));
+    fs.writeFileSync(`${SETTINGS_FILE}.tmp`, JSON.stringify(s, null, 4));
+    fs.renameSync(`${SETTINGS_FILE}.tmp`, SETTINGS_FILE);
 }
 let settings = loadSettings();
 let userscriptsDir = path.join(USER_DATA, 'userscripts');
@@ -84,13 +86,7 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
     app.quit();
 } else {
-    app.on('second-instance', () => {
-        const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes('launcher'));
-        if (w) {
-            if (w.isMinimized()) w.restore();
-            w.focus();
-        }
-    });
+    app.on('second-instance', () => showLauncher());
 }
 
 // ---------- server manager ----------
@@ -102,17 +98,39 @@ function broadcast(channel, ...args) {
     if (channel === 'server-started' || channel === 'server-stopped') ext.emit(channel);
 }
 
+// The server prints in bursts of hundreds of lines at startup. Lines are
+// collected for a moment and then written and sent to the launcher together,
+// instead of one disk write and one message per line.
+const LOG_FLUSH_MS = 60;
+const LOG_MAX_BYTES = 2 * 1024 * 1024; // then the old log moves to desktop-debug.old.log
+let pendingLog = [];
+let logStream = null;
+
+function openLog() {
+    try { if (fs.statSync(DEBUG_LOG).size > LOG_MAX_BYTES) fs.renameSync(DEBUG_LOG, DEBUG_LOG.replace(/\.log$/, '.old.log')); } catch { /* no log yet */ }
+    logStream = fs.createWriteStream(DEBUG_LOG, { flags: 'a' });
+    logStream.on('error', () => { /* disk hiccup — don't die over it */ });
+}
+
+function flushLog({ sync = false } = {}) {
+    if (!pendingLog.length) return;
+    const lines = pendingLog;
+    pendingLog = [];
+    const text = `${lines.join('\n')}\n`;
+    if (sync) { try { fs.appendFileSync(DEBUG_LOG, text); } catch { /* quitting anyway */ } } else {
+        if (!logStream) openLog();
+        logStream.write(text);
+    }
+    if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('server-log', lines);
+}
+
 function logLine(line) {
     // Strip ANSI color codes — the server colors its output for terminals.
     const entry = `[${new Date().toLocaleTimeString()}] ${line.replace(/\x1b\[[0-9;]*m/g, '')}`;
     serverState.logs.push(entry);
     if (serverState.logs.length > 500) serverState.logs.shift();
-    try { fs.appendFileSync(DEBUG_LOG, entry + '\n'); } catch { /* disk hiccup — don't die over it */ }
-    for (const w of BrowserWindow.getAllWindows()) {
-        if (!w.webContents.getURL().includes('127.0.0.1') && !w.webContents.getURL().includes('localhost')) {
-            w.webContents.send('server-log', entry);
-        }
-    }
+    if (!pendingLog.length) setTimeout(flushLog, LOG_FLUSH_MS);
+    pendingLog.push(entry);
 }
 
 function checkPortOpen() {
@@ -163,8 +181,8 @@ async function startServer() {
         logLine(`ERROR: failed to launch node: ${err.message}`);
         broadcast('server-stopped');
     });
-    child.stdout.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => logLine(l.trim())));
-    child.stderr.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => logLine(`[stderr] ${l.trim()}`)));
+    mx.onLines(child.stdout, l => { if (l.trim()) logLine(l.trim()); });
+    mx.onLines(child.stderr, l => { if (l.trim()) logLine(`[stderr] ${l.trim()}`); });
     child.on('exit', (code) => {
         serverState.running = false;
         serverState.child = null;
@@ -244,7 +262,8 @@ function stopServerAndWait() {
             logLine('The server was started outside this app — stop it there first.');
             return resolve(false);
         }
-        serverState.child.once('exit', () => setTimeout(() => resolve(true), 500));
+        const timer = setTimeout(() => { logLine('ERROR: the server did not stop within 20 seconds.'); resolve(false); }, 20000);
+        serverState.child.once('exit', () => { clearTimeout(timer); setTimeout(() => resolve(true), 500); });
         stopServer();
     });
 }
@@ -320,6 +339,15 @@ function stWebPreferences() {
     };
 }
 
+// Only web and mail links go to the system. Anything else (file:, custom
+// app protocols) could start a program, so it is dropped.
+function openExternalSafe(url) {
+    try {
+        if (['http:', 'https:', 'mailto:'].includes(new URL(url).protocol)) shell.openExternal(url);
+        else logLine(`Blocked a link to ${url.slice(0, 120)}: only web links open outside SillyTavern.`);
+    } catch { /* not a URL */ }
+}
+
 function isLocal(url) {
     try {
         const u = new URL(url);
@@ -333,11 +361,11 @@ function isLocal(url) {
 // instance: the SillyTavern the page belongs to; pages it opens stay in it.
 function lockToServer(wc, host, instance) {
     ext.attachPage(wc);
-    wc.on('will-navigate', (e, url) => { if (!isLocal(url)) { e.preventDefault(); shell.openExternal(url); } });
+    wc.on('will-navigate', (e, url) => { if (!isLocal(url)) { e.preventDefault(); openExternalSafe(url); } });
     wc.setWindowOpenHandler(({ url, disposition }) => {
         // about:blank is how extensions open a tab and fill it in afterwards.
         if (!isLocal(url) && url !== 'about:blank') {
-            shell.openExternal(url);
+            openExternalSafe(url);
             return { action: 'deny' };
         }
         const allow = { action: 'allow', overrideBrowserWindowOptions: { icon: path.join(__dirname, 'icon.ico'), autoHideMenuBar: true, webPreferences: instance.webPreferences } };
@@ -424,7 +452,11 @@ async function openSecondServer(from) {
         if (response !== 0) return;
         if (checkboxChecked) { settings.warnSecondServer = false; saveSettings(settings); }
     }
-    openInstance(await extraInstance(stRoot(), 'port'), from);
+    openExtra(stRoot(), 'port', from);
+}
+
+function openExtra(dir, kind, from) {
+    extraInstance(dir, kind).then(inst => openInstance(inst, from), e => logLine(`ERROR: could not start SillyTavern from ${dir}: ${e.message}`));
 }
 
 // Other installs for the New SillyTavern menu. Found in the background:
@@ -443,14 +475,16 @@ function newSillyTavernMenu(w) {
         { label: 'This SillyTavern on another port', click: () => openSecondServer(w) },
         { type: 'separator' },
         ...(otherInstalls.length
-            ? otherInstalls.map(i => ({ label: `SillyTavern ${i.version} — ${i.path}`, click: () => extraInstance(i.path, 'other').then(inst => openInstance(inst, w)) }))
+            // "&" marks a keyboard shortcut in Windows menus; "&&" shows one.
+            ? otherInstalls.map(i => ({ label: `SillyTavern ${i.version} — ${i.path}`.replace(/&/g, '&&'), click: () => openExtra(i.path, 'other', w) }))
             : [{ label: 'No other SillyTavern installs found', enabled: false }]),
     ];
 }
 
 function openSillyTavernWindow() {
-    const first = [...stWins][0];
-    if (first) { first.focus(); return; }
+    const wins = [...stWins];
+    const w = wins.find(x => x.tabs.some(t => t.instance.kind === 'main')) || wins[0];
+    if (w) { w.focus(); return; }
     createStWindow(mainInstance());
 }
 
@@ -816,8 +850,13 @@ if (gotLock) {
         instances.stopAll();
         app.quit();
     });
-    // Extra servers (second port, other installs) never outlive the app.
-    app.on('will-quit', () => { instances.stopAll(); });
+    // No server outlives the app, however it quits (also Windows shutting
+    // down, or quitting without the confirmation).
+    app.on('will-quit', () => {
+        if (!isQuitting && serverState.child) stopServer();
+        instances.stopAll();
+        flushLog({ sync: true });
+    });
 
     app.on('before-quit', (e) => {
         if (isQuitting) return;

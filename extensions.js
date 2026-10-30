@@ -138,7 +138,7 @@ function makeApi(id, entry) {
         appVersion: host.appVersion,
         log: msg => say(id, String(msg)),
         storage: Object.freeze({
-            get: (key, fallback) => (key in readData() ? readData()[key] : fallback),
+            get: (key, fallback) => { const d = readData(); return key in d ? d[key] : fallback; },
             set: (key, value) => { const d = readData(); d[key] = value; fs.writeFileSync(dataFile, JSON.stringify(d, null, 2)); },
             all: () => readData(),
         }),

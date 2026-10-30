@@ -24,6 +24,20 @@ const STORE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.
 let log = () => {};
 export function initMaintenance({ logLine }) { log = logLine; }
 
+// Calls fn with each complete line a child process prints. Output arrives
+// in arbitrary chunks: a line (or an emoji in a character's name) can be
+// split between two of them, so decode as UTF-8 and keep the unfinished end.
+export function onLines(stream, fn) {
+    let rest = '';
+    stream.setEncoding('utf8');
+    stream.on('data', s => {
+        const parts = (rest + s).split(/\r?\n/);
+        rest = parts.pop();
+        parts.forEach(fn);
+    });
+    stream.on('end', () => { if (rest) fn(rest); rest = ''; });
+}
+
 // Run a command, streaming output to the console unless quiet.
 export function run(cmd, args, cwd, { quiet = false, shell = false } = {}) {
     return new Promise(resolve => {
@@ -37,13 +51,12 @@ export function run(cmd, args, cwd, { quiet = false, shell = false } = {}) {
             finish({ code: -1, out: e.message });
             return;
         }
-        const onData = d => {
-            const s = d.toString();
-            out += s;
-            if (!quiet) s.split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach(l => log(l));
+        const onLine = l => {
+            out += `${l}\n`;
+            if (!quiet && l.trim()) log(l.trim());
         };
-        child.stdout.on('data', onData);
-        child.stderr.on('data', onData);
+        onLines(child.stdout, onLine);
+        onLines(child.stderr, onLine);
         child.on('error', e => finish({ code: -1, out: e.message }));
         child.on('close', code => finish({ code, out }));
     });

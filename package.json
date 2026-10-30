@@ -50,12 +50,16 @@
       "icon": "icon.ico"
     },
     "portable": {
-      "artifactName": "SillyTavern-Desktop.exe"
+      "artifactName": "SillyTavern-Desktop.exe",
+      "splashImage": "splash.bmp"
     },
     "nsis": {
       "oneClick": true,
       "artifactName": "SillyTavern-Desktop-Setup.exe"
-    }
+    },
+    "electronLanguages": [
+      "en-US"
+    ]
   },
   "dependencies": {
     "koffi": "^2.16.3",

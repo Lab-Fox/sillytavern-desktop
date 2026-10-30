@@ -53,9 +53,15 @@ function includeToRegex(pattern) {
     return new RegExp(`^${pattern.split('*').map(escapeRe).join('.*')}$`);
 }
 
+// Asked for on every frame SillyTavern loads and every GM request, so the
+// parsed scripts are kept until a file is added, removed or changed.
+let cache = { key: null, scripts: [] };
+
 function loadScripts() {
     let files = [];
     try { files = fs.readdirSync(scriptsDir).filter(f => f.endsWith('.user.js')); } catch { return []; }
+    const key = files.map(f => { try { return `${f}:${fs.statSync(path.join(scriptsDir, f)).mtimeMs}`; } catch { return f; } }).join('|');
+    if (key === cache.key) return cache.scripts;
     const scripts = [];
     for (const file of files) {
         let code;
@@ -77,6 +83,7 @@ function loadScripts() {
             excludes: [...(meta['exclude-match'] || []).map(matchToRegex), ...(meta.exclude || []).map(includeToRegex)].filter(Boolean),
         });
     }
+    cache = { key, scripts };
     return scripts;
 }
 
@@ -98,10 +105,15 @@ function connectAllowed(script, url, pageUrl) {
 }
 
 // ---------- persistent GM values ----------
+// Read once, then kept in memory: GM_getValue is a synchronous call from the
+// page, so it must not wait for the disk. Every change is still written out.
+let values = null;
 function readValues() {
-    try { return JSON.parse(fs.readFileSync(valuesFile, 'utf8')); } catch { return {}; }
+    if (!values) { try { values = JSON.parse(fs.readFileSync(valuesFile, 'utf8')); } catch { values = {}; } }
+    return values;
 }
 function writeValues(all) {
+    values = all;
     try { fs.writeFileSync(valuesFile, JSON.stringify(all, null, 2)); } catch (e) { log(`Could not save userscript values: ${e.message}`); }
 }
 
@@ -191,7 +203,7 @@ export function setupUserscripts({ userData, logLine }) {
         e.returnValue = loadScripts()
             .filter(s => !(s.noframes && !isMainFrame))
             .filter(s => s.includes.some(r => r.test(url)) && !s.excludes.some(r => r.test(url)))
-            .map(s => ({ id: s.id, runAt: s.runAt, code: buildInjection(s) }));
+            .map(s => ({ id: s.id, runAt: s.runAt, code: (s.injection ||= buildInjection(s)) }));
     });
 
     // GM_xmlhttpRequest: CORS-free, and sends the window's own session

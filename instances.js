@@ -11,6 +11,7 @@ import fs from 'fs';
 import http from 'http';
 import net from 'net';
 import path from 'path';
+import { onLines } from './maintenance.js';
 
 let log = () => {};
 let host = '127.0.0.1';
@@ -116,6 +117,9 @@ export function partitionFor(stRoot) {
 
 // ---------- extra servers ----------
 const servers = new Set(); // { child, port, stRoot, label }
+// Ports handed out but maybe not listening yet: two quick clicks must not
+// both get the same "free" port.
+const reserved = new Set();
 
 function portFree(port) {
     return new Promise(resolve => {
@@ -127,8 +131,10 @@ function portFree(port) {
 }
 export async function freePort(from, taken = []) {
     for (let p = from; p < from + 200; p++) {
-        if (taken.includes(p) || [...servers].some(s => s.port === p)) continue;
+        if (taken.includes(p) || reserved.has(p)) continue;
+        reserved.add(p);
         if (await portFree(p)) return p;
+        reserved.delete(p);
     }
     throw new Error('No free port found.');
 }
@@ -151,11 +157,11 @@ export function startServer(stRoot, port, label) {
     });
     const srv = { child, port, stRoot, label, exited: false };
     servers.add(srv);
-    const out = d => d.toString().split('\n').map(l => l.trim()).filter(Boolean).forEach(l => log(`${tag} ${l}`));
-    child.stdout.on('data', out);
-    child.stderr.on('data', out);
-    child.on('error', e => log(`${tag} ERROR: failed to launch node: ${e.message}`));
-    child.on('exit', code => { srv.exited = true; servers.delete(srv); log(`${tag} Server exited with code ${code}.`); });
+    const out = l => { if (l.trim()) log(`${tag} ${l.trim()}`); };
+    onLines(child.stdout, out);
+    onLines(child.stderr, out);
+    child.on('error', e => { srv.exited = true; servers.delete(srv); reserved.delete(port); log(`${tag} ERROR: failed to launch node: ${e.message}`); });
+    child.on('exit', code => { srv.exited = true; servers.delete(srv); reserved.delete(port); log(`${tag} Server exited with code ${code}.`); });
     srv.ready = (async () => {
         const started = Date.now();
         while (!srv.exited && Date.now() - started < 120000) {

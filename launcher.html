@@ -853,16 +853,21 @@
     $('miniLog').replaceChildren(...state.logs.slice(-7).map(lineDiv));
     if (!state.logs.length) $('miniLog').innerHTML = '<div class="muted">Nothing yet.</div>';
   }
-  function append(line) {
-    state.logs.push(line);
-    if (state.logs.length > 2000) state.logs.shift();
+  // One line or a batch of lines (the main process sends them in batches).
+  const MAX_LOG_LINES = 2000;
+  function append(lines) {
+    lines = [].concat(lines);
+    state.logs.push(...lines);
+    if (state.logs.length > MAX_LOG_LINES) state.logs.splice(0, state.logs.length - MAX_LOG_LINES);
     renderMiniLog();
-    if (state.page === 'console' && visible(line)) {
-      const c = $('console');
-      const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
-      c.appendChild(lineDiv(line));
-      if (atBottom) c.scrollTop = c.scrollHeight;
-    }
+    if ($('setup').classList.contains('show')) $('setupLog').replaceChildren(...state.logs.slice(-8).map(lineDiv));
+    const shown = state.page === 'console' ? lines.filter(visible) : [];
+    if (!shown.length) return;
+    const c = $('console');
+    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
+    c.append(...shown.map(lineDiv));
+    while (c.childElementCount > MAX_LOG_LINES) c.firstElementChild.remove();
+    if (atBottom) c.scrollTop = c.scrollHeight;
   }
   document.querySelectorAll('#logFilter button').forEach(b => b.onclick = () => {
     state.filter = b.dataset.f;
@@ -1029,7 +1034,12 @@
     stLogoSrc = null;
     loadThemes();
     D.getState().then(s => { current = s.settings; if (state.page === 'settings') loadSettingsForm(); });
-    loadSetup().then(st => { if (st.ready) { loadInfo(); loadExtensions(false); } });
+    // loadPage below already covers the info/extensions of the open page.
+    loadSetup().then(st => {
+      if (!st.ready) return;
+      if (state.page !== 'maintenance') loadInfo();
+      if (state.page !== 'extensions') loadExtensions(false);
+    });
     if (state.page !== 'home') loadPage(state.page);
   }
 
@@ -1186,7 +1196,7 @@
   };
 
   // ---------- events ----------
-  D.onLog(line => { append(line); if ($('setup').classList.contains('show')) $('setupLog').replaceChildren(...state.logs.slice(-8).map(lineDiv)); });
+  D.onLog(append);
   D.onStarted(() => D.getState().then(s => { state.running = true; state.startedAt = s.startedAt; state.url = s.url; renderStatus(); }));
   D.onStopped(() => { state.running = false; state.startedAt = 0; renderStatus(); });
   D.onBusy(setBusy);

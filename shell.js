@@ -84,9 +84,9 @@ export class StWindow {
         this.win.show();
         this.win.focus();
     }
-    reload() { this.active?.view.webContents.reload(); }
+    reload() { if (this.active) reloadTab(this.active); }
     // After a server restart every SillyTavern tab is a dead page.
-    reloadAll() { for (const t of this.tabs) t.view.webContents.reload(); }
+    reloadAll() { this.tabs.forEach(reloadTab); }
     toggleFullScreen() { this.win.setFullScreen(!this.fullScreen); }
     setLayer(mode) {
         this.layer = mode;
@@ -144,6 +144,16 @@ export class StWindow {
         wc.on('did-start-loading', () => { tab.loading = true; this.push(); });
         wc.on('did-stop-loading', () => { tab.loading = false; if (!tab.title || tab.title === 'Loading…') tab.title = wc.getTitle() || wc.getURL(); this.push(); });
         wc.on('before-input-event', (e, input) => this.onKey(e, input));
+        // A crashed page (e.g. out of memory on a huge chat) would stay blank:
+        // reload it once, and only show a message if it crashes again soon.
+        let lastCrash = 0;
+        wc.on('render-process-gone', (_e, d) => {
+            if (d.reason === 'clean-exit' || wc.isDestroyed()) return;
+            const again = Date.now() - lastCrash < 30000;
+            lastCrash = Date.now();
+            if (again) wc.loadURL(statusPage(this.opts.colors, `This page crashed twice (${d.reason}). Press F5 to try again.`));
+            else wc.reload();
+        });
         // Closed by us, by the page (window.close()) or by its opener.
         wc.once('destroyed', () => this.removeTab(tab));
         if (activate || !this.active) this.activate(tab);
@@ -250,7 +260,7 @@ export class StWindow {
     tabMenu(tab, at) {
         const others = this.tabs.filter(t => t !== tab);
         this.popupMenu([
-            { label: 'Reload tab', click: () => tab.view.webContents.reload() },
+            { label: 'Reload tab', click: () => reloadTab(tab) },
             { label: 'Close tab', accelerator: 'Ctrl+W', registerAccelerator: false, enabled: this.tabs.length > 1, click: () => this.closeTab(tab) },
             { label: 'Close other tabs', enabled: others.length > 0, click: () => others.forEach(t => this.closeTab(t)) },
             { type: 'separator' },
@@ -274,6 +284,13 @@ export class StWindow {
             return handled() && this.activate(n === 9 ? this.tabs.at(-1) : this.tabs[n - 1]);
         }
     }
+}
+
+// Our status pages are data: URLs; reloading one means trying the real page again.
+function reloadTab(tab) {
+    const wc = tab.view.webContents;
+    if (wc.getURL().startsWith('data:')) wc.loadURL(tab.instance.url);
+    else wc.reload();
 }
 
 const windowTitle = tab => (tab.instance.readOnly ? `[Read-only] ${tab.title}` : tab.title);
