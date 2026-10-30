@@ -83,7 +83,8 @@ function broadcast(channel) {
 }
 
 function logLine(line) {
-    const entry = `[${new Date().toLocaleTimeString()}] ${line}`;
+    // Strip ANSI color codes — the server colors its output for terminals.
+    const entry = `[${new Date().toLocaleTimeString()}] ${line.replace(/\x1b\[[0-9;]*m/g, '')}`;
     serverState.logs.push(entry);
     if (serverState.logs.length > 500) serverState.logs.shift();
     try { fs.appendFileSync(DEBUG_LOG, entry + '\n'); } catch { /* disk hiccup — don't die over it */ }
@@ -222,7 +223,7 @@ function backupData() {
     // Windows 11 ships bsdtar: zip via -a flag by extension
     const child = process.platform === 'win32'
         ? spawn('tar', ['-a', '-c', '-f', outFile, '-C', stRoot, 'data'], { windowsHide: true, shell: false })
-        : spawn('zip', ['-r', outFile, dataDir], { windowsHide: true, shell: false });
+        : spawn('zip', ['-r', outFile, 'data'], { cwd: stRoot, shell: false });
     child.on('exit', code => logLine(code === 0 ? `Backup complete: ${outFile}` : 'Backup failed.'));
     child.on('error', () => logLine('Backup tool not available.'));
 }
@@ -306,7 +307,11 @@ ipcMain.handle('update', () => gitPull());
 ipcMain.handle('backup', () => backupData());
 ipcMain.handle('git-version', () => gitVersion());
 ipcMain.handle('open-data-folder', () => shell.openPath(path.join(settings.sillytavernPath, 'data')));
-ipcMain.handle('open-backups-folder', () => shell.openPath(path.join(settings.sillytavernPath, 'backups', 'desktop')));
+ipcMain.handle('open-backups-folder', () => {
+    const dir = path.join(settings.sillytavernPath, 'backups', 'desktop');
+    fs.mkdirSync(dir, { recursive: true });
+    return shell.openPath(dir);
+});
 ipcMain.handle('save-settings', (_e, s) => { settings = { ...settings, ...s }; saveSettings(settings); logLine('Settings saved.'); });
 
 // ---------- app lifecycle ----------

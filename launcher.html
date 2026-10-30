@@ -121,10 +121,11 @@
 
   <main>
     <div class="actions">
-      <button class="btn primary" id="btnOpen"><span class="ico">▶</span><span>Open SillyTavern<span id="openSub"><small>starts server + opens window</small></span></span></button>
+      <button class="btn primary" id="btnOpen"><span class="ico">▶</span><span>Open SillyTavern<small id="openSub">starts server + opens window</small></span></button>
       <button class="btn" id="btnStop"><span class="ico">⏹</span><span>Stop server<small>kills the hidden node process</small></span></button>
       <button class="btn" id="btnUpdate"><span class="ico">⟳</span><span>Update SillyTavern<small>git pull — safe, wrapper survives</small></span></button>
       <button class="btn" id="btnBackup"><span class="ico">💾</span><span>Back up data<small>zips your data/ folder</small></span></button>
+      <button class="btn" id="btnBackups"><span class="ico">🗄</span><span>Open backups folder<small>backups/desktop/ in your install</small></span></button>
       <button class="btn" id="btnData"><span class="ico">📂</span><span>Open data folder<small>chats, characters, settings</small></span></button>
       <button class="btn" id="btnVersion"><span class="ico">🏷</span><span>Show current version<small>latest local commit</small></span></button>
       <button class="btn" id="btnSettings"><span class="ico">⚙</span><span>Settings<small>path, port, behavior</small></span></button>
@@ -146,7 +147,7 @@
         </div>
         <label class="check"><input type="checkbox" id="setAuto"> Start server automatically when app opens</label>
         <label class="check"><input type="checkbox" id="setConfirm"> Confirm before quitting while server runs</label>
-        <div class="hint">Changing the port here only changes where this app looks — also set it in SillyTavern's config.yaml if you deviate from 8000.</div>
+        <div class="hint">The port is passed to the server on start, overriding config.yaml. Path and port changes apply the next time the server starts — stop it first if it's running.</div>
         <div><button class="btn primary" id="btnSaveSettings" style="justify-content:center"><span class="ico">✓</span>Save settings</button></div>
       </div>
     </div>
@@ -182,6 +183,7 @@
   $('btnStop').onclick = () => window.desktop.stopServer();
   $('btnUpdate').onclick = () => window.desktop.update();
   $('btnBackup').onclick = () => window.desktop.backup();
+  $('btnBackups').onclick = () => window.desktop.openBackupsFolder();
   $('btnData').onclick = () => window.desktop.openDataFolder();
   $('btnVersion').onclick = () => window.desktop.gitVersion();
   $('btnClear').onclick = () => cons.innerHTML = '';

@@ -1,101 +1,185 @@
 # 🍺 SillyTavern Desktop
 
-**SillyTavern as real software.** A standalone desktop app with a built-in browser — no cmd window, no external browser, no launcher `.bat` scripts. Double-click an exe, get SillyTavern.
+**SillyTavern as real software.** A standalone Windows app with a built-in browser — no cmd window, no external browser, no `.bat` scripts. Double-click an exe, get SillyTavern.
 
-Built as a **wrapper, not a fork**: it wraps your existing SillyTavern git checkout and never modifies a single tracked upstream file, so `git pull` updates keep working forever.
+It's a **wrapper, not a fork**: it runs your existing SillyTavern install as-is and never modifies its files, so normal `git pull` updates keep working.
 
-## Features
+---
 
-| Feature | What it does |
-|---|---|
-| 🖥 Standalone app | One portable exe (or `npm start` in dev). Server runs as a hidden child process. |
-| 🌐 Built-in browser | Chromium `BrowserWindow` specialized for SillyTavern: menu bar stripped, navigation locked to your local server, external links open in your real browser, window size remembered. |
-| 🚀 Launcher hub | A menu that replaces the cmd startup: Start/Stop server, **Update** (git pull, output streamed in-app), **Backup** (zips `data/`), Open data folder, version check, settings. |
-| 📋 Live console | Full server log with color-coded output — you never need to see a terminal again. |
-| 🔁 Update-proof by design | Wrapper lives outside the SillyTavern repo, talks to the server over plain HTTP. Upstream can refactor everything and this keeps working. |
-| 🛟 Sensible failure handling | Detects an already-running server and attaches instead of double-starting; verifies the SillyTavern install exists before spawning; survives portable-exe temp self-extraction path quirks. |
+## Contents
 
-## How it works
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Using the launcher](#using-the-launcher)
+- [Settings](#settings)
+- [Where things are stored](#where-things-are-stored)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [How it works](#how-it-works)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing) · [Credits](#credits) · [License](#license)
 
-```
-┌────────────────────────────────────────────────┐
-│  SillyTavern Desktop.exe (Electron, portable)  │
-│                                                │
-│  ┌──────────────┐    ┌──────────────────────┐  │
-│  │ Launcher hub │    │  ST browser window   │  │
-│  │ start/update │    │  (Chromium, locked   │  │
-│  │ backup/logs  │    │   to localhost)      │  │
-│  └──────┬───────┘    └──────────┬───────────┘  │
-│         │ spawn (hidden)        │ HTTP         │
-│         ▼                       ▼              │
-│  ┌──────────────────────────────────────────┐  │
-│  │  node server.js   (your SillyTavern      │  │
-│  │  checkout, untouched, on 127.0.0.1:8000) │  │
-│  └──────────────────────────────────────────┘  │
-└────────────────────────────────────────────────┘
-```
-
-**Design rule: wrap, never fork.** The wrapper spawns the SillyTavern server as a child process and talks to it over HTTP — no patched upstream files, no merge conflicts on update. Settings and logs live in `%APPDATA%/SillyTavern Desktop`, not next to the exe.
+---
 
 ## Requirements
 
-- Windows 10/11 (Linux/macOS should work with minor path tweaks — PRs welcome)
-- An existing SillyTavern install via git clone (this app updates it with `git pull`)
-- Node.js ≥ 20 on PATH (used to run the server child process)
-- git on PATH (only needed for the Update button and version display)
+| Need | Why |
+|---|---|
+| Windows 10 or 11 | Only Windows is built and tested right now |
+| A SillyTavern install made with `git clone` | The app runs it and updates it with `git pull` |
+| [Node.js](https://nodejs.org/) 20 or newer, on `PATH` | Runs the SillyTavern server (same requirement as SillyTavern itself) |
+| [git](https://git-scm.com/), on `PATH` | Only for **Update** and **Show current version** |
 
-## Usage
+Installed SillyTavern with [SillyTavern-Launcher](https://github.com/SillyTavern/SillyTavern-Launcher)? You already have all of this.
 
-1. Grab `SillyTavern-Desktop.exe` from [Releases](../../releases)
-2. Put it **next to your SillyTavern folder** (e.g. `SillyTavern-Launcher/ST-Desktop/dist/`)
-3. Double-click. The launcher opens, the server boots, the SillyTavern window appears.
+## Quick start
 
-Moved the exe somewhere else? Set your SillyTavern path once in **Settings** — it persists in `%APPDATA%/SillyTavern Desktop/settings.json`.
+1. Download `SillyTavern-Desktop.exe` from the [latest release](../../releases/latest).
+2. Put it where the app can find SillyTavern automatically. Any of these work:
+
+   ```
+   SillyTavern-Launcher\
+   ├── SillyTavern\                ← your install (must contain server.js)
+   └── ST-Desktop\
+       └── dist\
+           └── SillyTavern-Desktop.exe   ← recommended spot
+   ```
+
+   The exe looks for a `SillyTavern` folder next to itself, one level up, or two levels up.
+3. Double-click the exe. The launcher opens, the server starts in the background, and the SillyTavern window appears once the server is ready (the first start can take a minute).
+
+Exe somewhere else? Open **⚙ Settings**, paste the full path of your SillyTavern folder, and click **Save settings**. It's remembered from then on.
+
+## Using the launcher
+
+| Button | What it does |
+|---|---|
+| ▶ **Open SillyTavern** | Starts the server if needed, then opens (or focuses) the SillyTavern window |
+| ⏹ **Stop server** | Stops the server and everything it started. If the server was started outside this app, the app just disconnects from it |
+| ⟳ **Update SillyTavern** | Runs `git pull` in your install. Stop the server first |
+| 💾 **Back up data** | Zips your `data/` folder into `backups/desktop/` inside your install |
+| 🗄 **Open backups folder** | Opens `backups/desktop/` in Explorer |
+| 📂 **Open data folder** | Opens `data/` — chats, characters, settings |
+| 🏷 **Show current version** | Prints the latest local SillyTavern commit to the console |
+| ⚙ **Settings** | Shows the settings panel (click again to return to the console) |
+
+The **server console** on the right shows everything the server prints — errors in red, success messages in green.
+
+The SillyTavern window only ever shows your local server. Links to other sites open in your normal browser.
+
+**Closing:** closing all windows stops the server and quits. Quitting another way while the server runs asks for confirmation (can be turned off).
+
+**Already running SillyTavern elsewhere?** If something is already serving on the configured port, the app uses that server instead of starting a second one.
+
+## Settings
+
+| Setting | Default | Notes |
+|---|---|---|
+| SillyTavern folder | Auto-detected | The folder that contains `server.js` |
+| Port | `8000` | Passed to the server with `--port`, overriding `config.yaml` |
+| Start server automatically | On | Start the server and open SillyTavern as soon as the app launches |
+| Confirm before quitting | On | Ask before quitting while the server runs |
+
+Path and port changes take effect the next time the server starts — stop it first if it's running.
+
+## Where things are stored
+
+| What | Location |
+|---|---|
+| App settings | `%APPDATA%\SillyTavern Desktop\settings.json` |
+| App log (everything shown in the console) | `%APPDATA%\SillyTavern Desktop\desktop-debug.log` |
+| Window size | Saved in `settings.json` when the SillyTavern window closes |
+| Backups | `<SillyTavern folder>\backups\desktop\st-backup-<date>.zip` |
+| Your chats, characters, etc. | Untouched, in `<SillyTavern folder>\data\` |
+
+To reset the app, quit it and delete `%APPDATA%\SillyTavern Desktop\`.
+
+## Troubleshooting
+
+| Console says | Fix |
+|---|---|
+| `server.js not found at …` | Set the right folder in **Settings** — the one containing `server.js` |
+| `failed to launch node` | Install Node.js 20+ and make sure `node -v` works in a new terminal |
+| `git not found` | Install git (only needed for Update / version) |
+| `Stop the server before updating.` | Click **Stop server**, then **Update** |
+| `Timed out waiting for the server to respond.` | Read the lines above it. Often a missing `npm install` in SillyTavern after an update — run `npm install` in the SillyTavern folder |
+| The window never opens and the port is in use by another program | Change the **Port** in Settings |
+
+Still stuck? Check `desktop-debug.log` and open an [issue](../../issues).
 
 ## Development
 
+Clone the repo **next to** your SillyTavern folder — in dev mode the app expects `../SillyTavern`:
+
 ```bash
-git clone https://github.com/Lab-Fox/sillytavern-desktop.git
-cd sillytavern-desktop
+cd SillyTavern-Launcher
+git clone https://github.com/Lab-Fox/sillytavern-desktop.git ST-Desktop
+cd ST-Desktop
 npm install
-npm start        # dev run (expects ../SillyTavern to exist)
-npm run dist     # build portable exe into dist/
 ```
+
+| Command | Does |
+|---|---|
+| `npm start` | Run the app from source |
+| `npm run dist` | Build the portable exe → `dist/SillyTavern-Desktop.exe` |
+| `npm run dist:installer` | Build an installer → `dist/SillyTavern-Desktop-Setup.exe` (untested) |
 
 ### Project layout
 
 | File | Role |
 |---|---|
-| `main.js` | Electron main process: server manager (spawn/kill/attach), git ops, backup, windows, IPC |
-| `launcher.html` | The launcher hub UI — dark theme, zero external dependencies |
-| `preload.js` | contextIsolation-safe IPC bridge |
-| `icon.ico` | App icon (generated, see git history for the trick) |
-| `package.json` | App + electron-builder config (portable & NSIS targets) |
+| `main.js` | Electron main process: server start/stop/attach, git, backups, windows, IPC |
+| `preload.js` | The only bridge between the launcher UI and `main.js` (`window.desktop.*`) |
+| `launcher.html` | Launcher UI — one self-contained file, no external dependencies |
+| `icon.ico` / `icon.png` | App icon (`.ico` is used by Windows and the build; `.png` is the source image) |
+| `package.json` | App metadata and electron-builder config |
 
-### Gotchas learned the hard way (read before hacking)
+### Gotchas (read before changing things)
 
-- **Portable exes self-extract to a temp dir** — `process.execPath` lies at runtime. Use `PORTABLE_EXECUTABLE_DIR` + verify `server.js` exists (see `resolveStRoot()`).
-- **Packaged apps run from a read-only asar** — never write settings/logs next to `__dirname`.
-- **Single-instance lock races** — guard *all* lifecycle wiring behind `gotLock`, or a second instance spawns a server into a dying app.
-- **Killing the server on Windows needs the whole tree** — `taskkill /PID <pid> /T /F`, because SillyTavern spawns its own children.
+- **Portable exes unpack to a temp folder before running**, so `process.execPath` points to the wrong place. Use `PORTABLE_EXECUTABLE_DIR` and check that `server.js` exists — see `resolveStRoot()`.
+- **Packaged apps run from a read-only archive (asar).** Never write files next to `__dirname`; use `app.getPath('userData')`.
+- **Single-instance lock:** all startup wiring must stay inside `if (gotLock)`, or a second launch starts a server inside an app that is already quitting.
+- **Stopping the server on Windows** needs `taskkill /PID <pid> /T /F` to also kill the processes SillyTavern starts.
 
-## Roadmap ideas
+## How it works
 
-- [ ] NSIS installer target (config already in `package.json`: `npm run dist:installer`)
-- [ ] "Update on launch" option (git pull before server start)
+```
+┌────────────────────────────────────────────────┐
+│  SillyTavern-Desktop.exe (Electron)            │
+│                                                │
+│  ┌──────────────┐    ┌──────────────────────┐  │
+│  │ Launcher     │    │  SillyTavern window  │  │
+│  │ start/update │    │  (Chromium, locked   │  │
+│  │ backup/logs  │    │   to localhost)      │  │
+│  └──────┬───────┘    └──────────┬───────────┘  │
+│         │ starts (hidden)       │ HTTP         │
+│         ▼                       ▼              │
+│  ┌──────────────────────────────────────────┐  │
+│  │  node server.js --port <port>            │  │
+│  │  (your SillyTavern install, untouched)   │  │
+│  └──────────────────────────────────────────┘  │
+└────────────────────────────────────────────────┘
+```
+
+The server runs as a hidden child process on `127.0.0.1`. The app talks to it only over HTTP, so SillyTavern can change internally without breaking the wrapper.
+
+## Roadmap
+
+- [ ] Test and publish the installer build (`npm run dist:installer`)
+- [ ] "Update on launch" option (git pull before starting the server)
 - [ ] System tray mode (close to tray, server keeps running)
-- [ ] Linux/macOS path handling + `Start` scripts
-- [ ] Restore/minimize ST window from launcher when hidden
+- [ ] Linux/macOS support
+- [ ] Show/restore the SillyTavern window from the launcher when it's hidden
 
 ## Contributing
 
-PRs welcome — keep the wrapper philosophy: **no upstream SillyTavern files in this repo, no runtime patching of the SillyTavern install.** Small, focused diffs preferred. For UI work, keep `launcher.html` dependency-free.
+PRs welcome. One rule: **wrap, never fork** — no SillyTavern files in this repo and no patching of the SillyTavern install at runtime. Keep changes small and focused, and keep `launcher.html` dependency-free.
 
 ## Credits
 
 - [SillyTavern](https://github.com/SillyTavern/SillyTavern) — the actual software this wraps. Go star it.
-- Upstream's own `src/electron` scaffold was the proof this approach works.
+- SillyTavern's own `src/electron` scaffold showed this approach works.
 
 ## License
 
-[AGPL-3.0](LICENSE) — matching the SillyTavern ecosystem.
+[AGPL-3.0](LICENSE), same as SillyTavern.
