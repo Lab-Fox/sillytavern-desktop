@@ -335,6 +335,9 @@ function lockToServer(wc, host) {
         // Real popups (window.open with a size) stay windows, as in a browser.
         if (settings.tabs && host && disposition !== 'new-window') {
             allow.createWindow = options => host.adoptTab(options, { background: disposition === 'background-tab' });
+            // Electron closes opened pages with their opener; tabs shouldn't
+            // vanish when the tab that opened them is closed.
+            allow.outlivesOpener = true;
         }
         return allow;
     });

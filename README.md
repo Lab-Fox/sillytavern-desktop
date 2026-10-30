@@ -239,7 +239,7 @@ npm install
 - **Single-instance lock:** all startup wiring must stay inside `if (gotLock)`, or a second launch starts a server inside an app that is already quitting.
 - **Stopping the server on Windows** needs `taskkill /PID <pid> /T /F` to also kill the processes SillyTavern starts.
 - **The SillyTavern window is a `BaseWindow` with views**, not a `BrowserWindow`. Views aren't owned by the window: close their `webContents` when it closes (see `shell.js`).
-- **Tabs take over the page Electron prepared for `window.open`** (`createWindow` in `lockToServer`, then `adoptTab` in `shell.js`). A fresh page would break `window.opener`, and extensions write into the `about:blank` page they open.
+- **Tabs take over the page Electron prepared for `window.open`** (`createWindow` in `lockToServer`, then `adoptTab` in `shell.js`). A fresh page would break `window.opener`, and extensions write into the `about:blank` page they open. Tabs also set `outlivesOpener: true`; by default Electron closes opened pages together with their opener.
 - **`isFullScreen()` lags behind the `enter-full-screen` event** on Windows; `shell.js` tracks full screen from the events instead.
 - **Electron ignores `setAlwaysOnTop` and `moveTop` while a window is full screen**, so `winlayer.js` also sets the z-order with `SetWindowPos`, and the layer is re-applied after every full-screen change.
 - **Chromium stops drawing windows it thinks are covered** (native occlusion). "Stay in background" covers the window on purpose, which left the top bar blank, so `main.js` turns that feature off.
