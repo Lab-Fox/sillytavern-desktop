@@ -39,7 +39,9 @@ Installing uses **winget**, Windows' built-in package manager. Windows may ask f
 
 ## Quick start
 
-1. Download `SillyTavern-Desktop.exe` from the [latest release](../../releases/latest) and put it anywhere: Desktop, Downloads, a USB stick.
+1. From the [latest release](../../releases/latest), download one of:
+   - **`SillyTavern-Desktop-Setup.exe`** (recommended): installs in a few seconds, no admin rights needed, adds Start menu and desktop shortcuts, and starts in under a second. Uninstall from Windows Settings → Apps.
+   - **`SillyTavern-Desktop.exe`** (portable): nothing to install, put it anywhere (Desktop, a USB stick). It unpacks itself on every launch, so it takes a few seconds to open.
 2. Double-click it.
    - **Already have SillyTavern?** The app searches this PC (your user folders, every drive, SillyTavern-Launcher installs) and uses it automatically. If it finds several, it asks which one.
    - **New to SillyTavern?** The welcome screen walks you through it: **Install for me** (Node.js and Git), then **Install SillyTavern**. That's it.
@@ -209,6 +211,8 @@ Path and port changes take effect the next time the server starts — stop it fi
 | Backups | `<SillyTavern folder>\backups\desktop\st-backup-<date>.zip` |
 | Your chats, characters, etc. | Untouched, in `<SillyTavern folder>\data\` |
 
+The installer puts the app itself in `%LOCALAPPDATA%\Programs\sillytavern-desktop\`. Both versions share the same settings. Uninstalling keeps them.
+
 To reset the app, quit it and delete `%APPDATA%\SillyTavern Desktop\`.
 
 ## Troubleshooting
@@ -242,7 +246,8 @@ npm install
 |---|---|
 | `npm start` | Run the app from source |
 | `npm run dist` | Build the portable exe → `dist/SillyTavern-Desktop.exe` |
-| `npm run dist:installer` | Build an installer → `dist/SillyTavern-Desktop-Setup.exe` (untested) |
+| `npm run dist:installer` | Build the installer → `dist/SillyTavern-Desktop-Setup.exe` |
+| `npm run dist:all` | Build both |
 
 ### Project layout
 
@@ -266,13 +271,15 @@ npm install
 | `fonts/` | Bundled pixel fonts (Pixelify Sans, VT323) with their OFL licenses |
 | `icon.ico` / `icon.png` | App icon (`.ico` is used by Windows and the build; `.png` is the source image) |
 | `splash.bmp` | Shown by the portable exe while it unpacks itself (build resource, not part of the app) |
+| `installer.nsh` | Extra installer step: asks a running app to close itself (`--quit`) before installing or uninstalling (build resource) |
 | `package.json` | App metadata and electron-builder config |
 
 ### Gotchas (read before changing things)
 
 - **Portable exes unpack to a temp folder before running**, so `process.execPath` points to the wrong place. Use `PORTABLE_EXECUTABLE_DIR` — see `exeBases()` in `main.js`.
 - **Packaged apps run from a read-only archive (asar).** Never write files next to `__dirname`; use `app.getPath('userData')`.
-- **Single-instance lock:** all startup wiring must stay inside `if (gotLock)`, or a second launch starts a server inside an app that is already quitting.
+- **Single-instance lock:** all startup wiring must stay inside `if (gotLock)`, or a second launch starts a server inside an app that is already quitting. `--quit` (sent by the installer) closes a running copy and never starts one.
+- **The installer would otherwise kill the app** (electron-builder's default), so the server never gets stopped properly. `installer.nsh` overrides `customCheckAppRunning` and must include `getProcessInfo.nsh` and `Var pid` itself, because electron-builder only adds them when there's no custom check.
 - **Stopping the server on Windows** needs `taskkill /PID <pid> /T /F` to also kill the processes SillyTavern starts.
 - **The SillyTavern window is a `BaseWindow` with views**, not a `BrowserWindow`. Views aren't owned by the window: close their `webContents` when it closes (see `shell.js`).
 - **Tabs take over the page Electron prepared for `window.open`** (`createWindow` in `lockToServer`, then `adoptTab` in `shell.js`). A fresh page would break `window.opener`, and extensions write into the `about:blank` page they open. Tabs also set `outlivesOpener: true`; by default Electron closes opened pages together with their opener.
@@ -311,7 +318,7 @@ The server runs as a hidden child process on `127.0.0.1`. The app talks to it on
 
 ## Roadmap
 
-- [ ] Test and publish the installer build (`npm run dist:installer`)
+- [x] Test the installer build (`npm run dist:installer`); published with the next release
 - [ ] "Update on launch" option (git pull before starting the server)
 - [x] System tray mode (close to tray, server keeps running)
 - [ ] Linux/macOS support

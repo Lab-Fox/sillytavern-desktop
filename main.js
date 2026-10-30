@@ -83,11 +83,20 @@ let userscriptsDir = path.join(USER_DATA, 'userscripts');
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 // ---------- single instance lock ----------
-const gotLock = app.requestSingleInstanceLock();
+// `--quit` comes from the installer before it replaces the app: it closes a
+// running copy and never starts one itself.
+const quitOnly = process.argv.includes('--quit');
+const gotLock = app.requestSingleInstanceLock() && !quitOnly;
 if (!gotLock) {
     app.quit();
 } else {
-    app.on('second-instance', () => showLauncher());
+    app.on('second-instance', (_e, argv) => {
+        if (!argv.includes('--quit')) return showLauncher();
+        // will-quit stops the servers and writes the log.
+        logLine('Closing for the installer (update or uninstall).');
+        isQuitting = true;
+        app.quit();
+    });
 }
 
 // ---------- server manager ----------
