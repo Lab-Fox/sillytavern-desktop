@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('desktop', {
     openBackupsFolder: () => ipcRenderer.invoke('open-backups-folder'),
     saveSettings: (s) => ipcRenderer.invoke('save-settings', s),
     onLog: (cb) => ipcRenderer.on('server-log', (_e, line) => cb(line)),
+    onStarted: (cb) => ipcRenderer.on('server-started', () => cb()),
     onStopped: (cb) => ipcRenderer.on('server-stopped', () => cb()),
 });

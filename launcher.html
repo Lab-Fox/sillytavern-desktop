@@ -175,6 +175,7 @@
   }
 
   window.desktop.onLog(append);
+  window.desktop.onStarted(() => setRunning(true));
   window.desktop.onStopped(() => setRunning(false));
 
   $('btnOpen').onclick = async () => { append('→ launching SillyTavern...'); await window.desktop.openST(); };

@@ -75,7 +75,12 @@ if (!gotLock) {
 }
 
 // ---------- server manager ----------
-const serverState = { child: null, running: false, logs: [] };
+// attached: we found a server we didn't spawn, so we can't stop it.
+const serverState = { child: null, running: false, attached: false, logs: [] };
+
+function broadcast(channel) {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send(channel);
+}
 
 function logLine(line) {
     const entry = `[${new Date().toLocaleTimeString()}] ${line}`;
@@ -105,6 +110,8 @@ async function startServer() {
     if (await checkPortOpen()) {
         logLine(`Port ${settings.port} is already serving — a SillyTavern server is running elsewhere. Attaching to it instead of starting a duplicate.`);
         serverState.running = true;
+        serverState.attached = true;
+        broadcast('server-started');
         return;
     }
     const stRoot = settings.sillytavernPath;
@@ -113,7 +120,8 @@ async function startServer() {
         return;
     }
     logLine(`Starting SillyTavern server from ${stRoot} ...`);
-    const child = spawn('node', ['server.js'], {
+    // Pass the port explicitly so the Settings value is what the server binds to.
+    const child = spawn('node', ['server.js', '--port', String(settings.port)], {
         cwd: stRoot,
         windowsHide: true,
         env: { ...process.env, ELECTRON_RUN_AS_NODE: '' },
@@ -121,12 +129,14 @@ async function startServer() {
     });
     serverState.child = child;
     serverState.running = true;
+    broadcast('server-started');
 
     // If node can't even be spawned (ENOENT etc.) we get 'error', not 'exit'.
     child.on('error', err => {
         serverState.running = false;
         serverState.child = null;
         logLine(`ERROR: failed to launch node: ${err.message}`);
+        broadcast('server-stopped');
     });
     child.stdout.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => logLine(l.trim())));
     child.stderr.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => logLine(`[stderr] ${l.trim()}`)));
@@ -134,11 +144,19 @@ async function startServer() {
         serverState.running = false;
         serverState.child = null;
         logLine(`Server exited with code ${code}.`);
-        for (const w of BrowserWindow.getAllWindows()) w.webContents.send('server-stopped');
+        broadcast('server-stopped');
     });
 }
 
 function stopServer() {
+    if (serverState.attached) {
+        // Not ours to kill — just detach so the UI reflects reality.
+        logLine('This server was started outside the app; detaching. Stop it from where it was launched.');
+        serverState.attached = false;
+        serverState.running = false;
+        broadcast('server-stopped');
+        return;
+    }
     if (!serverState.child) return;
     logLine('Stopping server...');
     // taskkill /T kills the whole process tree (node spawns children e.g. transformers)
@@ -150,21 +168,25 @@ function stopServer() {
 }
 
 // Poll the server until it answers, then open the ST window.
+let waitingForServer = false;
 function waitForServerThenOpen() {
+    // autoStart and the Open button can both land here; only one poller at a time.
+    if (waitingForServer) return;
+    waitingForServer = true;
     const started = Date.now();
     const timeout = 120000; // transformers.js can take a while on first run
     const tryFetch = () => {
         const req = http.get(`http://${settings.host}:${settings.port}/`, { timeout: 3000 }, res => {
             res.resume();
-            if (res.statusCode && res.statusCode < 500) openSillyTavernWindow();
+            if (res.statusCode && res.statusCode < 500) { waitingForServer = false; openSillyTavernWindow(); }
             else retry();
         });
         req.on('timeout', () => { req.destroy(); retry(); });
         req.on('error', retry);
     };
     const retry = () => {
-        if (!serverState.running) { logLine('Server process died during startup — giving up on opening the window.'); return; }
-        if (Date.now() - started > timeout) { logLine('Timed out waiting for the server to respond.'); return; }
+        if (!serverState.running) { waitingForServer = false; logLine('Server process died during startup — giving up on opening the window.'); return; }
+        if (Date.now() - started > timeout) { waitingForServer = false; logLine('Timed out waiting for the server to respond.'); return; }
         setTimeout(tryFetch, 1000);
     };
     tryFetch();
@@ -177,6 +199,7 @@ function gitPull() {
     const child = spawn('git', ['pull'], { cwd: settings.sillytavernPath, windowsHide: true, shell: false });
     child.stdout.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => logLine(l.trim())));
     child.stderr.on('data', d => d.toString().split('\n').filter(Boolean).forEach(l => logLine(l.trim())));
+    child.on('error', () => logLine('git not found — cannot update.'));
     child.on('exit', code => logLine(code === 0 ? 'Update finished. You are on the latest version.' : `git pull exited with code ${code}.`));
 }
 
@@ -263,8 +286,8 @@ function openSillyTavernWindow() {
         shell.openExternal(url);
         return { action: 'deny' };
     });
-    // Remember window size
-    stWin.on('resize', () => {
+    // Remember window size — saved once on close, not on every resize event
+    stWin.on('close', () => {
         const [w, h] = stWin.getSize();
         settings.windowWidth = w; settings.windowHeight = h; saveSettings(settings);
     });
