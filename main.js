@@ -1,7 +1,7 @@
 // ENI's SillyTavern Desktop — main process
 // Wraps the SillyTavern server as a hidden child process and
 // renders it in a dedicated Chromium window. No cmd, ever.
-import { app, BrowserWindow, Menu, ipcMain, shell, dialog, clipboard } from 'electron';
+import { app, BrowserWindow, Menu, Tray, ipcMain, shell, dialog, clipboard } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -56,7 +56,8 @@ const DEFAULT_SETTINGS = {
     consoleFontSize: 18,
     autoStart: true,      // start server + open ST window immediately on app launch
     confirmBeforeQuit: true,
-    backupBeforeUpdate: true,   // zip data/ before every update or branch switch
+    closeToTray: false,         // closing the launcher hides it to the tray; the server keeps running
+    backupBeforeUpdate: true,  // zip data/ before every update or branch switch
     checkUpdatesOnLaunch: true, // git fetch on startup so the dashboard can say "update available"
     backupKeep: 10,             // automatic backups kept; manual ones are never pruned
     theme: 'sillytavern',       // launcher theme id (see themes.js)
@@ -95,7 +96,7 @@ const serverState = { child: null, running: false, attached: false, startedAt: 0
 
 function broadcast(channel, ...args) {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send(channel, ...args);
-    if (channel === 'server-started' || channel === 'server-stopped') ext.emit(channel);
+    if (channel === 'server-started' || channel === 'server-stopped') { ext.emit(channel); updateTray(); }
 }
 
 // The server prints in bursts of hundreds of lines at startup. Lines are
@@ -305,6 +306,7 @@ const keep = () => settings.backupKeep;
 // ---------- windows ----------
 let launcherWin = null;
 const stWins = new Set(); // SillyTavern windows (several when tabs are off)
+let isQuitting = false;   // set once quitting is decided; closing the launcher then really closes it
 
 function createLauncherWindow() {
     launcherWin = new BrowserWindow({
@@ -324,7 +326,58 @@ function createLauncherWindow() {
     });
     Menu.setApplicationMenu(null);
     launcherWin.loadFile('launcher.html');
+    // With the tray on, closing only hides the launcher.
+    launcherWin.on('close', e => {
+        if (!tray || isQuitting) return;
+        e.preventDefault();
+        launcherWin.hide();
+        if (!trayHintShown) {
+            trayHintShown = true;
+            tray.displayBalloon({ iconType: 'info', title: 'SillyTavern Desktop is still running', content: serverState.running ? 'The server keeps running. Click the tray icon to open the launcher.' : 'Click the tray icon to open the launcher.' });
+        }
+    });
+    // Windows shutting down or signing out must not be held up by the tray.
+    launcherWin.on('query-session-end', () => { isQuitting = true; });
+    launcherWin.on('session-end', () => { isQuitting = true; });
     launcherWin.on('closed', () => { launcherWin = null; });
+}
+
+// ---------- tray ----------
+// Only there while the closeToTray setting is on.
+let tray = null;
+let trayHintShown = false;
+
+function trayMenu() {
+    const w = stWindowState();
+    return [
+        { label: !w.open ? 'Open SillyTavern' : w.minimized ? 'Restore SillyTavern' : 'Show SillyTavern', click: () => (serverState.running ? openSillyTavernWindow() : startServer().then(() => waitForServerThenOpen())) },
+        ...(w.open && !w.minimized ? [{ label: 'Minimize SillyTavern', click: minimizeStWindows }] : []),
+        { label: 'Show launcher', click: showLauncher },
+        { type: 'separator' },
+        serverState.running
+            ? { label: 'Stop server', enabled: !busyTask, click: stopServer }
+            : { label: 'Start server', enabled: !busyTask, click: () => startServer() },
+        { type: 'separator' },
+        { label: 'Quit', click: () => app.quit() },
+    ];
+}
+
+function updateTray() {
+    if (tray) tray.setToolTip(`SillyTavern Desktop — server ${serverState.running ? 'running' : 'stopped'}`);
+}
+
+function syncTray() {
+    if (settings.closeToTray && !tray) {
+        tray = new Tray(path.join(__dirname, 'icon.ico'));
+        tray.on('click', showLauncher);
+        tray.on('right-click', () => tray.popUpContextMenu(Menu.buildFromTemplate(trayMenu())));
+        updateTray();
+    } else if (!settings.closeToTray && tray) {
+        tray.destroy();
+        tray = null;
+        // A launcher hidden to the tray would be unreachable without it.
+        if (launcherWin && !launcherWin.isVisible()) showLauncher();
+    }
 }
 
 // Shared by the main ST window and any tab it opens (e.g. Character Library).
@@ -484,7 +537,12 @@ function newSillyTavernMenu(w) {
 function openSillyTavernWindow() {
     const wins = [...stWins];
     const w = wins.find(x => x.tabs.some(t => t.instance.kind === 'main')) || wins[0];
-    if (w) { w.focus(); return; }
+    if (w) {
+        // Minimized together from the launcher, so restored together too.
+        wins.forEach(x => { if (x !== w && x.win.isMinimized()) x.win.restore(); });
+        w.focus();
+        return;
+    }
     createStWindow(mainInstance());
 }
 
@@ -508,8 +566,23 @@ function createStWindow(instance) {
         },
     });
     stWins.add(w);
-    w.win.on('closed', () => stWins.delete(w));
+    w.win.on('minimize', pushWindowState);
+    w.win.on('restore', pushWindowState);
+    w.win.on('closed', () => { stWins.delete(w); pushWindowState(); });
+    pushWindowState();
     return w;
+}
+
+// What the launcher's Home shows: Open, Show or Restore, and Minimize.
+function stWindowState() {
+    const wins = [...stWins].filter(w => !w.isDestroyed());
+    return { open: wins.length, minimized: wins.length > 0 && wins.every(w => w.win.isMinimized()) };
+}
+function pushWindowState() {
+    if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('st-windows', stWindowState());
+}
+function minimizeStWindows() {
+    stWins.forEach(w => { if (!w.isDestroyed()) w.win.minimize(); });
 }
 
 // Right-click menu of the SillyTavern window's top bar.
@@ -589,6 +662,8 @@ ipcMain.handle('get-state', () => ({
     url: `http://${settings.host}:${settings.port}/`,
     settings,
     logs: serverState.logs,
+    appVersion: app.getVersion(),
+    windows: stWindowState(),
 }));
 ipcMain.handle('start-server', () => startServer().then(() => waitForServerThenOpen()));
 ipcMain.handle('stop-server', () => stopServer());
@@ -596,7 +671,8 @@ ipcMain.handle('open-st', () => {
     if (serverState.running) { openSillyTavernWindow(); return; }
     return startServer().then(() => waitForServerThenOpen());
 });
-ipcMain.handle('st-info', () => mx.getInfo(stRoot()));
+ipcMain.handle('minimize-st', () => minimizeStWindows());
+ipcMain.handle('st-info',() => mx.getInfo(stRoot()));
 ipcMain.handle('check-updates', () => mx.checkForUpdates(stRoot()));
 ipcMain.handle('update', () => runTask('Updating SillyTavern', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
 ipcMain.handle('repair', async (_e, kind) => {
@@ -660,6 +736,7 @@ ipcMain.handle('set-tabs', (_e, on) => setTabs(on));
 ipcMain.handle('save-settings', (_e, s) => {
     settings = { ...settings, ...s };
     saveSettings(settings);
+    syncTray();
     logLine('Settings saved.');
 });
 
@@ -803,8 +880,6 @@ function ensureInstall() {
 // gotLock is false and this process must do nothing but quit. Previously
 // startup raced the quit and spawned a server into a dying app.
 if (gotLock) {
-    let isQuitting = false;
-
     app.whenReady().then(() => {
         // Plain Chrome UA: Electron/app tokens make Cloudflare-gated sites
         // (used by community extensions) challenge harder or refuse outright.
@@ -830,6 +905,7 @@ if (gotLock) {
         });
         themes.initThemes(USER_DATA);
         createLauncherWindow();
+        syncTray();
         ext.activateEnabled();
         if (!ensureInstall()) return; // the welcome screen takes it from here
         refreshInstalls();
@@ -853,7 +929,7 @@ if (gotLock) {
     // No server outlives the app, however it quits (also Windows shutting
     // down, or quitting without the confirmation).
     app.on('will-quit', () => {
-        if (!isQuitting && serverState.child) stopServer();
+        if (serverState.child) stopServer();
         instances.stopAll();
         flushLog({ sync: true });
     });
@@ -874,6 +950,8 @@ if (gotLock) {
                 stopServer();
                 setTimeout(() => app.quit(), 800);
             }
+            return;
         }
+        isQuitting = true;
     });
 }

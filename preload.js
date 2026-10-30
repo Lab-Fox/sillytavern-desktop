@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('desktop', {
     startServer: () => invoke('start-server'),
     stopServer: () => invoke('stop-server'),
     openST: () => invoke('open-st'),
+    minimizeST: () => invoke('minimize-st'),
     // version & maintenance
     stInfo: () => invoke('st-info'),
     checkUpdates: () => invoke('check-updates'),
@@ -63,4 +64,5 @@ contextBridge.exposeInMainWorld('desktop', {
     onRefresh: on('refresh'),
     onTheme: on('theme'),
     onSettings: on('settings'),
+    onWindows: on('st-windows'),
 });

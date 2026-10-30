@@ -259,7 +259,7 @@
   <aside>
     <div class="brand">
       <img class="logo" data-logo alt="">
-      <div><b>SillyTavern</b><span>Desktop</span></div>
+      <div><b>SillyTavern</b><span>Desktop <span id="appVer"></span></span></div>
     </div>
     <nav id="nav">
       <button data-page="home" class="active"><svg class="i"><use href="#i-home"/></svg>Home<span class="badge" id="navUpdate" hidden>1</span></button>
@@ -295,7 +295,8 @@
             <h3 id="heroTitle">Ready when you are</h3>
             <div class="sub" id="heroSub">Start the server and open SillyTavern in its own window.</div>
             <div class="row">
-              <button class="btn primary" id="btnOpen"><svg class="i"><use href="#i-play"/></svg>Open SillyTavern</button>
+              <button class="btn primary" id="btnOpen"><svg class="i"><use href="#i-play"/></svg><span>Open SillyTavern</span></button>
+              <button class="btn" id="btnMinST" hidden><svg class="i"><use href="#i-minus"/></svg>Minimize</button>
               <span class="muted small mono" id="heroUrl"></span>
             </div>
           </div>
@@ -513,6 +514,7 @@
           <label class="switch"><input type="checkbox" id="setCheck"><div><b>Check for updates on launch</b><span>Shows "update available" on Home. Never updates by itself.</span></div></label>
           <label class="switch"><input type="checkbox" id="setBackup"><div><b>Back up before updating</b><span>Zip your data before every update or channel switch.</span></div></label>
           <label class="switch"><input type="checkbox" id="setConfirm"><div><b>Confirm before quitting</b><span>Ask before quitting while the server runs.</span></div></label>
+          <label class="switch"><input type="checkbox" id="setTray"><div><b>Keep running in the tray</b><span>Closing this window hides it to the tray (by the clock) and the server keeps running. Quit from the tray icon's menu.</span></div></label>
           <div class="field" style="padding-top:10px;border-top:1px solid var(--border)">
             <label>Automatic backups to keep (manual backups are never removed)</label>
             <input type="number" id="setKeep" min="1" max="100" style="max-width:120px">
@@ -622,7 +624,8 @@
       <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
       <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></symbol>
-      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 18h14"/></symbol>
+      <symbol id="i-copy"viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
     </defs>
   </svg>
 
@@ -631,7 +634,7 @@
   const D = window.desktop;
   const icon = name => `<svg class="i"><use href="#i-${name}"/></svg>`;
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const state = { running: false, startedAt: 0, busy: '', url: '', page: 'home', logs: [], filter: 'all', search: '', extTab: 'st' };
+  const state = { running: false, startedAt: 0, busy: '', url: '', windows: { open: 0, minimized: false }, page: 'home', logs: [], filter: 'all', search: '', extTab: 'st' };
 
   // ---------- navigation ----------
   const TITLES = { home: 'Home', backups: 'Backups', extensions: 'Extensions', maintenance: 'Maintenance', console: 'Console', settings: 'Settings' };
@@ -674,6 +677,9 @@
       ? 'Your server is up. Open the window any time — closing it keeps the server running.'
       : 'Start the server and open SillyTavern in its own window.';
     $('heroUrl').textContent = state.running ? state.url : '';
+    const w = state.windows;
+    $('btnOpen').lastElementChild.textContent = !w.open ? 'Open SillyTavern' : w.minimized ? 'Restore SillyTavern' : 'Show SillyTavern';
+    $('btnMinST').hidden = !w.open || w.minimized;
   }
   function setBusy(label) {
     state.busy = label;
@@ -684,6 +690,7 @@
   }
   $('btnPower').onclick = () => state.running ? D.stopServer() : D.startServer();
   $('btnOpen').onclick = () => D.openST();
+  $('btnMinST').onclick = () => D.minimizeST();
   setInterval(renderStatus, 30000);
 
   // ---------- version info ----------
@@ -887,6 +894,7 @@
     $('setCheck').checked = current.checkUpdatesOnLaunch;
     $('setBackup').checked = current.backupBeforeUpdate;
     $('setConfirm').checked = current.confirmBeforeQuit;
+    $('setTray').checked = !!current.closeToTray;
     $('setKeep').value = current.backupKeep;
     document.querySelectorAll('#setLayer button').forEach(b => b.classList.toggle('on', b.dataset.layer === (current.windowLayer || 'normal')));
     $('setTabs').checked = current.tabs !== false;
@@ -944,6 +952,7 @@
       checkUpdatesOnLaunch: $('setCheck').checked,
       backupBeforeUpdate: $('setBackup').checked,
       confirmBeforeQuit: $('setConfirm').checked,
+      closeToTray: $('setTray').checked,
       backupKeep: Math.min(100, Math.max(1, parseInt($('setKeep').value, 10) || 10)),
     };
     await D.saveSettings(s);
@@ -1203,13 +1212,15 @@
   D.onRefresh(refreshAll);
   D.onTheme(loadThemes);
   D.onSettings(s => { current = s; if (state.page === 'settings') loadSettingsForm(); });
+  D.onWindows(w => { state.windows = w; renderStatus(); });
 
   (async () => {
     await loadThemes();
     const s = await D.getState();
     current = s.settings;
     applyLogFont(current.consoleFont, current.consoleFontSize);
-    Object.assign(state, { running: s.running, startedAt: s.startedAt, url: s.url, logs: [...s.logs] });
+    Object.assign(state, { running: s.running, startedAt: s.startedAt, url: s.url, windows: s.windows, logs: [...s.logs] });
+    $('appVer').textContent = `v${s.appVersion}`;
     renderStatus();
     renderMiniLog();
     setBusy(s.busy);

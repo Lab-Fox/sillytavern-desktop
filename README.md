@@ -50,11 +50,11 @@ The app remembers your choice. If you later move or delete SillyTavern, the welc
 
 ## Using the launcher
 
-The launcher has six pages in the sidebar. **Start / Stop** in the top-right corner works from any page.
+The launcher has six pages in the sidebar. **Start / Stop** in the top-right corner works from any page. The app's own version is shown under its name, top left.
 
 | Page | What you can do there |
 |---|---|
-| **Home** | Open SillyTavern, see your version and branch, and get an **Update now** button when an update is out. Quick buttons for backup, characters, chats, data, extensions and `config.yaml`. |
+| **Home** | Open SillyTavern (or **Show** / **Restore** it when its window is open or minimized, and **Minimize** it), see your version and branch, and get an **Update now** button when an update is out. Quick buttons for backup, characters, chats, data, extensions and `config.yaml`. |
 | **Backups** | Back up your data, see every backup with its date and size, and **restore** or delete one. |
 | **Extensions** | **SillyTavern:** every third-party extension with its version and whether an update is waiting; **Update all** updates them in one go. **Desktop app:** extensions for this app itself (see below). |
 | **Maintenance** | **Update Node.js & Git** in one click, a **health check** (Node.js, git, npm, dependencies, changed files, disk space), one-click **repair tools**, and switching between the **release** and **staging** channels. |
@@ -186,6 +186,7 @@ Themes are only colors and an image, never CSS or code, so an imported theme can
 | Port | `8000` | Passed to the server with `--port`, overriding `config.yaml` |
 | Start server automatically | On | Start the server and open SillyTavern as soon as the app launches |
 | Confirm before quitting | On | Ask before quitting while the server runs |
+| Keep running in the tray | Off | Closing the launcher hides it to the tray and the server keeps running. Click the tray icon for the launcher; right-click it to open, show or minimize SillyTavern, start or stop the server, or quit |
 | Check for updates on launch | On | Shows "update available" on Home. Never updates by itself |
 | Back up before updating | On | Zip your data before every update or channel switch |
 | Automatic backups to keep | 10 | Older automatic backups are removed; manual backups never are |
@@ -312,9 +313,9 @@ The server runs as a hidden child process on `127.0.0.1`. The app talks to it on
 
 - [ ] Test and publish the installer build (`npm run dist:installer`)
 - [ ] "Update on launch" option (git pull before starting the server)
-- [ ] System tray mode (close to tray, server keeps running)
+- [x] System tray mode (close to tray, server keeps running)
 - [ ] Linux/macOS support
-- [ ] Show/restore the SillyTavern window from the launcher when it's hidden
+- [x] Show/restore the SillyTavern window from the launcher when it's hidden
 
 ## Contributing
 
