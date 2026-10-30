@@ -15,9 +15,16 @@ const HOVER_POLL_MS = 80;
 const byBar = new Map(); // bar webContents id → StWindow
 
 export class StWindow {
-    // opts: url, width, height, fullScreen, layer, colors, icon,
-    //       webPreferences, setupPage(webContents, stWindow), tabsEnabled() → bool,
-    //       menu(stWindow) → template, onClose({ width, height, fullScreen })
+    // opts: instance (the SillyTavern its first tab shows), width, height,
+    //       fullScreen, layer, colors, icon, tabsEnabled() → bool,
+    //       setupPage(webContents, stWindow, instance),
+    //       menu(stWindow) → template, newMenu(stWindow) → template,
+    //       onClose({ width, height, fullScreen })
+    //
+    // An instance is one SillyTavern a tab can show: { kind, url,
+    // webPreferences, chip, tip, info, readOnly, server?, onUnused? }.
+    // Tabs count their instance's users so an extra server can stop when
+    // its last tab closes.
     constructor(opts) {
         this.opts = opts;
         this.layer = opts.layer;
@@ -26,7 +33,7 @@ export class StWindow {
         // Tracked from the events: isFullScreen() still reports the old
         // state while 'enter-full-screen' is being emitted.
         this.fullScreen = false;
-        this.tabs = [];     // { view, id, title, favicon, loading }
+        this.tabs = [];     // { view, id, instance, title, favicon, loading }
         this.active = null; // the shown tab
 
         const win = this.win = new BaseWindow({
@@ -64,7 +71,7 @@ export class StWindow {
 
         this.bar.webContents.loadFile(path.join(__dirname, 'stbar.html'));
         this.bar.webContents.once('did-finish-load', () => this.push());
-        this.newTab();
+        this.newTab(opts.instance);
         layer.apply(win, this.layer);
         if (opts.fullScreen) win.setFullScreen(true);
         this.layout();
@@ -95,32 +102,42 @@ export class StWindow {
     }
 
     // ---------- tabs ----------
-    // A fresh SillyTavern page (first tab, the + button, Ctrl+T).
-    newTab() {
-        const view = new WebContentsView({ webPreferences: this.opts.webPreferences });
-        this.addTab(view, true);
-        view.webContents.loadURL(this.opts.url);
+    // A fresh SillyTavern page (first tab, the + button, Ctrl+T, the New
+    // SillyTavern menu). A server that is still starting gets a short
+    // "starting" page first.
+    newTab(instance = this.opts.instance) {
+        const view = new WebContentsView({ webPreferences: instance.webPreferences });
+        const tab = this.addTab(view, true, instance);
+        const wc = view.webContents;
+        if (!instance.server) { wc.loadURL(instance.url); return tab; }
+        wc.loadURL(statusPage(this.opts.colors, `Starting ${instance.tip}…`));
+        instance.server.ready.then(ok => {
+            if (wc.isDestroyed()) return;
+            wc.loadURL(ok ? instance.url : statusPage(this.opts.colors, `${instance.tip} could not start. The launcher's Console says why.`));
+        });
+        return tab;
     }
     // A page SillyTavern or an extension opened with window.open. Taking
     // over Electron's prepared webContents keeps window.opener working, so
     // an extension can still write into the about:blank page it opened.
-    adoptTab(options, { background = false } = {}) {
+    adoptTab(options, { background = false, instance = this.opts.instance } = {}) {
         const view = new WebContentsView({ webContents: options.webContents, webPreferences: options.webPreferences });
-        this.addTab(view, !background);
+        this.addTab(view, !background, instance);
         return view.webContents;
     }
-    addTab(view, activate) {
+    addTab(view, activate, instance) {
         const wc = view.webContents;
-        const tab = { view, id: wc.id, title: 'Loading…', favicon: '', loading: true };
+        const tab = { view, id: wc.id, instance, title: 'Loading…', favicon: '', loading: true };
+        instance.refs = (instance.refs || 0) + 1;
         view.setBackgroundColor(this.opts.colors.bg);
         view.setVisible(false);
         this.tabs.splice(this.active ? this.tabs.indexOf(this.active) + 1 : this.tabs.length, 0, tab);
         this.win.contentView.addChildView(view);
         this.win.contentView.addChildView(this.bar); // keep the bar on top
-        this.opts.setupPage(wc, this);
+        this.opts.setupPage(wc, this, instance);
         wc.on('page-title-updated', (_e, title) => {
             tab.title = title;
-            if (tab === this.active) this.win.setTitle(title);
+            if (tab === this.active) this.win.setTitle(windowTitle(tab));
             this.push();
         });
         wc.on('page-favicon-updated', (_e, icons) => { tab.favicon = icons[0] || ''; this.push(); });
@@ -139,7 +156,7 @@ export class StWindow {
         this.active?.view.setVisible(false);
         this.active = tab;
         tab.view.setVisible(true);
-        this.win.setTitle(tab.title);
+        this.win.setTitle(windowTitle(tab));
         tab.view.webContents.focus();
         this.layout();
         this.push();
@@ -151,6 +168,7 @@ export class StWindow {
         const i = this.tabs.indexOf(tab);
         if (i < 0) return;
         this.tabs.splice(i, 1);
+        if (--tab.instance.refs === 0) tab.instance.onUnused?.();
         if (this.closing) return;
         this.win.contentView.removeChildView(tab.view);
         if (!this.tabs.length) { this.win.close(); return; }
@@ -158,6 +176,7 @@ export class StWindow {
         this.push();
     }
     tabById(id) { return this.tabs.find(t => t.id === id); }
+    closeTabsOf(instance) { this.tabs.filter(t => t.instance === instance).forEach(t => this.closeTab(t)); }
     cycleTabs(step) {
         const i = this.tabs.indexOf(this.active);
         this.activate(this.tabs[(i + step + this.tabs.length) % this.tabs.length]);
@@ -212,8 +231,10 @@ export class StWindow {
     push() {
         if (this.bar.webContents.isDestroyed()) return;
         this.bar.webContents.send('bar:state', {
-            tabs: this.tabs.map(t => ({ id: t.id, title: t.title, favicon: t.favicon, loading: t.loading })),
+            tabs: this.tabs.map(t => ({ id: t.id, title: t.title, favicon: t.favicon, loading: t.loading, chip: t.instance.chip, tip: t.instance.tip, readOnly: !!t.instance.readOnly })),
             active: this.active?.id,
+            info: this.active?.instance.info || '',
+            readOnly: !!this.active?.instance.readOnly,
             tabsEnabled: this.opts.tabsEnabled(),
             fullScreen: this.fullScreen,
             layer: this.layer,
@@ -255,6 +276,14 @@ export class StWindow {
     }
 }
 
+const windowTitle = tab => (tab.instance.readOnly ? `[Read-only] ${tab.title}` : tab.title);
+
+// A themed one-line page for tabs whose server isn't up yet.
+function statusPage(c, text) {
+    const esc = String(text).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]);
+    return 'data:text/html;charset=utf-8,' + encodeURIComponent(`<title>${esc}</title><body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:${c.bg};color:${c.text};font:16px system-ui,sans-serif">${esc}</body>`);
+}
+
 function overlay(c) {
     return { color: c.panel, symbolColor: c.text, height: BAR_H };
 }
@@ -268,6 +297,7 @@ ipcMain.on('bar:action', (e, action, data = {}) => {
     else if (action === 'reload') w.reload();
     else if (action === 'fullscreen') w.toggleFullScreen();
     else if (action === 'tab-new') w.newTab();
+    else if (action === 'new-menu') w.popupMenu(w.opts.newMenu(w), data.at);
     else if (action === 'tab-select') w.activate(tab);
     else if (action === 'tab-close') w.closeTab(tab);
     else if (action === 'tab-menu' && tab) w.tabMenu(tab, data.at);

@@ -14,6 +14,7 @@ import * as setup from './setup.js';
 import * as themes from './themes.js';
 import { StWindow } from './shell.js';
 import { MODES as LAYERS } from './winlayer.js';
+import * as instances from './instances.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -48,6 +49,7 @@ const DEFAULT_SETTINGS = {
     windowFullScreen: false,
     windowLayer: 'normal',      // SillyTavern window: 'normal' | 'top' (always on top) | 'bottom' (stays in background)
     tabs: true,                 // pages SillyTavern/extensions open become tabs instead of windows
+    warnSecondServer: true,     // explain the shared-data risk before a second server on the same folder
     consoleFont: '',            // console/log font; '' = the built-in pixel font
     consoleFontSize: 18,
     autoStart: true,      // start server + open ST window immediately on app launch
@@ -210,7 +212,7 @@ function waitForServerThenOpen({ reload = false } = {}) {
             res.resume();
             if (res.statusCode && res.statusCode < 500) {
                 waitingForServer = false;
-                if (reload && stWin && !stWin.isDestroyed()) stWin.reloadAll();
+                if (reload) stWins.forEach(w => w.reloadAll());
                 openSillyTavernWindow();
             }
             else retry();
@@ -250,6 +252,8 @@ async function runTask(label, fn, { needsStopped = true } = {}) {
     broadcast('busy', busyTask);
     let restart = false;
     try {
+        // Extra servers on the same folder hold its files too; their tabs close.
+        if (needsStopped) await instances.stopAll(stRoot());
         if (needsStopped && serverState.running) {
             restart = !serverState.attached;
             if (!(await stopServerAndWait())) return false;
@@ -278,7 +282,7 @@ const keep = () => settings.backupKeep;
 
 // ---------- windows ----------
 let launcherWin = null;
-let stWin = null;
+const stWins = new Set(); // SillyTavern windows (several when tabs are off)
 
 function createLauncherWindow() {
     launcherWin = new BrowserWindow({
@@ -323,7 +327,8 @@ function isLocal(url) {
 // --- ST-specialized browser behavior ---
 // Keeps a page on the local server; external links go to the real browser.
 // host: the StWindow the page lives in, which takes new pages as tabs.
-function lockToServer(wc, host) {
+// instance: the SillyTavern the page belongs to; pages it opens stay in it.
+function lockToServer(wc, host, instance) {
     wc.on('will-navigate', (e, url) => { if (!isLocal(url)) { e.preventDefault(); shell.openExternal(url); } });
     wc.setWindowOpenHandler(({ url, disposition }) => {
         // about:blank is how extensions open a tab and fill it in afterwards.
@@ -331,43 +336,142 @@ function lockToServer(wc, host) {
             shell.openExternal(url);
             return { action: 'deny' };
         }
-        const allow = { action: 'allow', overrideBrowserWindowOptions: { icon: path.join(__dirname, 'icon.ico'), autoHideMenuBar: true, webPreferences: stWebPreferences() } };
+        const allow = { action: 'allow', overrideBrowserWindowOptions: { icon: path.join(__dirname, 'icon.ico'), autoHideMenuBar: true, webPreferences: instance.webPreferences } };
         // Real popups (window.open with a size) stay windows, as in a browser.
         if (settings.tabs && host && disposition !== 'new-window') {
-            allow.createWindow = options => host.adoptTab(options, { background: disposition === 'background-tab' });
+            allow.createWindow = options => host.adoptTab(options, { background: disposition === 'background-tab', instance });
             // Electron closes opened pages with their opener; tabs shouldn't
             // vanish when the tab that opened them is closed.
             allow.outlivesOpener = true;
         }
         return allow;
     });
-    wc.on('did-create-window', child => { child.setMenu(null); lockToServer(child.webContents); });
+    wc.on('did-create-window', child => { child.setMenu(null); lockToServer(child.webContents, null, instance); });
+}
+
+// ---------- SillyTavern instances ----------
+// What a tab or window shows: the main server, a read-only view of it, the
+// same folder on another port, or another install. `chip` goes after the
+// tab's title, `info` in the bar for the active tab, `tip` on hover.
+const sameDir = (a, b) => !!a && !!b && path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+const versionText = d => [d.version, d.branch].filter(Boolean).join(' ');
+let mainInst = null;
+let readOnlyInst = null;
+
+function mainInstance() {
+    const url = `http://${settings.host}:${settings.port}/`;
+    if (!mainInst || mainInst.url !== url) mainInst = { kind: 'main', url, webPreferences: stWebPreferences() };
+    const d = instances.describe(stRoot());
+    return Object.assign(mainInst, {
+        chip: `:${settings.port}`,
+        tip: `SillyTavern ${versionText(d)} on port ${settings.port}`,
+        info: `${versionText(d)} · :${settings.port}`,
+    });
+}
+
+// Same server, but every save, delete and send is blocked (see instances.js).
+function readOnlyInstance() {
+    instances.readOnlySession();
+    const d = instances.describe(stRoot());
+    readOnlyInst ||= { kind: 'readonly', readOnly: true, webPreferences: { ...stWebPreferences(), partition: instances.READ_ONLY_PARTITION } };
+    return Object.assign(readOnlyInst, {
+        url: mainInstance().url,
+        chip: `read-only :${settings.port}`,
+        tip: `Read-only SillyTavern ${d.version} on port ${settings.port} (nothing is saved or sent)`,
+        info: `READ-ONLY · ${d.version} · :${settings.port}`,
+    });
+}
+
+// A second server: this install on another port, or another install.
+async function extraInstance(dir, kind) {
+    const port = await instances.freePort(settings.port + 1, [settings.port]);
+    const d = instances.describe(dir);
+    const second = kind === 'port';
+    const srv = instances.startServer(dir, port, second ? 'second server' : `SillyTavern ${d.version}`);
+    const inst = {
+        kind, server: srv,
+        url: `http://${settings.host}:${port}/`,
+        webPreferences: { ...stWebPreferences(), partition: instances.partitionFor(dir) },
+        chip: second ? `:${port} · 2nd` : `${d.version} :${port}`,
+        tip: second ? `SillyTavern ${versionText(d)} on port ${port} (second server, same folder)` : `SillyTavern ${versionText(d)} on port ${port} (${dir})`,
+        info: second ? `${versionText(d)} · :${port} · 2nd server` : `${versionText(d)} · :${port} · ${dir}`,
+        onUnused: () => instances.stopServer(srv),
+    };
+    // Tabs of a server that stopped (or crashed) would only show an error.
+    srv.child.once('exit', () => stWins.forEach(w => w.closeTabsOf(inst)));
+    return inst;
+}
+
+// In the window it was asked from as a tab, or in a window of its own.
+function openInstance(inst, from) {
+    const w = from && !from.isDestroyed() ? from : [...stWins][0];
+    if (settings.tabs && w) { w.newTab(inst); w.focus(); }
+    else createStWindow(inst);
+}
+
+async function openSecondServer(from) {
+    if (settings.warnSecondServer) {
+        const { response, checkboxChecked } = await dialog.showMessageBox({
+            type: 'warning', buttons: ['Start second server', 'Cancel'], defaultId: 0, cancelId: 1,
+            message: 'Run a second server on the same SillyTavern folder?',
+            detail: 'Both servers use the same chats, characters, presets and settings. If you change the same thing in both, the one that saves last wins. To only look at presets or chats, a read-only copy is safer.',
+            checkboxLabel: "Don't show this again",
+        });
+        if (response !== 0) return;
+        if (checkboxChecked) { settings.warnSecondServer = false; saveSettings(settings); }
+    }
+    openInstance(await extraInstance(stRoot(), 'port'), from);
+}
+
+// Other installs for the New SillyTavern menu. Found in the background:
+// the search looks at every drive, and menus are built synchronously.
+let otherInstalls = [];
+function refreshInstalls() {
+    setTimeout(() => { otherInstalls = setup.detectInstalls(exeBases()).filter(i => !sameDir(i.path, stRoot())); }, 0);
+}
+
+function newSillyTavernMenu(w) {
+    const where = settings.tabs ? 'tab' : 'window';
+    refreshInstalls();
+    return [
+        { label: `Another ${where} of this SillyTavern`, accelerator: settings.tabs ? 'Ctrl+T' : undefined, registerAccelerator: false, click: () => openInstance(mainInstance(), w) },
+        { label: 'Read-only copy (browse without saving or sending)', click: () => openInstance(readOnlyInstance(), w) },
+        { label: 'This SillyTavern on another port', click: () => openSecondServer(w) },
+        { type: 'separator' },
+        ...(otherInstalls.length
+            ? otherInstalls.map(i => ({ label: `SillyTavern ${i.version} — ${i.path}`, click: () => extraInstance(i.path, 'other').then(inst => openInstance(inst, w)) }))
+            : [{ label: 'No other SillyTavern installs found', enabled: false }]),
+    ];
 }
 
 function openSillyTavernWindow() {
-    if (stWin && !stWin.isDestroyed()) {
-        stWin.focus();
-        return;
-    }
-    stWin = new StWindow({
-        url: `http://${settings.host}:${settings.port}/`,
+    const first = [...stWins][0];
+    if (first) { first.focus(); return; }
+    createStWindow(mainInstance());
+}
+
+function createStWindow(instance) {
+    const w = new StWindow({
+        instance,
         width: settings.windowWidth,
         height: settings.windowHeight,
         fullScreen: settings.windowFullScreen,
         layer: settings.windowLayer,
         colors: themes.get(settings.theme).colors,
         icon: path.join(__dirname, 'icon.ico'),
-        webPreferences: stWebPreferences(),
         setupPage: lockToServer,
         tabsEnabled: () => settings.tabs,
         menu: stWindowMenu,
+        newMenu: newSillyTavernMenu,
         // Remember size and full screen — saved once on close, not on every resize
         onClose: ({ width, height, fullScreen }) => {
             Object.assign(settings, { windowWidth: width, windowHeight: height, windowFullScreen: fullScreen });
             saveSettings(settings);
         },
     });
-    stWin.win.on('closed', () => { stWin = null; });
+    stWins.add(w);
+    w.win.on('closed', () => stWins.delete(w));
+    return w;
 }
 
 // Right-click menu of the SillyTavern window's top bar.
@@ -383,7 +487,7 @@ function stWindowMenu(w) {
         { label: 'Full screen', type: 'checkbox', checked: w.fullScreen, accelerator: 'F11', registerAccelerator: false, click: () => w.toggleFullScreen() },
         { label: 'Reload', accelerator: 'F5', registerAccelerator: false, click: () => w.reload() },
         { type: 'separator' },
-        { label: 'New tab', accelerator: 'Ctrl+T', registerAccelerator: false, visible: settings.tabs, click: () => w.newTab() },
+        { label: 'New SillyTavern', submenu: newSillyTavernMenu(w) },
         { label: 'Open new pages as tabs', type: 'checkbox', checked: settings.tabs, click: () => setTabs(!settings.tabs) },
         { type: 'separator' },
         { label: 'Show launcher', click: showLauncher },
@@ -393,7 +497,7 @@ function stWindowMenu(w) {
 function setTabs(on) {
     settings.tabs = !!on;
     saveSettings(settings);
-    stWin?.push();
+    stWins.forEach(w => w.push());
     broadcast('settings', settings);
 }
 
@@ -401,7 +505,7 @@ function setLayer(mode) {
     if (!LAYERS.includes(mode)) return;
     settings.windowLayer = mode;
     saveSettings(settings);
-    if (stWin && !stWin.isDestroyed()) stWin.setLayer(mode);
+    stWins.forEach(w => w.setLayer(mode));
     broadcast('settings', settings);
 }
 
@@ -569,7 +673,7 @@ function setTheme(id) {
     settings.theme = themes.get(id).id;
     saveSettings(settings);
     broadcast('theme');
-    if (stWin && !stWin.isDestroyed()) stWin.setColors(themes.get(settings.theme).colors);
+    stWins.forEach(w => w.setColors(themes.get(settings.theme).colors));
 }
 ipcMain.handle('list-themes', () => ({ active: themes.get(settings.theme).id, themes: themes.list() }));
 ipcMain.handle('set-theme', (_e, id) => setTheme(id));
@@ -649,9 +753,11 @@ if (gotLock) {
         userscriptsDir = setupUserscripts({ userData: USER_DATA, logLine }).scriptsDir;
         mx.initMaintenance({ logLine });
         setup.initSetup({ logLine });
+        instances.initInstances({ logLine, host: settings.host });
         themes.initThemes(USER_DATA);
         createLauncherWindow();
         if (!ensureInstall()) return; // the welcome screen takes it from here
+        refreshInstalls();
         if (settings.checkUpdatesOnLaunch) {
             mx.checkForUpdates(stRoot()).then(info => {
                 if (info.behind > 0) logLine(`A SillyTavern update is available (${info.behind} new commit${info.behind === 1 ? '' : 's'} on ${info.branch}).`);
@@ -666,8 +772,11 @@ if (gotLock) {
         // don't hit them with the confirmation dialog a second time.
         isQuitting = true;
         stopServer();
+        instances.stopAll();
         app.quit();
     });
+    // Extra servers (second port, other installs) never outlive the app.
+    app.on('will-quit', () => { instances.stopAll(); });
 
     app.on('before-quit', (e) => {
         if (isQuitting) return;

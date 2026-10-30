@@ -3,6 +3,10 @@
 // only ever sees window.__stDesktopGM, never ipcRenderer.
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
+// Read-only SillyTavern tabs: answer blocked saves inside the page (see instances.js).
+const readOnlyShim = ipcRenderer.sendSync('st:read-only');
+if (readOnlyShim) webFrame.executeJavaScript(readOnlyShim);
+
 const scripts = ipcRenderer.sendSync('us:for-url', location.href, process.isMainFrame);
 
 if (scripts.length) {

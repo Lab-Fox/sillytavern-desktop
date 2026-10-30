@@ -10,7 +10,7 @@
   /* Same base colors as the launcher theme (set from bar:state). */
   :root {
     --bg: #1c1d21; --panel: #26272d; --border: #3d3e47; --accent: #d65a52;
-    --text: #d9d7d0; --title: #efede6; --muted: #9c9ba4;
+    --text: #d9d7d0; --title: #efede6; --muted: #9c9ba4; --warn: #e6c36a;
     --tint: color-mix(in srgb, var(--accent) 18%, transparent);
     --px: 2px;
   }
@@ -41,9 +41,16 @@
   .tab img { width: 16px; height: 16px; image-rendering: pixelated; flex-shrink: 0; }
   .tab i { width: 8px; height: 8px; margin: 0 4px; background: var(--accent); flex-shrink: 0; animation: blink .6s steps(2) infinite; }
   .tab span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Which SillyTavern a tab shows: port, version, read-only. */
+  .chip { flex-shrink: 0; font-size: 12px; line-height: 1; padding: 2px 5px; color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+  .tab.ro .chip { color: var(--warn); border-color: var(--warn); }
+  .tab.ro.on::before { background: var(--warn); }
+  .info { flex-shrink: 1; min-width: 0; max-width: 360px; padding: 0 6px; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info.ro { color: var(--warn); font-weight: 600; }
   .tab button { height: 20px; min-width: 20px; padding: 0; }
   .tab button svg { width: 12px; height: 12px; }
-  #btnNewTab { margin: 0 0 3px 2px; flex-shrink: 0; }
+  #btnNewTab, #btnNewMenu { margin: 0 0 3px 2px; flex-shrink: 0; }
+  #btnNewMenu { min-width: 22px; padding: 0 3px; margin-left: 0; }
   @keyframes blink { 50% { opacity: 0; } }
   button {
     -webkit-app-region: no-drag; height: 26px; min-width: 30px; padding: 0 7px;
@@ -59,7 +66,8 @@
 </head>
 <body>
   <div class="bar" id="bar">
-    <div class="tabs" id="tabs"><button id="btnNewTab" title="New tab (Ctrl+T)" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+    <div class="tabs" id="tabs"><button id="btnNewTab" title="New tab (Ctrl+T)" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button id="btnNewMenu" title="New SillyTavern: another tab, a read-only copy, another port or another install"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></button></div>
+    <div class="info" id="info"></div>
     <button id="btnReload" title="Reload (F5)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button>
     <button id="btnLayer" title="Window layer"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5zM3 13l9 5 9-5"/></svg><span id="layerText" hidden></span></button>
     <button id="btnFull" title="Full screen (F11)"><svg viewBox="0 0 24 24" id="icoFull"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><span id="fullText" hidden>Exit full screen</span></button>
@@ -68,7 +76,7 @@
   </div>
 <script>
   const $ = id => document.getElementById(id);
-  const VARS = { bg: '--bg', panel: '--panel', border: '--border', accent: '--accent', text: '--text', title: '--title', muted: '--muted' };
+  const VARS = { bg: '--bg', panel: '--panel', border: '--border', accent: '--accent', text: '--text', title: '--title', muted: '--muted', warn: '--warn' };
   const LAYER_TEXT = { top: 'On top', bottom: 'In background' };
   $('btnReload').onclick = () => bar.action('reload');
   // Menus drop down from the button that opened them.
@@ -77,6 +85,7 @@
   $('btnFull').onclick = () => bar.action('fullscreen');
   $('btnMenu').onclick = () => bar.action('menu', { at: below($('btnMenu')) });
   $('btnNewTab').onclick = () => bar.action('tab-new');
+  $('btnNewMenu').onclick = () => bar.action('new-menu', { at: below($('btnNewMenu')) });
   // Right-clicks on tabs and buttons (the drag area is handled by the window).
   document.addEventListener('contextmenu', e => {
     e.preventDefault();
@@ -91,7 +100,7 @@
     const el = document.createElement('div');
     el.className = 'tab';
     el.dataset.id = id;
-    el.innerHTML = '<img alt="" hidden><i hidden></i><span></span><button title="Close tab (Ctrl+W)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>';
+    el.innerHTML = '<img alt="" hidden><i hidden></i><span></span><b class="chip"></b><button title="Close tab (Ctrl+W)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>';
     el.onmousedown = e => { if (e.button === 0 && !e.target.closest('button')) bar.action('tab-select', { id }); };
     el.onauxclick = e => { if (e.button === 1) bar.action('tab-close', { id }); }; // middle click
     el.querySelector('button').onclick = () => bar.action('tab-close', { id });
@@ -106,8 +115,11 @@
       const el = tabEl(t.id);
       const img = el.querySelector('img');
       el.classList.toggle('on', t.id === s.active);
-      el.title = t.title;
+      el.classList.toggle('ro', t.readOnly);
+      el.title = t.tip ? `${t.title}\n${t.tip}` : t.title;
       el.querySelector('span').textContent = t.title;
+      el.querySelector('.chip').textContent = t.chip || '';
+      el.querySelector('.chip').hidden = !t.chip;
       el.querySelector('i').hidden = !t.loading;
       img.hidden = t.loading || !t.favicon;
       if (t.favicon && img.getAttribute('src') !== t.favicon) img.src = t.favicon;
@@ -121,6 +133,9 @@
   bar.onState(s => {
     for (const [k, v] of Object.entries(VARS)) if (s.colors[k]) document.documentElement.style.setProperty(v, s.colors[k]);
     renderTabs(s);
+    $('info').textContent = s.info;
+    $('info').title = s.tabs.find(t => t.id === s.active)?.tip || '';
+    $('info').classList.toggle('ro', s.readOnly);
     $('controls').style.width = `${s.controlsWidth}px`;
     $('btnLayer').classList.toggle('on', s.layer !== 'normal');
     $('layerText').hidden = s.layer === 'normal';

@@ -80,7 +80,7 @@ The SillyTavern window only ever shows your local server. Links to other sites o
 
 ## The SillyTavern window
 
-SillyTavern gets its own window with a slim top bar: your tabs, **Reload**, **Window layer**, **Full screen** and a **menu** button, next to the usual minimize / maximize / close.
+SillyTavern gets its own window with a slim top bar: your tabs, what the active tab is running (version, branch, port), **Reload**, **Window layer**, **Full screen** and a **menu** button, next to the usual minimize / maximize / close.
 
 | Want to | Do this |
 |---|---|
@@ -92,6 +92,21 @@ SillyTavern gets its own window with a slim top bar: your tabs, **Reload**, **Wi
 | Open another SillyTavern tab | **+** in the tab strip or **Ctrl+T** |
 | Switch tabs | Click a tab, **Ctrl+Tab** / **Ctrl+Shift+Tab**, or **Ctrl+1**…**Ctrl+9** (9 = last tab) |
 | Close a tab | Its **×**, a middle click, or **Ctrl+W**. Ctrl+W never closes the last tab, so it can't close SillyTavern by accident |
+
+### Several SillyTavern at once
+
+Click **▾** next to **+** (or right-click the top bar → **New SillyTavern**):
+
+| Choice | What you get |
+|---|---|
+| **Another tab of this SillyTavern** | One more page of the server you already run. Same port, same data, like a second browser tab |
+| **Read-only copy** | Your SillyTavern with everything visible (chats, characters, presets, settings) but **nothing is saved and nothing is sent**. Browse or compare presets without touching your working tab |
+| **This SillyTavern on another port** | A second server on the same folder, e.g. port 8001. Both use the same chats and settings, so whichever saves last wins; the app warns you first |
+| **Other installs** | Every other SillyTavern found on this PC (e.g. an older version on another drive), each on its own port with its own data |
+
+With tabs on they open as tabs, otherwise as windows. Every tab shows which SillyTavern it is after its title — `:8000`, `read-only :8000`, `:8001 · 2nd`, `1.13.2 :8002` — and the bar shows the details of the active one. Extra servers stop by themselves when their last tab closes, before updates and repairs, and when the app quits.
+
+**How read-only works:** the app blocks every request from that tab that would change something (saves, deletes, uploads, imports, generating, any server plugin) before it leaves the app, and allows only the requests SillyTavern uses for reading. Inside the page, blocked saves are answered with "OK" so SillyTavern doesn't warn about a lost connection on every click; pressing send shows "this is a read-only copy". Nothing it changes is stored, not even in the browser, so closing the tab forgets it.
 
 **Tabs:** pages that SillyTavern or an extension opens (Character Library, for example) open as tabs in this window, like in a browser, and keep working with the page that opened them. Small popup windows that ask for a size still open as windows. Right-click a tab for **Reload tab**, **Close tab** and **Close other tabs**. Don't want tabs? Turn off **Open new pages as tabs** in the right-click menu or in Settings, and new pages open as separate windows again.
 
@@ -228,6 +243,7 @@ npm install
 | `shell.js` | The SillyTavern window: frameless window, tabs, top bar, full screen with the hover bar, keyboard shortcuts |
 | `stbar.html` / `bar-preload.js` | The top bar's page and its bridge to `shell.js` |
 | `winlayer.js` | Normal / always on top / stay in background (calls Windows' `SetWindowPos` through `koffi`) |
+| `instances.js` | Extra SillyTavern servers (free port, start/stop), the read-only filter and in-page shim, a browser session per instance |
 | `fonts/` | Bundled pixel fonts (Pixelify Sans, VT323) with their OFL licenses |
 | `icon.ico` / `icon.png` | App icon (`.ico` is used by Windows and the build; `.png` is the source image) |
 | `package.json` | App metadata and electron-builder config |
@@ -240,6 +256,8 @@ npm install
 - **Stopping the server on Windows** needs `taskkill /PID <pid> /T /F` to also kill the processes SillyTavern starts.
 - **The SillyTavern window is a `BaseWindow` with views**, not a `BrowserWindow`. Views aren't owned by the window: close their `webContents` when it closes (see `shell.js`).
 - **Tabs take over the page Electron prepared for `window.open`** (`createWindow` in `lockToServer`, then `adoptTab` in `shell.js`). A fresh page would break `window.opener`, and extensions write into the `about:blank` page they open. Tabs also set `outlivesOpener: true`; by default Electron closes opened pages together with their opener.
+- **SillyTavern's session cookie is named after the PC, not the port**, and cookies ignore ports. Two servers on `127.0.0.1` in one browser session overwrite each other's login/CSRF session, so every extra instance gets its own session (`partitionFor()` in `instances.js`).
+- **Read-only = allow-list.** `READ_POSTS` lists the POST routes SillyTavern uses to read; anything else that isn't a GET is blocked, including routes SillyTavern adds later. If a read breaks in read-only tabs after a SillyTavern update, add its route there.
 - **`isFullScreen()` lags behind the `enter-full-screen` event** on Windows; `shell.js` tracks full screen from the events instead.
 - **Electron ignores `setAlwaysOnTop` and `moveTop` while a window is full screen**, so `winlayer.js` also sets the z-order with `SetWindowPos`, and the layer is re-applied after every full-screen change.
 - **Chromium stops drawing windows it thinks are covered** (native occlusion). "Stay in background" covers the window on purpose, which left the top bar blank, so `main.js` turns that feature off.
@@ -275,7 +293,6 @@ The server runs as a hidden child process on `127.0.0.1`. The app talks to it on
 - [ ] System tray mode (close to tray, server keeps running)
 - [ ] Linux/macOS support
 - [ ] Show/restore the SillyTavern window from the launcher when it's hidden
-- [ ] Several SillyTavern at once: same install on another port, a read-only "dummy" copy for browsing presets, or another install
 - [ ] Extensions for the app itself
 
 ## Contributing
