@@ -15,6 +15,7 @@ import * as themes from './themes.js';
 import { StWindow } from './shell.js';
 import { MODES as LAYERS } from './winlayer.js';
 import * as instances from './instances.js';
+import * as ext from './extensions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -50,6 +51,7 @@ const DEFAULT_SETTINGS = {
     windowLayer: 'normal',      // SillyTavern window: 'normal' | 'top' (always on top) | 'bottom' (stays in background)
     tabs: true,                 // pages SillyTavern/extensions open become tabs instead of windows
     warnSecondServer: true,     // explain the shared-data risk before a second server on the same folder
+    desktopExtensions: {},      // id → true for desktop extensions the user turned on
     consoleFont: '',            // console/log font; '' = the built-in pixel font
     consoleFontSize: 18,
     autoStart: true,      // start server + open ST window immediately on app launch
@@ -97,6 +99,7 @@ const serverState = { child: null, running: false, attached: false, startedAt: 0
 
 function broadcast(channel, ...args) {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send(channel, ...args);
+    if (channel === 'server-started' || channel === 'server-stopped') ext.emit(channel);
 }
 
 function logLine(line) {
@@ -329,6 +332,7 @@ function isLocal(url) {
 // host: the StWindow the page lives in, which takes new pages as tabs.
 // instance: the SillyTavern the page belongs to; pages it opens stay in it.
 function lockToServer(wc, host, instance) {
+    ext.attachPage(wc);
     wc.on('will-navigate', (e, url) => { if (!isLocal(url)) { e.preventDefault(); shell.openExternal(url); } });
     wc.setWindowOpenHandler(({ url, disposition }) => {
         // about:blank is how extensions open a tab and fill it in afterwards.
@@ -488,6 +492,7 @@ function stWindowMenu(w) {
         { label: 'Reload', accelerator: 'F5', registerAccelerator: false, click: () => w.reload() },
         { type: 'separator' },
         { label: 'New SillyTavern', submenu: newSillyTavernMenu(w) },
+        ...(ext.menuItems().length ? [{ label: 'Extensions', submenu: ext.menuItems() }] : []),
         { label: 'Open new pages as tabs', type: 'checkbox', checked: settings.tabs, click: () => setTabs(!settings.tabs) },
         { type: 'separator' },
         { label: 'Show launcher', click: showLauncher },
@@ -526,6 +531,7 @@ const PLACES = {
     extensions: () => path.join(stRoot(), 'data', 'default-user', 'extensions'),
     backups: () => mx.backupsDir(stRoot()),
     userscripts: () => userscriptsDir,
+    desktopExtensions: () => ext.extensionsDir(),
     config: () => path.join(stRoot(), 'config.yaml'),
     logs: () => USER_DATA,
 };
@@ -538,6 +544,7 @@ const LINKS = {
     node: 'https://nodejs.org/en/download',
     git: 'https://git-scm.com/downloads',
     desktop: 'https://github.com/Lab-Fox/sillytavern-desktop',
+    extensionDocs: 'https://github.com/Lab-Fox/sillytavern-desktop/blob/main/EXTENSIONS.md',
 };
 
 ipcMain.handle('get-state', () => ({
@@ -595,6 +602,26 @@ ipcMain.handle('open-place', (_e, key) => {
 ipcMain.handle('open-link', (_e, key) => { if (LINKS[key]) shell.openExternal(LINKS[key]); });
 ipcMain.handle('copy-logs', () => { clipboard.writeText(serverState.logs.join('\n')); });
 ipcMain.handle('set-layer', (_e, mode) => setLayer(mode));
+
+// ---------- desktop extensions ----------
+const EXAMPLE_EXTENSION = path.join(__dirname, 'examples', 'break-reminder');
+ipcMain.handle('ext:list', () => ext.list());
+ipcMain.handle('ext:set-enabled', async (_e, id, on) => {
+    if (!ext.isValidId(id)) return false;
+    if (on) {
+        const e = ext.list().find(x => x.id === id);
+        if (!(await confirm(`Turn on "${e.name}"?`, `${e.description ? `${e.description}\n\n` : ''}Desktop extensions run with full access to your PC, like any program you install. Only turn on extensions you trust.`, 'Turn on'))) return false;
+    }
+    settings.desktopExtensions = { ...settings.desktopExtensions, [id]: !!on };
+    if (!on) delete settings.desktopExtensions[id];
+    saveSettings(settings);
+    await (on ? ext.activate(id) : ext.deactivate(id));
+    return true;
+});
+ipcMain.handle('ext:reload', () => ext.reloadAll());
+ipcMain.handle('ext:panel', (_e, id) => (ext.isValidId(id) && settings.desktopExtensions[id] ? ext.panelCode(id) : null));
+ipcMain.handle('ext:invoke', (_e, id, channel, args) => ext.invoke(id, channel, Array.isArray(args) ? args : []));
+ipcMain.handle('ext:add-example', () => ext.addExample(EXAMPLE_EXTENSION));
 ipcMain.handle('set-tabs', (_e, on) => setTabs(on));
 ipcMain.handle('save-settings', (_e, s) => {
     settings = { ...settings, ...s };
@@ -754,8 +781,22 @@ if (gotLock) {
         mx.initMaintenance({ logLine });
         setup.initSetup({ logLine });
         instances.initInstances({ logLine, host: settings.host });
+        ext.initExtensions({
+            userData: USER_DATA,
+            appVersion: app.getVersion(),
+            logLine,
+            isEnabled: id => !!settings.desktopExtensions[id],
+            sillytavern: {
+                folder: () => stRoot(),
+                url: () => mainInstance().url,
+                info: () => ({ ...instances.describe(stRoot()), port: settings.port, running: serverState.running }),
+                // Only paths on the main server: an extension can't point a tab elsewhere.
+                openTab: p => openInstance({ ...mainInstance(), url: new URL(p.replace(/^\/*/, '/'), mainInstance().url).href }),
+            },
+        });
         themes.initThemes(USER_DATA);
         createLauncherWindow();
+        ext.activateEnabled();
         if (!ensureInstall()) return; // the welcome screen takes it from here
         refreshInstalls();
         if (settings.checkUpdatesOnLaunch) {

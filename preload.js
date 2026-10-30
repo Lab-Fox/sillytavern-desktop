@@ -48,6 +48,13 @@ contextBridge.exposeInMainWorld('desktop', {
     saveSettings: s => invoke('save-settings', s),
     setLayer: mode => invoke('set-layer', mode),
     setTabs: on => invoke('set-tabs', on),
+    // desktop extensions
+    extList: () => invoke('ext:list'),
+    extSetEnabled: (id, on) => invoke('ext:set-enabled', id, on),
+    extReload: () => invoke('ext:reload'),
+    extPanel: id => invoke('ext:panel', id),
+    extInvoke: (id, channel, ...args) => invoke('ext:invoke', id, channel, args),
+    extAddExample: () => invoke('ext:add-example'),
     // events
     onLog: on('server-log'),
     onStarted: on('server-started'),

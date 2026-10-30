@@ -1,0 +1,9 @@
+{
+    "name": "Break reminder",
+    "version": "1.0.0",
+    "author": "Lab-Fox",
+    "description": "Example extension: a small note inside SillyTavern every so often to take a break. Shows every part of the extension API.",
+    "minAppVersion": "1.1.0",
+    "main": "main.cjs",
+    "panel": "panel.js"
+}

@@ -13,6 +13,7 @@ It's a **wrapper, not a fork**: it runs your existing SillyTavern install as-is 
 - [Using the launcher](#using-the-launcher)
 - [The SillyTavern window](#the-sillytavern-window)
 - [Extensions, plugins & userscripts](#extensions-plugins--userscripts)
+- [Desktop extensions](#desktop-extensions)
 - [Themes](#themes)
 - [Settings](#settings)
 - [Where things are stored](#where-things-are-stored)
@@ -55,7 +56,7 @@ The launcher has six pages in the sidebar. **Start / Stop** in the top-right cor
 |---|---|
 | **Home** | Open SillyTavern, see your version and branch, and get an **Update now** button when an update is out. Quick buttons for backup, characters, chats, data, extensions and `config.yaml`. |
 | **Backups** | Back up your data, see every backup with its date and size, and **restore** or delete one. |
-| **Extensions** | Every third-party extension with its version and whether an update is waiting. **Update all** updates them in one go. |
+| **Extensions** | **SillyTavern:** every third-party extension with its version and whether an update is waiting; **Update all** updates them in one go. **Desktop app:** extensions for this app itself (see below). |
 | **Maintenance** | **Update Node.js & Git** in one click, a **health check** (Node.js, git, npm, dependencies, changed files, disk space), one-click **repair tools**, and switching between the **release** and **staging** channels. |
 | **Console** | Everything the server prints. Show only problems, search, copy the whole log for a bug report, or open the log file. |
 | **Settings** | **Appearance** (themes), which SillyTavern install to use (**Change…**), **Move to another folder…**, the port, and behavior switches. |
@@ -133,6 +134,19 @@ Supported: `@match`, `@include`, `@exclude`, `@run-at`, `@noframes`, `@connect` 
 
 Only install userscripts you trust — like browser userscripts, they can make requests to any site their `@connect` allows.
 
+## Desktop extensions
+
+Extensions for **this app** (not for SillyTavern): anyone can add their own features without changing the app's code. An extension can:
+
+- add items to the SillyTavern window's menu (under **Extensions**)
+- add CSS or scripts to SillyTavern pages (at runtime, like a userscript — SillyTavern's files are never changed)
+- show its own settings panel in the launcher
+- react when the server starts or stops, and keep its own settings
+
+Manage them in **Extensions → Desktop app**: turn each one on or off, **Open folder**, **Reload** after editing, and **Add example** to try the bundled *Break reminder*. Extensions run with full access to your PC, so they stay **off** until you turn them on, and the app asks first.
+
+**Making one:** see **[EXTENSIONS.md](EXTENSIONS.md)** for the folder layout, `manifest.json`, the full API and the launcher panel, and copy [`examples/break-reminder`](examples/break-reminder) to start.
+
 ## Themes
 
 The launcher has a retro pixel look, designed to be easy on the eyes: a readable pixel font (Pixelify Sans), a pixel console font (VT323), soft contrast, and no scanlines or glow. Pick a theme in **Settings → Appearance**:
@@ -190,6 +204,7 @@ Path and port changes take effect the next time the server starts — stop it fi
 | Window size and full screen | Saved in `settings.json` when the SillyTavern window closes |
 | Custom themes | `%APPDATA%\SillyTavern Desktop\themes\` |
 | Userscripts | `%APPDATA%\SillyTavern Desktop\userscripts\` (saved values: `userscript-values.json` next to it) |
+| Desktop extensions | `%APPDATA%\SillyTavern Desktop\extensions\<id>\` (which ones are on: `settings.json`) |
 | Backups | `<SillyTavern folder>\backups\desktop\st-backup-<date>.zip` |
 | Your chats, characters, etc. | Untouched, in `<SillyTavern folder>\data\` |
 
@@ -243,6 +258,9 @@ npm install
 | `shell.js` | The SillyTavern window: frameless window, tabs, top bar, full screen with the hover bar, keyboard shortcuts |
 | `stbar.html` / `bar-preload.js` | The top bar's page and its bridge to `shell.js` |
 | `winlayer.js` | Normal / always on top / stay in background (calls Windows' `SetWindowPos` through `koffi`) |
+| `extensions.js` | Desktop extensions: discovery, turning on/off, the `api` object, page styles/scripts, menu items, panel handlers |
+| `examples/` | Example desktop extension (bundled; **Add example** copies it) |
+| `EXTENSIONS.md` | How to write a desktop extension |
 | `instances.js` | Extra SillyTavern servers (free port, start/stop), the read-only filter and in-page shim, a browser session per instance |
 | `fonts/` | Bundled pixel fonts (Pixelify Sans, VT323) with their OFL licenses |
 | `icon.ico` / `icon.png` | App icon (`.ico` is used by Windows and the build; `.png` is the source image) |
@@ -293,7 +311,6 @@ The server runs as a hidden child process on `127.0.0.1`. The app talks to it on
 - [ ] System tray mode (close to tray, server keeps running)
 - [ ] Linux/macOS support
 - [ ] Show/restore the SillyTavern window from the launcher when it's hidden
-- [ ] Extensions for the app itself
 
 ## Contributing
 

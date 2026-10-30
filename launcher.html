@@ -351,6 +351,26 @@
 
     <!-- ===== Extensions ===== -->
     <section class="page" id="page-extensions">
+      <div class="seg" id="extTabs" style="width:max-content;margin-bottom:14px">
+        <button data-ext-tab="st" class="on">SillyTavern</button>
+        <button data-ext-tab="desktop">Desktop app</button>
+      </div>
+      <div id="extDesktop" class="stack" hidden>
+        <p class="lead">Add-ons for this app itself (not for SillyTavern): they can add buttons to the top bar's menu, change how SillyTavern pages look, and show a panel here. Each one is a folder with a <span class="mono">manifest.json</span>.</p>
+        <div class="card">
+          <h2>Desktop extensions
+            <span class="act row">
+              <button class="btn sm ghost" id="btnDxExample"><svg class="i"><use href="#i-download"/></svg>Add example</button>
+              <button class="btn sm ghost" data-place="desktopExtensions"><svg class="i"><use href="#i-folder"/></svg>Open folder</button>
+              <button class="btn sm" id="btnDxReload"><svg class="i"><use href="#i-refresh"/></svg>Reload</button>
+            </span>
+          </h2>
+          <div class="list" id="dxList"></div>
+          <p class="muted small" style="margin-top:10px">Extensions run with full access to your PC, like any program, so they stay off until you turn them on. Only turn on extensions you trust. Edited an extension? Click <b style="color:var(--title)">Reload</b>. <button class="link" data-link="extensionDocs">How to make one</button></p>
+        </div>
+        <div class="stack" id="dxPanels"></div>
+      </div>
+      <div id="extSt">
       <p class="lead">Third-party extensions installed in SillyTavern. Extensions installed from SillyTavern's own menu can be updated here in one go. Install new ones from the Extensions menu inside SillyTavern.</p>
       <div class="stack">
         <div class="card">
@@ -369,6 +389,7 @@
             <button class="btn sm" data-place="userscripts"><svg class="i"><use href="#i-folder"/></svg>Open folder</button>
           </div>
         </div>
+      </div>
       </div>
     </section>
 
@@ -610,7 +631,7 @@
   const D = window.desktop;
   const icon = name => `<svg class="i"><use href="#i-${name}"/></svg>`;
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const state = { running: false, startedAt: 0, busy: '', url: '', page: 'home', logs: [], filter: 'all', search: '' };
+  const state = { running: false, startedAt: 0, busy: '', url: '', page: 'home', logs: [], filter: 'all', search: '', extTab: 'st' };
 
   // ---------- navigation ----------
   const TITLES = { home: 'Home', backups: 'Backups', extensions: 'Extensions', maintenance: 'Maintenance', console: 'Console', settings: 'Settings' };
@@ -632,7 +653,7 @@
   function loadPage(page) {
     if (page === 'home') loadInfo();
     if (page === 'backups') loadBackups();
-    if (page === 'extensions') loadExtensions(false);
+    if (page === 'extensions') { loadExtensions(false); if (state.extTab === 'desktop') loadDesktopExtensions(); }
     if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); }
     if (page === 'console') renderConsole();
     if (page === 'settings') loadSettingsForm();
@@ -741,6 +762,59 @@
     }).join('');
   }
   $('btnExtCheck').onclick = () => loadExtensions(true);
+
+  // ----- desktop extensions (add-ons for this app) -----
+  document.querySelectorAll('[data-ext-tab]').forEach(b => b.onclick = () => {
+    state.extTab = b.dataset.extTab;
+    document.querySelectorAll('[data-ext-tab]').forEach(x => x.classList.toggle('on', x === b));
+    $('extSt').hidden = state.extTab !== 'st';
+    $('extDesktop').hidden = state.extTab !== 'desktop';
+    if (state.extTab === 'desktop') loadDesktopExtensions();
+  });
+  async function loadDesktopExtensions() {
+    const list = await D.extList();
+    $('dxList').innerHTML = list.length ? list.map(e => {
+      const meta = [e.version && `v${e.version}`, e.author].filter(Boolean).map(esc).join(' · ');
+      const status = e.error ? `<div class="meta" style="color:var(--bad)">${esc(e.error)}</div>` : e.description ? `<div class="meta">${esc(e.description)}</div>` : '';
+      return `<div class="item"><div class="main"><div class="title">${esc(e.name)} <span class="muted small">${meta}</span></div>${status}</div>
+        <label class="switch" style="border:0;padding:0" title="${e.enabled ? 'Turn off' : 'Turn on'}"><input type="checkbox" data-dx="${esc(e.id)}"${e.enabled ? ' checked' : ''}></label></div>`;
+    }).join('') : `<div class="empty">No desktop extensions yet. <b style="color:var(--title)">Add example</b> installs one to try, or put an extension's folder in the extensions folder.</div>`;
+    $('dxList').querySelectorAll('[data-dx]').forEach(c => c.onchange = async () => {
+      c.disabled = true;
+      await D.extSetEnabled(c.dataset.dx, c.checked);
+      loadDesktopExtensions();
+    });
+    loadDesktopPanels(list);
+  }
+  // A panel is the extension's script, run with `panel` (its card body) and
+  // `ext` ({ id, invoke(channel, ...args) } to reach its main part).
+  window.__dxMount = {};
+  async function loadDesktopPanels(list) {
+    const box = $('dxPanels');
+    box.replaceChildren();
+    for (const e of list.filter(x => x.active && x.hasPanel)) {
+      const code = await D.extPanel(e.id);
+      if (!code) continue;
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `<h2>${esc(e.name)}</h2>`;
+      const panel = document.createElement('div');
+      card.append(panel);
+      box.append(card);
+      window.__dxMount[e.id] = { panel, ext: { id: e.id, invoke: (channel, ...args) => D.extInvoke(e.id, channel, ...args) } };
+      const key = JSON.stringify(e.id);
+      const script = document.createElement('script');
+      script.textContent = `(function (panel, ext) { try {\n${code}\n} catch (err) { panel.innerHTML = '<p class="muted" style="color:var(--bad)">This panel failed: ' + String(err.message).replace(/</g, '&lt;') + '</p>'; } })(window.__dxMount[${key}].panel, window.__dxMount[${key}].ext);`;
+      document.body.append(script);
+      script.remove();
+    }
+  }
+  $('btnDxReload').onclick = async () => { await D.extReload(); loadDesktopExtensions(); };
+  $('btnDxExample').onclick = async () => {
+    const r = await D.extAddExample();
+    append(r.exists ? `The example extension "${r.id}" is already in the extensions folder.` : `Added the example extension "${r.id}". Turn it on to try it.`);
+    loadDesktopExtensions();
+  };
   $('btnExtUpdate').onclick = () => D.updateExtensions();
 
   // ---------- maintenance ----------
