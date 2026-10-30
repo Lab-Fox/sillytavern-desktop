@@ -29,10 +29,16 @@
       "maintenance.js",
       "setup.js",
       "themes.js",
+      "shell.js",
+      "winlayer.js",
+      "bar-preload.js",
       "fonts/**",
       "launcher.html",
+      "stbar.html",
       "icon.ico",
-      "package.json"
+      "package.json",
+      "!node_modules/koffi/build/koffi/!(win32_x64)/**",
+      "!node_modules/koffi/{src,vendor,doc}/**"
     ],
     "win": {
       "target": [
@@ -49,6 +55,7 @@
     }
   },
   "dependencies": {
+    "koffi": "^2.16.3",
     "yauzl": "^3.4.0",
     "yazl": "^3.3.1"
   }

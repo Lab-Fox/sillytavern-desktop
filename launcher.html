@@ -29,6 +29,8 @@
     --px: 2px;            /* pixel unit: borders, shadows, offsets */
     --pixel-font: "Pixelify Sans", "Segoe UI", system-ui, sans-serif;
     --mono: "VT323", "Cascadia Code", Consolas, monospace;
+    --log-font: var(--mono);   /* Settings → Console font */
+    --log-size: 18px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
   [hidden] { display: none !important; }
@@ -155,7 +157,7 @@
   .quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
   .quick .btn { justify-content: flex-start; padding: 8px 10px; }
   .quick .btn svg { color: var(--accent); }
-  .mini-log { font-family: var(--mono); font-size: 17px; color: var(--muted); line-height: 1.25; max-height: 160px; overflow: hidden; }
+  .mini-log { font-family: var(--log-font); font-size: calc(var(--log-size) - 1px); color: var(--muted); line-height: 1.25; max-height: 160px; overflow: hidden; }
   .mini-log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ---------- lists ---------- */
@@ -185,7 +187,7 @@
   .seg button.on { background: var(--accent); color: var(--on-accent); }
   #console {
     flex: 1; min-height: 0; overflow-y: auto; background: var(--well);
-    padding: 10px 14px; font-family: var(--mono); font-size: 18px; line-height: 1.25; letter-spacing: 0;
+    padding: 10px 14px; font-family: var(--log-font); font-size: var(--log-size); line-height: 1.25; letter-spacing: 0;
     white-space: pre-wrap; word-break: break-word; color: var(--text); user-select: text;
   }
   .l-err { color: var(--bad); }
@@ -194,11 +196,14 @@
 
   /* ---------- forms ---------- */
   .field label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
-  input[type=text], input[type=number], input[type=search] {
+  input[type=text], input[type=number], input[type=search], select {
     width: 100%; background: var(--well); color: var(--title);
     padding: 6px 10px; font: inherit; outline: none; user-select: text;
   }
-  input:focus { border-color: var(--accent); }
+  input:focus, select:focus { border-color: var(--accent); }
+  select { border: var(--px) solid var(--border); cursor: pointer; }
+  select option, select optgroup { background: var(--panel); color: var(--text); }
+  .log-preview { background: var(--well); border: var(--px) solid var(--border); padding: 8px 12px; font-family: var(--log-font); font-size: var(--log-size); line-height: 1.25; letter-spacing: 0; color: var(--text); white-space: pre-wrap; }
   .switch { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 10px 0; border-top: var(--px) dashed var(--border); }
   .switch:first-of-type { border-top: 0; }
   .switch input { appearance: none; width: 36px; height: 20px; background: var(--well); border: var(--px) solid var(--border); position: relative; flex-shrink: 0; cursor: pointer; margin-top: 2px; }
@@ -402,7 +407,7 @@
         <div class="card">
           <h2>Release channel</h2>
           <div class="row">
-            <p class="muted" style="flex:1"><b style="color:var(--cream)">Release</b> is the stable version most people use. <b style="color:var(--cream)">Staging</b> gets new features first and is updated daily, but can break. You're on <span class="tag fox" id="branchTag">—</span></p>
+            <p class="muted" style="flex:1"><b style="color:var(--title)">Release</b> is the stable version most people use. <b style="color:var(--title)">Staging</b> gets new features first and is updated daily, but can break. You're on <span class="tag fox" id="branchTag">—</span></p>
             <button class="btn sm" data-task data-branch="release">Use release</button>
             <button class="btn sm" data-task data-branch="staging">Use staging</button>
           </div>
@@ -470,7 +475,7 @@
               <button class="btn sm" data-task id="btnMoveST"><svg class="i"><use href="#i-folder"/></svg>Move to another folder…</button>
               <button class="btn sm ghost" data-place="st"><svg class="i"><use href="#i-external"/></svg>Open</button>
             </div>
-            <p class="muted small">This app can live anywhere — it remembers where SillyTavern is. <b style="color:var(--cream)">Move</b> relocates the whole install, backups included.</p>
+            <p class="muted small">This app can live anywhere — it remembers where SillyTavern is. <b style="color:var(--title)">Move</b> relocates the whole install, backups included.</p>
           </div>
           <div class="card stack">
             <h2>Server</h2>
@@ -491,6 +496,33 @@
             <label>Automatic backups to keep (manual backups are never removed)</label>
             <input type="number" id="setKeep" min="1" max="100" style="max-width:120px">
           </div>
+        </div>
+      </div>
+      <div class="grid g2" style="margin-top:16px">
+        <div class="card stack">
+          <h2>SillyTavern window</h2>
+          <div class="field">
+            <label>Window layer</label>
+            <div class="seg" id="setLayer" style="width:max-content">
+              <button data-layer="normal">Normal</button>
+              <button data-layer="top">On top</button>
+              <button data-layer="bottom">In background</button>
+            </div>
+          </div>
+          <p class="muted small"><b style="color:var(--title)">On top</b> keeps SillyTavern above every other app. <b style="color:var(--title)">In background</b> keeps it behind other apps, even while you use it — handy for a full-screen SillyTavern under your other windows. <b style="color:var(--title)">Normal</b> is the default. All three are also in the right-click menu of the window's top bar.</p>
+          <p class="muted small"><b style="color:var(--title)">F11</b> toggles full screen. In full screen, move the mouse to the top edge to show the bar.</p>
+        </div>
+        <div class="card stack">
+          <h2>Console font</h2>
+          <div class="row" style="align-items:flex-end">
+            <div class="field" style="flex:1;min-width:0"><label>Font</label><select id="setLogFont"></select></div>
+            <div class="field"><label>Size</label><input type="number" id="setLogSize" min="10" max="32" style="width:80px"></div>
+            <button class="btn sm ghost" id="btnLogFontReset">Reset</button>
+          </div>
+          <div class="log-preview"><span class="l-ok">[12:00:01] SillyTavern is listening on IPv4: 127.0.0.1:8000</span>
+<span class="l-warn">[12:00:02] WARNING: an extension is out of date</span>
+[12:00:03] 0123456789 — The quick brown fox jumps over the lazy dog</div>
+          <p class="muted small">Used by the Console page and the activity logs. Applies right away.</p>
         </div>
       </div>
       <div style="margin-top:16px"><button class="btn primary" id="btnSave"><svg class="i"><use href="#i-check"/></svg>Save settings</button></div>
@@ -776,7 +808,53 @@
     $('setBackup').checked = current.backupBeforeUpdate;
     $('setConfirm').checked = current.confirmBeforeQuit;
     $('setKeep').value = current.backupKeep;
+    document.querySelectorAll('#setLayer button').forEach(b => b.classList.toggle('on', b.dataset.layer === (current.windowLayer || 'normal')));
+    renderLogFontForm();
   }
+  document.querySelectorAll('#setLayer button').forEach(b => b.onclick = () => D.setLayer(b.dataset.layer));
+
+  // ----- console font: presets first, then every installed font -----
+  const LOG_FONTS = [['', 'Pixel (default)', 18], ['Cascadia Mono', 'Cascadia Mono', 14], ['Consolas', 'Consolas', 14], ['Courier New', 'Courier New', 14], ['Segoe UI', 'Segoe UI', 14]];
+  let installedFonts = null;
+  const cssFont = name => name ? `"${name.replace(/["\\]/g, '')}", var(--mono)` : 'var(--mono)';
+  function applyLogFont(font, size) {
+    document.documentElement.style.setProperty('--log-font', cssFont(font));
+    document.documentElement.style.setProperty('--log-size', `${size}px`);
+  }
+  async function loadInstalledFonts() {
+    if (installedFonts) return;
+    // Chromium only answers a visible page right after a click (opening
+    // Settings counts); otherwise show the suggestions and retry next time.
+    try {
+      const names = new Set((await window.queryLocalFonts()).map(f => f.family));
+      for (const [f] of LOG_FONTS) names.delete(f);
+      installedFonts = [...names].sort((a, b) => a.localeCompare(b));
+    } catch { /* not allowed right now */ }
+  }
+  async function renderLogFontForm() {
+    await loadInstalledFonts();
+    const font = current.consoleFont || '';
+    const opt = (v, label) => `<option value="${esc(v)}"${v === font ? ' selected' : ''}>${esc(label)}</option>`;
+    const installed = installedFonts || [];
+    const extra = font && !LOG_FONTS.some(([f]) => f === font) && !installed.includes(font) ? [font] : [];
+    $('setLogFont').innerHTML = `<optgroup label="Suggested">${LOG_FONTS.map(([v, l]) => opt(v, l)).join('')}</optgroup>`
+      + (installed.length || extra.length ? `<optgroup label="Installed fonts">${[...extra, ...installed].map(f => opt(f, f)).join('')}</optgroup>` : '');
+    $('setLogSize').value = current.consoleFontSize || 18;
+  }
+  async function saveLogFont(font, size) {
+    size = Math.min(32, Math.max(10, parseInt(size, 10) || 18));
+    current = { ...current, consoleFont: font, consoleFontSize: size };
+    applyLogFont(font, size);
+    $('setLogSize').value = size;
+    await D.saveSettings({ consoleFont: font, consoleFontSize: size });
+  }
+  // A new font gets a size that suits it; the size box fine-tunes it.
+  $('setLogFont').onchange = () => {
+    const font = $('setLogFont').value;
+    saveLogFont(font, (LOG_FONTS.find(([f]) => f === font) || [0, 0, 14])[2]);
+  };
+  $('setLogSize').onchange = () => saveLogFont($('setLogFont').value, $('setLogSize').value);
+  $('btnLogFontReset').onclick = async () => { await saveLogFont('', 18); renderLogFontForm(); };
   $('btnSave').onclick = async () => {
     const s = {
       port: Math.min(65535, Math.max(1, parseInt($('setPort').value, 10) || 8000)),
@@ -1037,11 +1115,13 @@
   D.onBusy(setBusy);
   D.onRefresh(refreshAll);
   D.onTheme(loadThemes);
+  D.onSettings(s => { current = s; if (state.page === 'settings') loadSettingsForm(); });
 
   (async () => {
     await loadThemes();
     const s = await D.getState();
     current = s.settings;
+    applyLogFont(current.consoleFont, current.consoleFontSize);
     Object.assign(state, { running: s.running, startedAt: s.startedAt, url: s.url, logs: [...s.logs] });
     renderStatus();
     renderMiniLog();

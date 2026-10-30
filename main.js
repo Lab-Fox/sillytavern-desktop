@@ -12,6 +12,8 @@ import { setupUserscripts } from './userscripts.js';
 import * as mx from './maintenance.js';
 import * as setup from './setup.js';
 import * as themes from './themes.js';
+import { StWindow } from './shell.js';
+import { MODES as LAYERS } from './winlayer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -43,6 +45,10 @@ const DEFAULT_SETTINGS = {
     host: '127.0.0.1',
     windowWidth: 1280,
     windowHeight: 800,
+    windowFullScreen: false,
+    windowLayer: 'normal',      // SillyTavern window: 'normal' | 'top' (always on top) | 'bottom' (stays in background)
+    consoleFont: '',            // console/log font; '' = the built-in pixel font
+    consoleFontSize: 18,
     autoStart: true,      // start server + open ST window immediately on app launch
     confirmBeforeQuit: true,
     backupBeforeUpdate: true,   // zip data/ before every update or branch switch
@@ -62,6 +68,11 @@ function saveSettings(s) {
 }
 let settings = loadSettings();
 let userscriptsDir = path.join(USER_DATA, 'userscripts');
+
+// Chromium stops drawing windows it thinks are fully covered. "Stay in
+// background" keeps the SillyTavern window covered on purpose, and coming
+// back from that left the top bar blank.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 // ---------- single instance lock ----------
 const gotLock = app.requestSingleInstanceLock();
@@ -198,7 +209,7 @@ function waitForServerThenOpen({ reload = false } = {}) {
             res.resume();
             if (res.statusCode && res.statusCode < 500) {
                 waitingForServer = false;
-                if (reload && stWin && !stWin.isDestroyed()) stWin.webContents.reload();
+                if (reload && stWin && !stWin.isDestroyed()) stWin.reload();
                 openSillyTavernWindow();
             }
             else retry();
@@ -309,10 +320,10 @@ function isLocal(url) {
 }
 
 // --- ST-specialized browser behavior ---
-// Keeps a window on the local server; external links go to the real browser.
-function lockToServer(win) {
-    win.webContents.on('will-navigate', (e, url) => { if (!isLocal(url)) { e.preventDefault(); shell.openExternal(url); } });
-    win.webContents.setWindowOpenHandler(({ url }) => {
+// Keeps a page on the local server; external links go to the real browser.
+function lockToServer(wc) {
+    wc.on('will-navigate', (e, url) => { if (!isLocal(url)) { e.preventDefault(); shell.openExternal(url); } });
+    wc.setWindowOpenHandler(({ url }) => {
         // about:blank is how extensions open a tab and fill it in afterwards.
         if (isLocal(url) || url === 'about:blank') {
             return { action: 'allow', overrideBrowserWindowOptions: { icon: path.join(__dirname, 'icon.ico'), autoHideMenuBar: true, webPreferences: stWebPreferences() } };
@@ -320,33 +331,64 @@ function lockToServer(win) {
         shell.openExternal(url);
         return { action: 'deny' };
     });
-    win.webContents.on('did-create-window', child => { child.setMenu(null); lockToServer(child); });
+    wc.on('did-create-window', child => { child.setMenu(null); lockToServer(child.webContents); });
 }
 
 function openSillyTavernWindow() {
     if (stWin && !stWin.isDestroyed()) {
-        stWin.show();
         stWin.focus();
         return;
     }
-    stWin = new BrowserWindow({
+    stWin = new StWindow({
+        url: `http://${settings.host}:${settings.port}/`,
         width: settings.windowWidth,
         height: settings.windowHeight,
-        title: 'SillyTavern',
-        show: false,
+        fullScreen: settings.windowFullScreen,
+        layer: settings.windowLayer,
+        colors: themes.get(settings.theme).colors,
         icon: path.join(__dirname, 'icon.ico'),
         webPreferences: stWebPreferences(),
+        setupPage: lockToServer,
+        menu: stWindowMenu,
+        // Remember size and full screen — saved once on close, not on every resize
+        onClose: ({ width, height, fullScreen }) => {
+            Object.assign(settings, { windowWidth: width, windowHeight: height, windowFullScreen: fullScreen });
+            saveSettings(settings);
+        },
     });
-    Menu.setApplicationMenu(null);
-    stWin.loadURL(`http://${settings.host}:${settings.port}/`);
-    stWin.once('ready-to-show', () => stWin.show());
-    lockToServer(stWin);
-    // Remember window size — saved once on close, not on every resize event
-    stWin.on('close', () => {
-        const [w, h] = stWin.getSize();
-        settings.windowWidth = w; settings.windowHeight = h; saveSettings(settings);
+    stWin.win.on('closed', () => { stWin = null; });
+}
+
+// Right-click menu of the SillyTavern window's top bar.
+function stWindowMenu(w) {
+    const layerItem = (mode, label) => ({
+        label, type: 'radio', checked: w.layer === mode, layerItem: true, click: () => setLayer(mode),
     });
-    stWin.on('closed', () => { stWin = null; });
+    return [
+        layerItem('normal', 'Normal window (default)'),
+        layerItem('top', 'Always on top'),
+        layerItem('bottom', 'Stay in background'),
+        { type: 'separator' },
+        { label: 'Full screen', type: 'checkbox', checked: w.fullScreen, accelerator: 'F11', registerAccelerator: false, click: () => w.toggleFullScreen() },
+        { label: 'Reload', accelerator: 'F5', registerAccelerator: false, click: () => w.reload() },
+        { type: 'separator' },
+        { label: 'Show launcher', click: showLauncher },
+    ];
+}
+
+function setLayer(mode) {
+    if (!LAYERS.includes(mode)) return;
+    settings.windowLayer = mode;
+    saveSettings(settings);
+    if (stWin && !stWin.isDestroyed()) stWin.setLayer(mode);
+    broadcast('settings', settings);
+}
+
+function showLauncher() {
+    if (!launcherWin) return createLauncherWindow();
+    if (launcherWin.isMinimized()) launcherWin.restore();
+    launcherWin.show();
+    launcherWin.focus();
 }
 
 // ---------- IPC ----------
@@ -427,6 +469,7 @@ ipcMain.handle('open-place', (_e, key) => {
 });
 ipcMain.handle('open-link', (_e, key) => { if (LINKS[key]) shell.openExternal(LINKS[key]); });
 ipcMain.handle('copy-logs', () => { clipboard.writeText(serverState.logs.join('\n')); });
+ipcMain.handle('set-layer', (_e, mode) => setLayer(mode));
 ipcMain.handle('save-settings', (_e, s) => {
     settings = { ...settings, ...s };
     saveSettings(settings);
@@ -504,6 +547,7 @@ function setTheme(id) {
     settings.theme = themes.get(id).id;
     saveSettings(settings);
     broadcast('theme');
+    if (stWin && !stWin.isDestroyed()) stWin.setColors(themes.get(settings.theme).colors);
 }
 ipcMain.handle('list-themes', () => ({ active: themes.get(settings.theme).id, themes: themes.list() }));
 ipcMain.handle('set-theme', (_e, id) => setTheme(id));

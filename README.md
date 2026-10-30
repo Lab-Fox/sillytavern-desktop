@@ -11,6 +11,7 @@ It's a **wrapper, not a fork**: it runs your existing SillyTavern install as-is 
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Using the launcher](#using-the-launcher)
+- [The SillyTavern window](#the-sillytavern-window)
 - [Extensions, plugins & userscripts](#extensions-plugins--userscripts)
 - [Themes](#themes)
 - [Settings](#settings)
@@ -77,6 +78,20 @@ The SillyTavern window only ever shows your local server. Links to other sites o
 
 **Already running SillyTavern elsewhere?** If something is already serving on the configured port, the app uses that server instead of starting a second one. Updates and repairs then ask you to stop that server yourself first.
 
+## The SillyTavern window
+
+SillyTavern gets its own window with a slim top bar: the page title, **Reload**, **Window layer**, **Full screen** and a **menu** button, next to the usual minimize / maximize / close.
+
+| Want to | Do this |
+|---|---|
+| Go full screen | Press **F11** or click the full-screen button. Move the mouse to the **top edge** and the bar slides in; move away and it hides again. **F11** or **Exit full screen** leaves it. |
+| Keep SillyTavern **above** every other app | Right-click the top bar → **Always on top** |
+| Keep SillyTavern **behind** your other apps, even while you use it | Right-click the top bar → **Stay in background**. Handy for a full-screen SillyTavern "wallpaper" with your other windows on top. |
+| Go back to a normal window | Right-click the top bar → **Normal window (default)** |
+| Reload the page | **F5**, **Ctrl+R**, or the reload button |
+
+The window layer is also under **Settings → SillyTavern window** in the launcher, and it's remembered, along with the window size and full screen.
+
 ## Extensions, plugins & userscripts
 
 The app runs your normal SillyTavern, so community add-ons work as usual:
@@ -140,6 +155,8 @@ Themes are only colors and an image, never CSS or code, so an imported theme can
 | Check for updates on launch | On | Shows "update available" on Home. Never updates by itself |
 | Back up before updating | On | Zip your data before every update or channel switch |
 | Automatic backups to keep | 10 | Older automatic backups are removed; manual backups never are |
+| Window layer | Normal | **On top** or **In background** (see [The SillyTavern window](#the-sillytavern-window)). Applies right away |
+| Console font | Pixel (VT323), 18 | Any font installed on your PC, and its size, for the Console page and activity logs. Applies right away |
 
 Path and port changes take effect the next time the server starts — stop it first if it's running.
 
@@ -149,8 +166,8 @@ Path and port changes take effect the next time the server starts — stop it fi
 |---|---|
 | App settings | `%APPDATA%\SillyTavern Desktop\settings.json` |
 | App log (everything shown in the console) | `%APPDATA%\SillyTavern Desktop\desktop-debug.log` |
-| Window size | Saved in `settings.json` when the SillyTavern window closes |
-| Custom themes | `%APPDATA%\SillyTavern Desktop	hemes\` |
+| Window size and full screen | Saved in `settings.json` when the SillyTavern window closes |
+| Custom themes | `%APPDATA%\SillyTavern Desktop\themes\` |
 | Userscripts | `%APPDATA%\SillyTavern Desktop\userscripts\` (saved values: `userscript-values.json` next to it) |
 | Backups | `<SillyTavern folder>\backups\desktop\st-backup-<date>.zip` |
 | Your chats, characters, etc. | Untouched, in `<SillyTavern folder>\data\` |
@@ -202,16 +219,23 @@ npm install
 | `st-preload.js` | Runs in every frame of SillyTavern windows; injects matching userscripts with the GM_* shim |
 | `launcher.html` | Launcher UI — one self-contained file, no external dependencies |
 | `themes.js` | Built-in themes, custom theme storage, validation, import/export |
+| `shell.js` | The SillyTavern window: frameless window, top bar, full screen with the hover bar, keyboard shortcuts |
+| `stbar.html` / `bar-preload.js` | The top bar's page and its bridge to `shell.js` |
+| `winlayer.js` | Normal / always on top / stay in background (calls Windows' `SetWindowPos` through `koffi`) |
 | `fonts/` | Bundled pixel fonts (Pixelify Sans, VT323) with their OFL licenses |
 | `icon.ico` / `icon.png` | App icon (`.ico` is used by Windows and the build; `.png` is the source image) |
 | `package.json` | App metadata and electron-builder config |
 
 ### Gotchas (read before changing things)
 
-- **Portable exes unpack to a temp folder before running**, so `process.execPath` points to the wrong place. Use `PORTABLE_EXECUTABLE_DIR` and check that `server.js` exists — see `resolveStRoot()`.
+- **Portable exes unpack to a temp folder before running**, so `process.execPath` points to the wrong place. Use `PORTABLE_EXECUTABLE_DIR` — see `exeBases()` in `main.js`.
 - **Packaged apps run from a read-only archive (asar).** Never write files next to `__dirname`; use `app.getPath('userData')`.
 - **Single-instance lock:** all startup wiring must stay inside `if (gotLock)`, or a second launch starts a server inside an app that is already quitting.
 - **Stopping the server on Windows** needs `taskkill /PID <pid> /T /F` to also kill the processes SillyTavern starts.
+- **The SillyTavern window is a `BaseWindow` with views**, not a `BrowserWindow`. Views aren't owned by the window: close their `webContents` when it closes (see `shell.js`).
+- **`isFullScreen()` lags behind the `enter-full-screen` event** on Windows; `shell.js` tracks full screen from the events instead.
+- **Electron ignores `setAlwaysOnTop` and `moveTop` while a window is full screen**, so `winlayer.js` also sets the z-order with `SetWindowPos`, and the layer is re-applied after every full-screen change.
+- **Chromium stops drawing windows it thinks are covered** (native occlusion). "Stay in background" covers the window on purpose, which left the top bar blank, so `main.js` turns that feature off.
 
 ## How it works
 
@@ -244,6 +268,9 @@ The server runs as a hidden child process on `127.0.0.1`. The app talks to it on
 - [ ] System tray mode (close to tray, server keeps running)
 - [ ] Linux/macOS support
 - [ ] Show/restore the SillyTavern window from the launcher when it's hidden
+- [ ] Tabs: pages that SillyTavern or an extension opens become tabs instead of windows (optional)
+- [ ] Several SillyTavern at once: same install on another port, a read-only "dummy" copy for browsing presets, or another install
+- [ ] Extensions for the app itself
 
 ## Contributing
 
