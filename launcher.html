@@ -154,6 +154,10 @@
   .kv dt { color: var(--muted); }
   .kv dd { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .update-box { margin-top: 14px; padding-top: 14px; border-top: var(--px) dashed var(--border); display: flex; align-items: center; gap: 10px; }
+  .notes summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  .notes div { white-space: pre-wrap; max-height: 220px; overflow: auto; margin-top: 8px; font-size: 14px; }
+  .progress { flex: 1; height: 12px; border: var(--px) solid var(--border); background: var(--bg); }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); }
   .quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
   .quick .btn { justify-content: flex-start; padding: 8px 10px; }
   .quick .btn svg { color: var(--accent); }
@@ -289,6 +293,16 @@
     <!-- ===== Home ===== -->
     <section class="page show" id="page-home">
       <div class="stack">
+        <div class="card" id="appUpdCard" hidden>
+          <h2>SillyTavern Desktop <span id="appUpdVer"></span> is available<button class="link act" data-link="desktopReleases">Release page</button></h2>
+          <details class="notes"><summary>What's new</summary><div id="appUpdNotes"></div></details>
+          <div class="update-box">
+            <div class="progress" id="appUpdBar" hidden><i></i></div>
+            <span class="muted small" id="appUpdHint"></span>
+            <button class="btn sm primary" id="btnAppUpd" style="margin-left:auto"></button>
+          </div>
+        </div>
+
         <div class="card hero">
           <img class="logo" data-logo alt="">
           <div style="flex:1">
@@ -512,12 +526,17 @@
           <h2>Behavior</h2>
           <label class="switch"><input type="checkbox" id="setAuto"><div><b>Start automatically</b><span>Start the server and open SillyTavern when the app launches.</span></div></label>
           <label class="switch"><input type="checkbox" id="setCheck"><div><b>Check for updates on launch</b><span>Shows "update available" on Home. Never updates by itself.</span></div></label>
+          <label class="switch"><input type="checkbox" id="setAppUpd"><div><b>Check for app updates on launch</b><span>Looks for a new version of this app on GitHub and shows it on Home. Installs only when you click.</span></div></label>
           <label class="switch"><input type="checkbox" id="setBackup"><div><b>Back up before updating</b><span>Zip your data before every update or channel switch.</span></div></label>
           <label class="switch"><input type="checkbox" id="setConfirm"><div><b>Confirm before quitting</b><span>Ask before quitting while the server runs.</span></div></label>
           <label class="switch"><input type="checkbox" id="setTray"><div><b>Keep running in the tray</b><span>Closing this window hides it to the tray (by the clock) and the server keeps running. Quit from the tray icon's menu.</span></div></label>
           <div class="field" style="padding-top:10px;border-top:1px solid var(--border)">
             <label>Automatic backups to keep (manual backups are never removed)</label>
             <input type="number" id="setKeep" min="1" max="100" style="max-width:120px">
+          </div>
+          <div class="row" style="padding-top:10px;border-top:1px solid var(--border)">
+            <span class="muted small" id="appUpdStatus" style="flex:1"></span>
+            <button class="btn sm ghost" id="btnAppCheck"><svg class="i"><use href="#i-refresh"/></svg>Check for app updates</button>
           </div>
         </div>
       </div>
@@ -625,7 +644,7 @@
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
       <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></symbol>
       <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 18h14"/></symbol>
-      <symbol id="i-copy"viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
     </defs>
   </svg>
 
@@ -728,6 +747,50 @@
     loadInfo(await D.checkUpdates());
   };
   $('btnUpdate').onclick = () => D.update();
+
+  // ---------- updates of this app ----------
+  // Release notes are Markdown; shown as plain text without the markup.
+  const plainNotes = s => String(s || '').replace(/\r/g, '').replace(/^#+\s*/gm, '').replace(/\*\*|`/g, '').trim();
+  function renderAppUpdate(u) {
+    state.appUpdate = u;
+    const pct = u.percent || 0;
+    const line = {
+      checking: 'checking for updates…',
+      current: 'up to date',
+      error: `could not check for updates (${u.error})`,
+      available: `version ${u.version} is available (see Home)`,
+      downloading: `downloading ${u.version}… ${pct}%`,
+      ready: `version ${u.version} is ready to install (see Home)`,
+    }[u.status];
+    $('appUpdStatus').textContent = `This app: v${state.appVersion}${line ? ` · ${line}` : ''}`;
+    $('btnAppCheck').disabled = ['checking', 'downloading', 'ready'].includes(u.status);
+    const show = ['available', 'downloading', 'ready'].includes(u.status);
+    $('appUpdCard').hidden = !show;
+    if (!show) return;
+    $('appUpdVer').textContent = u.version;
+    $('appUpdNotes').textContent = plainNotes(u.notes) || 'No notes for this release.';
+    $('appUpdBar').hidden = u.status !== 'downloading';
+    $('appUpdBar').firstElementChild.style.width = `${pct}%`;
+    const btn = $('btnAppUpd');
+    btn.disabled = u.status === 'downloading';
+    if (!u.canInstall) {
+      btn.innerHTML = `${icon('external')}Open release page`;
+      $('appUpdHint').textContent = u.kind === 'source' ? 'Running from source: pull the new version with git.' : 'Download the new version from the release page.';
+    } else if (u.status === 'ready') {
+      btn.innerHTML = `${icon('refresh')}Restart and update`;
+      $('appUpdHint').textContent = 'The app closes, installs the update and opens again. The SillyTavern server is stopped first.';
+    } else {
+      btn.innerHTML = `${icon('download')}Download update`;
+      $('appUpdHint').textContent = u.status === 'downloading' ? `${pct}%` : u.error ? `Download failed: ${u.error}` : '';
+    }
+  }
+  $('btnAppUpd').onclick = () => {
+    const u = state.appUpdate;
+    if (!u.canInstall) D.openLink('desktopReleases');
+    else if (u.status === 'ready') D.appUpdateInstall();
+    else if (u.status === 'available') D.appUpdateDownload();
+  };
+  $('btnAppCheck').onclick = () => D.appUpdateCheck();
 
   // ---------- backups ----------
   async function loadBackups() {
@@ -892,6 +955,7 @@
     $('setPort').value = current.port;
     $('setAuto').checked = current.autoStart;
     $('setCheck').checked = current.checkUpdatesOnLaunch;
+    $('setAppUpd').checked = current.checkAppUpdates !== false;
     $('setBackup').checked = current.backupBeforeUpdate;
     $('setConfirm').checked = current.confirmBeforeQuit;
     $('setTray').checked = !!current.closeToTray;
@@ -950,6 +1014,7 @@
       port: Math.min(65535, Math.max(1, parseInt($('setPort').value, 10) || 8000)),
       autoStart: $('setAuto').checked,
       checkUpdatesOnLaunch: $('setCheck').checked,
+      checkAppUpdates: $('setAppUpd').checked,
       backupBeforeUpdate: $('setBackup').checked,
       confirmBeforeQuit: $('setConfirm').checked,
       closeToTray: $('setTray').checked,
@@ -1213,6 +1278,7 @@
   D.onTheme(loadThemes);
   D.onSettings(s => { current = s; if (state.page === 'settings') loadSettingsForm(); });
   D.onWindows(w => { state.windows = w; renderStatus(); });
+  D.onAppUpdate(renderAppUpdate);
 
   (async () => {
     await loadThemes();
@@ -1221,6 +1287,8 @@
     applyLogFont(current.consoleFont, current.consoleFontSize);
     Object.assign(state, { running: s.running, startedAt: s.startedAt, url: s.url, windows: s.windows, logs: [...s.logs] });
     $('appVer').textContent = `v${s.appVersion}`;
+    state.appVersion = s.appVersion;
+    renderAppUpdate(await D.appUpdateState());
     renderStatus();
     renderMiniLog();
     setBusy(s.busy);

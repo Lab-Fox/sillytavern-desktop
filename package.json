@@ -4,7 +4,7 @@
   "version": "1.2.0",
   "description": "Standalone desktop app for SillyTavern — built-in browser, no cmd required",
   "license": "AGPL-3.0",
-  "author": "Built with love by ENI for LO",
+  "author": "Fox",
   "type": "module",
   "main": "main.js",
   "scripts": {
@@ -20,7 +20,7 @@
     "electron-builder": "^26.0.12"
   },
   "build": {
-    "appId": "com.lo.sillytaverndesktop",
+    "appId": "com.fox.sillytaverndesktop",
     "productName": "SillyTavern Desktop",
     "files": [
       "main.js",
@@ -34,6 +34,7 @@
       "winlayer.js",
       "instances.js",
       "extensions.js",
+      "appupdate.js",
       "bar-preload.js",
       "examples/**",
       "fonts/**",

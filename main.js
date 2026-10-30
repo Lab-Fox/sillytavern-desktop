@@ -1,4 +1,4 @@
-// ENI's SillyTavern Desktop — main process
+// SillyTavern Desktop — main process
 // Wraps the SillyTavern server as a hidden child process and
 // renders it in a dedicated Chromium window. No cmd, ever.
 import { app, BrowserWindow, Menu, Tray, ipcMain, shell, dialog, clipboard } from 'electron';
@@ -16,6 +16,7 @@ import { StWindow } from './shell.js';
 import { MODES as LAYERS } from './winlayer.js';
 import * as instances from './instances.js';
 import * as ext from './extensions.js';
+import * as appUpdate from './appupdate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -57,8 +58,9 @@ const DEFAULT_SETTINGS = {
     autoStart: true,      // start server + open ST window immediately on app launch
     confirmBeforeQuit: true,
     closeToTray: false,         // closing the launcher hides it to the tray; the server keeps running
-    backupBeforeUpdate: true,  // zip data/ before every update or branch switch
+    backupBeforeUpdate: true,   // zip data/ before every update or branch switch
     checkUpdatesOnLaunch: true, // git fetch on startup so the dashboard can say "update available"
+    checkAppUpdates: true,      // look for a new release of this app on startup (never installs by itself)
     backupKeep: 10,             // automatic backups kept; manual ones are never pruned
     theme: 'sillytavern',       // launcher theme id (see themes.js)
 };
@@ -156,6 +158,8 @@ function checkPortOpen() {
 
 async function startServer() {
     if (serverState.running) { logLine('Server is already running.'); return; }
+    // An update, restore or branch switch is changing SillyTavern's files.
+    if (busyStopsServer) { logLine(`Busy with "${busyTask}" — the server starts again when it has finished.`); return; }
     if (await checkPortOpen()) {
         logLine(`Port ${settings.port} is already serving — a SillyTavern server is running elsewhere. Attaching to it instead of starting a duplicate.`);
         serverState.running = true;
@@ -220,7 +224,9 @@ function stopServer() {
         broadcast('server-stopped');
         return;
     }
-    if (!serverState.child) return;
+    // Several quit paths call this; one taskkill is enough.
+    if (!serverState.child || serverState.child.stopping) return;
+    serverState.child.stopping = true;
     logLine('Stopping server...');
     // taskkill /T kills the whole process tree (node spawns children e.g. transformers)
     if (process.platform === 'win32') {
@@ -228,6 +234,13 @@ function stopServer() {
     } else {
         serverState.child.kill('SIGTERM');
     }
+}
+
+// Start the server if needed, then open the window once it answers. Nothing
+// to wait for when it didn't start (no install, busy, node missing).
+async function startAndOpen() {
+    await startServer();
+    if (serverState.running) waitForServerThenOpen();
 }
 
 // Poll the server until it answers, then open the ST window.
@@ -264,6 +277,7 @@ function waitForServerThenOpen({ reload = false } = {}) {
 // first (Windows locks files a running node process holds) and start it
 // again afterwards if it was running.
 let busyTask = '';
+let busyStopsServer = false; // the running task needs the server stopped
 
 function stopServerAndWait() {
     return new Promise(resolve => {
@@ -281,6 +295,7 @@ function stopServerAndWait() {
 async function runTask(label, fn, { needsStopped = true } = {}) {
     if (busyTask) { logLine(`Busy with "${busyTask}" — wait for it to finish.`); return false; }
     busyTask = label;
+    busyStopsServer = needsStopped;
     broadcast('busy', busyTask);
     let restart = false;
     try {
@@ -296,6 +311,7 @@ async function runTask(label, fn, { needsStopped = true } = {}) {
         return false;
     } finally {
         busyTask = '';
+        busyStopsServer = false;
         broadcast('busy', '');
         broadcast('refresh');
         if (restart) startServer().then(() => waitForServerThenOpen({ reload: true }));
@@ -359,7 +375,7 @@ let trayHintShown = false;
 function trayMenu() {
     const w = stWindowState();
     return [
-        { label: !w.open ? 'Open SillyTavern' : w.minimized ? 'Restore SillyTavern' : 'Show SillyTavern', click: () => (serverState.running ? openSillyTavernWindow() : startServer().then(() => waitForServerThenOpen())) },
+        { label: !w.open ? 'Open SillyTavern' : w.minimized ? 'Restore SillyTavern' : 'Show SillyTavern', click: () => (serverState.running ? openSillyTavernWindow() : startAndOpen()) },
         ...(w.open && !w.minimized ? [{ label: 'Minimize SillyTavern', click: minimizeStWindows }] : []),
         { label: 'Show launcher', click: showLauncher },
         { type: 'separator' },
@@ -660,6 +676,7 @@ const LINKS = {
     node: 'https://nodejs.org/en/download',
     git: 'https://git-scm.com/downloads',
     desktop: 'https://github.com/Lab-Fox/sillytavern-desktop',
+    desktopReleases: appUpdate.RELEASES_PAGE,
     extensionDocs: 'https://github.com/Lab-Fox/sillytavern-desktop/blob/main/EXTENSIONS.md',
 };
 
@@ -674,14 +691,14 @@ ipcMain.handle('get-state', () => ({
     appVersion: app.getVersion(),
     windows: stWindowState(),
 }));
-ipcMain.handle('start-server', () => startServer().then(() => waitForServerThenOpen()));
+ipcMain.handle('start-server', () => startAndOpen());
 ipcMain.handle('stop-server', () => stopServer());
 ipcMain.handle('open-st', () => {
     if (serverState.running) { openSillyTavernWindow(); return; }
-    return startServer().then(() => waitForServerThenOpen());
+    return startAndOpen();
 });
 ipcMain.handle('minimize-st', () => minimizeStWindows());
-ipcMain.handle('st-info',() => mx.getInfo(stRoot()));
+ipcMain.handle('st-info', () => mx.getInfo(stRoot()));
 ipcMain.handle('check-updates', () => mx.checkForUpdates(stRoot()));
 ipcMain.handle('update', () => runTask('Updating SillyTavern', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
 ipcMain.handle('repair', async (_e, kind) => {
@@ -721,6 +738,16 @@ ipcMain.handle('open-place', (_e, key) => {
 ipcMain.handle('open-link', (_e, key) => { if (LINKS[key]) shell.openExternal(LINKS[key]); });
 ipcMain.handle('copy-logs', () => { clipboard.writeText(serverState.logs.join('\n')); });
 ipcMain.handle('set-layer', (_e, mode) => setLayer(mode));
+
+// ---------- app updates ----------
+ipcMain.handle('app-update-state', () => appUpdate.getState());
+ipcMain.handle('app-update-check', () => appUpdate.check());
+ipcMain.handle('app-update-download', () => appUpdate.download());
+ipcMain.handle('app-update-install', () => {
+    // A restore or SillyTavern update must not be cut off halfway.
+    if (busyTask) { logLine(`Busy with "${busyTask}" — update the app when it has finished.`); return false; }
+    return appUpdate.install(() => { isQuitting = true; app.quit(); });
+});
 
 // ---------- desktop extensions ----------
 const EXAMPLE_EXTENSION = path.join(__dirname, 'examples', 'break-reminder');
@@ -913,9 +940,12 @@ if (gotLock) {
             },
         });
         themes.initThemes(USER_DATA);
+        appUpdate.initAppUpdate({ logLine, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
         createLauncherWindow();
         syncTray();
         ext.activateEnabled();
+        // A few seconds in, so it doesn't compete with startup.
+        if (settings.checkAppUpdates) setTimeout(() => appUpdate.check({ quiet: true }), 4000);
         if (!ensureInstall()) return; // the welcome screen takes it from here
         refreshInstalls();
         if (settings.checkUpdatesOnLaunch) {
@@ -924,7 +954,7 @@ if (gotLock) {
                 broadcast('refresh');
             });
         }
-        if (settings.autoStart) startServer().then(() => waitForServerThenOpen());
+        if (settings.autoStart) startAndOpen();
     });
 
     app.on('window-all-closed', () => {

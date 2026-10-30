@@ -49,6 +49,12 @@ contextBridge.exposeInMainWorld('desktop', {
     saveSettings: s => invoke('save-settings', s),
     setLayer: mode => invoke('set-layer', mode),
     setTabs: on => invoke('set-tabs', on),
+    // updates of this app
+    appUpdateState: () => invoke('app-update-state'),
+    appUpdateCheck: () => invoke('app-update-check'),
+    appUpdateDownload: () => invoke('app-update-download'),
+    appUpdateInstall: () => invoke('app-update-install'),
+    onAppUpdate: on('app-update'),
     // desktop extensions
     extList: () => invoke('ext:list'),
     extSetEnabled: (id, on) => invoke('ext:set-enabled', id, on),

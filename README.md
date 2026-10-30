@@ -190,6 +190,7 @@ Themes are only colors and an image, never CSS or code, so an imported theme can
 | Confirm before quitting | On | Ask before quitting while the server runs |
 | Keep running in the tray | Off | Closing the launcher hides it to the tray and the server keeps running. Click the tray icon for the launcher; right-click it to open, show or minimize SillyTavern, start or stop the server, or quit |
 | Check for updates on launch | On | Shows "update available" on Home. Never updates by itself |
+| Check for app updates on launch | On | Looks for a new release of this app on GitHub and shows it on Home, with what's new. **Download update** then **Restart and update** installs it (the installer version installs silently, the portable exe replaces itself) and the app opens again. Each download is checked against the SHA256 GitHub publishes. **Check for app updates** at the bottom of Behavior checks right away |
 | Back up before updating | On | Zip your data before every update or channel switch |
 | Automatic backups to keep | 10 | Older automatic backups are removed; manual backups never are |
 | Open new pages as tabs | On | Pages SillyTavern or extensions open become tabs; off = separate windows |
@@ -271,6 +272,7 @@ npm install
 | `fonts/` | Bundled pixel fonts (Pixelify Sans, VT323) with their OFL licenses |
 | `icon.ico` / `icon.png` | App icon (`.ico` is used by Windows and the build; `.png` is the source image) |
 | `splash.bmp` | Shown by the portable exe while it unpacks itself (build resource, not part of the app) |
+| `appupdate.js` | Updates of this app: checks the latest GitHub release, downloads the matching exe (SHA256-checked), runs the installer silently or swaps the portable exe after quitting |
 | `installer.nsh` | Extra installer step: asks a running app to close itself (`--quit`) before installing or uninstalling (build resource) |
 | `package.json` | App metadata and electron-builder config |
 
@@ -279,6 +281,7 @@ npm install
 - **Portable exes unpack to a temp folder before running**, so `process.execPath` points to the wrong place. Use `PORTABLE_EXECUTABLE_DIR` — see `exeBases()` in `main.js`.
 - **Packaged apps run from a read-only archive (asar).** Never write files next to `__dirname`; use `app.getPath('userData')`.
 - **Single-instance lock:** all startup wiring must stay inside `if (gotLock)`, or a second launch starts a server inside an app that is already quitting. `--quit` (sent by the installer) closes a running copy and never starts one.
+- **Self-update depends on release file names:** the installed app downloads `SillyTavern-Desktop-Setup.exe`, the portable one `SillyTavern-Desktop.exe`, from the latest release. Keep those names (and tags like `v1.3.0`) or updates stop. `ST_DESKTOP_UPDATE_URL` points the check at a local copy of the releases API for testing.
 - **The installer would otherwise kill the app** (electron-builder's default), so the server never gets stopped properly. `installer.nsh` overrides `customCheckAppRunning` and must include `getProcessInfo.nsh` and `Var pid` itself, because electron-builder only adds them when there's no custom check.
 - **Stopping the server on Windows** needs `taskkill /PID <pid> /T /F` to also kill the processes SillyTavern starts.
 - **The SillyTavern window is a `BaseWindow` with views**, not a `BrowserWindow`. Views aren't owned by the window: close their `webContents` when it closes (see `shell.js`).
