@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Build output (97MB exe — belongs in Releases, not git)
+dist/
+
+# Local state & logs — never commit machine-specific paths or runtime logs
+settings.json
+*.log
+
+# OS cruft
+Thumbs.db
+desktop.ini
+.DS_Store

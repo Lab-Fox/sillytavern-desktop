@@ -1,0 +1,41 @@
+{
+  "name": "sillytavern-desktop",
+  "productName": "SillyTavern Desktop",
+  "version": "1.0.0",
+  "description": "Standalone desktop app for SillyTavern — built-in browser, no cmd required",
+  "license": "AGPL-3.0",
+  "author": "Built with love by ENI for LO",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable",
+    "dist:installer": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^41.1.1",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.lo.sillytaverndesktop",
+    "productName": "SillyTavern Desktop",
+    "files": [
+      "main.js",
+      "preload.js",
+      "launcher.html",
+      "icon.ico",
+      "package.json"
+    ],
+    "win": {
+      "target": ["portable"],
+      "icon": "icon.ico"
+    },
+    "portable": {
+      "artifactName": "SillyTavern-Desktop.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "artifactName": "SillyTavern-Desktop-Setup.exe"
+    }
+  }
+}
