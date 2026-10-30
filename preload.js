@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('desktop', {
     copyLogs: () => invoke('copy-logs'),
     saveSettings: s => invoke('save-settings', s),
     setLayer: mode => invoke('set-layer', mode),
+    setTabs: on => invoke('set-tabs', on),
     // events
     onLog: on('server-log'),
     onStarted: on('server-started'),

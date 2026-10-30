@@ -510,6 +510,7 @@
             </div>
           </div>
           <p class="muted small"><b style="color:var(--title)">On top</b> keeps SillyTavern above every other app. <b style="color:var(--title)">In background</b> keeps it behind other apps, even while you use it — handy for a full-screen SillyTavern under your other windows. <b style="color:var(--title)">Normal</b> is the default. All three are also in the right-click menu of the window's top bar.</p>
+          <label class="switch" style="border-top:var(--px) dashed var(--border)"><input type="checkbox" id="setTabs"><div><b>Open new pages as tabs</b><span>Pages SillyTavern or an extension opens become tabs in the SillyTavern window, like a browser (Ctrl+T new tab, Ctrl+W close, Ctrl+Tab switch). Off: they open as separate windows.</span></div></label>
           <p class="muted small"><b style="color:var(--title)">F11</b> toggles full screen. In full screen, move the mouse to the top edge to show the bar.</p>
         </div>
         <div class="card stack">
@@ -809,9 +810,11 @@
     $('setConfirm').checked = current.confirmBeforeQuit;
     $('setKeep').value = current.backupKeep;
     document.querySelectorAll('#setLayer button').forEach(b => b.classList.toggle('on', b.dataset.layer === (current.windowLayer || 'normal')));
+    $('setTabs').checked = current.tabs !== false;
     renderLogFontForm();
   }
   document.querySelectorAll('#setLayer button').forEach(b => b.onclick = () => D.setLayer(b.dataset.layer));
+  $('setTabs').onchange = () => D.setTabs($('setTabs').checked);
 
   // ----- console font: presets first, then every installed font -----
   const LOG_FONTS = [['', 'Pixel (default)', 18], ['Cascadia Mono', 'Cascadia Mono', 14], ['Consolas', 'Consolas', 14], ['Courier New', 'Courier New', 14], ['Segoe UI', 'Segoe UI', 14]];

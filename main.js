@@ -47,6 +47,7 @@ const DEFAULT_SETTINGS = {
     windowHeight: 800,
     windowFullScreen: false,
     windowLayer: 'normal',      // SillyTavern window: 'normal' | 'top' (always on top) | 'bottom' (stays in background)
+    tabs: true,                 // pages SillyTavern/extensions open become tabs instead of windows
     consoleFont: '',            // console/log font; '' = the built-in pixel font
     consoleFontSize: 18,
     autoStart: true,      // start server + open ST window immediately on app launch
@@ -209,7 +210,7 @@ function waitForServerThenOpen({ reload = false } = {}) {
             res.resume();
             if (res.statusCode && res.statusCode < 500) {
                 waitingForServer = false;
-                if (reload && stWin && !stWin.isDestroyed()) stWin.reload();
+                if (reload && stWin && !stWin.isDestroyed()) stWin.reloadAll();
                 openSillyTavernWindow();
             }
             else retry();
@@ -321,15 +322,21 @@ function isLocal(url) {
 
 // --- ST-specialized browser behavior ---
 // Keeps a page on the local server; external links go to the real browser.
-function lockToServer(wc) {
+// host: the StWindow the page lives in, which takes new pages as tabs.
+function lockToServer(wc, host) {
     wc.on('will-navigate', (e, url) => { if (!isLocal(url)) { e.preventDefault(); shell.openExternal(url); } });
-    wc.setWindowOpenHandler(({ url }) => {
+    wc.setWindowOpenHandler(({ url, disposition }) => {
         // about:blank is how extensions open a tab and fill it in afterwards.
-        if (isLocal(url) || url === 'about:blank') {
-            return { action: 'allow', overrideBrowserWindowOptions: { icon: path.join(__dirname, 'icon.ico'), autoHideMenuBar: true, webPreferences: stWebPreferences() } };
+        if (!isLocal(url) && url !== 'about:blank') {
+            shell.openExternal(url);
+            return { action: 'deny' };
         }
-        shell.openExternal(url);
-        return { action: 'deny' };
+        const allow = { action: 'allow', overrideBrowserWindowOptions: { icon: path.join(__dirname, 'icon.ico'), autoHideMenuBar: true, webPreferences: stWebPreferences() } };
+        // Real popups (window.open with a size) stay windows, as in a browser.
+        if (settings.tabs && host && disposition !== 'new-window') {
+            allow.createWindow = options => host.adoptTab(options, { background: disposition === 'background-tab' });
+        }
+        return allow;
     });
     wc.on('did-create-window', child => { child.setMenu(null); lockToServer(child.webContents); });
 }
@@ -349,6 +356,7 @@ function openSillyTavernWindow() {
         icon: path.join(__dirname, 'icon.ico'),
         webPreferences: stWebPreferences(),
         setupPage: lockToServer,
+        tabsEnabled: () => settings.tabs,
         menu: stWindowMenu,
         // Remember size and full screen — saved once on close, not on every resize
         onClose: ({ width, height, fullScreen }) => {
@@ -372,8 +380,18 @@ function stWindowMenu(w) {
         { label: 'Full screen', type: 'checkbox', checked: w.fullScreen, accelerator: 'F11', registerAccelerator: false, click: () => w.toggleFullScreen() },
         { label: 'Reload', accelerator: 'F5', registerAccelerator: false, click: () => w.reload() },
         { type: 'separator' },
+        { label: 'New tab', accelerator: 'Ctrl+T', registerAccelerator: false, visible: settings.tabs, click: () => w.newTab() },
+        { label: 'Open new pages as tabs', type: 'checkbox', checked: settings.tabs, click: () => setTabs(!settings.tabs) },
+        { type: 'separator' },
         { label: 'Show launcher', click: showLauncher },
     ];
+}
+
+function setTabs(on) {
+    settings.tabs = !!on;
+    saveSettings(settings);
+    stWin?.push();
+    broadcast('settings', settings);
 }
 
 function setLayer(mode) {
@@ -470,6 +488,7 @@ ipcMain.handle('open-place', (_e, key) => {
 ipcMain.handle('open-link', (_e, key) => { if (LINKS[key]) shell.openExternal(LINKS[key]); });
 ipcMain.handle('copy-logs', () => { clipboard.writeText(serverState.logs.join('\n')); });
 ipcMain.handle('set-layer', (_e, mode) => setLayer(mode));
+ipcMain.handle('set-tabs', (_e, on) => setTabs(on));
 ipcMain.handle('save-settings', (_e, s) => {
     settings = { ...settings, ...s };
     saveSettings(settings);

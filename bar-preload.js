@@ -2,6 +2,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('bar', {
-    action: (name, at) => ipcRenderer.send('bar:action', name, at),
+    action: (name, data) => ipcRenderer.send('bar:action', name, data),
     onState: cb => ipcRenderer.on('bar:state', (_e, s) => cb(s)),
 });

@@ -25,10 +25,25 @@
     background: var(--panel); border-bottom: var(--px) solid var(--border);
     -webkit-app-region: drag;
   }
-  .title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
-  .title img { width: 16px; height: 16px; image-rendering: pixelated; flex-shrink: 0; }
-  .title span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--title); font-weight: 600; }
-  .title i { width: 8px; height: 8px; background: var(--accent); flex-shrink: 0; animation: blink .6s steps(2) infinite; }
+  /* Tab strip; the empty space around the tabs drags the window. */
+  .tabs { flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; gap: 2px; }
+  .tab {
+    -webkit-app-region: no-drag; flex: 0 1 210px; min-width: 52px; height: 28px; margin-bottom: calc(var(--px) * -1);
+    display: flex; align-items: center; gap: 7px; padding: 0 4px 0 9px;
+    border: var(--px) solid transparent; border-bottom: 0; color: var(--muted); cursor: default; position: relative;
+  }
+  .tab:hover { background: var(--tint); color: var(--text); }
+  .tab.on { background: var(--bg); border-color: var(--border); color: var(--title); }
+  .tab.on::before { content: ""; position: absolute; left: calc(var(--px) * -1); right: calc(var(--px) * -1); top: calc(var(--px) * -1); height: var(--px); background: var(--accent); }
+  /* One tab and tabs turned off: just the page title, like before. */
+  .tabs.solo .tab { background: none; border-color: transparent; color: var(--title); font-weight: 600; padding-left: 0; }
+  .tabs.solo .tab::before { display: none; }
+  .tab img { width: 16px; height: 16px; image-rendering: pixelated; flex-shrink: 0; }
+  .tab i { width: 8px; height: 8px; margin: 0 4px; background: var(--accent); flex-shrink: 0; animation: blink .6s steps(2) infinite; }
+  .tab span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab button { height: 20px; min-width: 20px; padding: 0; }
+  .tab button svg { width: 12px; height: 12px; }
+  #btnNewTab { margin: 0 0 3px 2px; flex-shrink: 0; }
   @keyframes blink { 50% { opacity: 0; } }
   button {
     -webkit-app-region: no-drag; height: 26px; min-width: 30px; padding: 0 7px;
@@ -44,7 +59,7 @@
 </head>
 <body>
   <div class="bar" id="bar">
-    <div class="title"><img id="fav" alt="" hidden><i id="spin" hidden></i><span id="title">SillyTavern</span></div>
+    <div class="tabs" id="tabs"><button id="btnNewTab" title="New tab (Ctrl+T)" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
     <button id="btnReload" title="Reload (F5)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button>
     <button id="btnLayer" title="Window layer"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5zM3 13l9 5 9-5"/></svg><span id="layerText" hidden></span></button>
     <button id="btnFull" title="Full screen (F11)"><svg viewBox="0 0 24 24" id="icoFull"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><span id="fullText" hidden>Exit full screen</span></button>
@@ -58,18 +73,54 @@
   $('btnReload').onclick = () => bar.action('reload');
   // Menus drop down from the button that opened them.
   const below = el => { const r = el.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.bottom) }; };
-  $('btnLayer').onclick = () => bar.action('layer-menu', below($('btnLayer')));
+  $('btnLayer').onclick = () => bar.action('layer-menu', { at: below($('btnLayer')) });
   $('btnFull').onclick = () => bar.action('fullscreen');
-  $('btnMenu').onclick = () => bar.action('menu', below($('btnMenu')));
-  // Right-clicks on buttons (the drag area is handled by the window).
-  document.addEventListener('contextmenu', e => { e.preventDefault(); bar.action('menu'); });
+  $('btnMenu').onclick = () => bar.action('menu', { at: below($('btnMenu')) });
+  $('btnNewTab').onclick = () => bar.action('tab-new');
+  // Right-clicks on tabs and buttons (the drag area is handled by the window).
+  document.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const tab = e.target.closest('.tab');
+    bar.action(tab ? 'tab-menu' : 'menu', tab ? { id: +tab.dataset.id } : {});
+  });
+
+  // Tabs are kept by id so favicons don't reload on every update.
+  const tabEls = new Map();
+  function tabEl(id) {
+    if (tabEls.has(id)) return tabEls.get(id);
+    const el = document.createElement('div');
+    el.className = 'tab';
+    el.dataset.id = id;
+    el.innerHTML = '<img alt="" hidden><i hidden></i><span></span><button title="Close tab (Ctrl+W)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>';
+    el.onmousedown = e => { if (e.button === 0 && !e.target.closest('button')) bar.action('tab-select', { id }); };
+    el.onauxclick = e => { if (e.button === 1) bar.action('tab-close', { id }); }; // middle click
+    el.querySelector('button').onclick = () => bar.action('tab-close', { id });
+    tabEls.set(id, el);
+    return el;
+  }
+  function renderTabs(s) {
+    const box = $('tabs');
+    const ids = new Set(s.tabs.map(t => t.id));
+    for (const [id, el] of tabEls) if (!ids.has(id)) { el.remove(); tabEls.delete(id); }
+    for (const t of s.tabs) {
+      const el = tabEl(t.id);
+      const img = el.querySelector('img');
+      el.classList.toggle('on', t.id === s.active);
+      el.title = t.title;
+      el.querySelector('span').textContent = t.title;
+      el.querySelector('i').hidden = !t.loading;
+      img.hidden = t.loading || !t.favicon;
+      if (t.favicon && img.getAttribute('src') !== t.favicon) img.src = t.favicon;
+      el.querySelector('button').hidden = s.tabs.length < 2;
+      box.insertBefore(el, $('btnNewTab'));
+    }
+    box.classList.toggle('solo', s.tabs.length < 2 && !s.tabsEnabled);
+    $('btnNewTab').hidden = !s.tabsEnabled;
+  }
 
   bar.onState(s => {
     for (const [k, v] of Object.entries(VARS)) if (s.colors[k]) document.documentElement.style.setProperty(v, s.colors[k]);
-    $('title').textContent = s.title;
-    $('fav').hidden = !s.favicon;
-    if (s.favicon && $('fav').getAttribute('src') !== s.favicon) $('fav').src = s.favicon;
-    $('spin').hidden = !s.loading;
+    renderTabs(s);
     $('controls').style.width = `${s.controlsWidth}px`;
     $('btnLayer').classList.toggle('on', s.layer !== 'normal');
     $('layerText').hidden = s.layer === 'normal';

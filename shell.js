@@ -1,7 +1,7 @@
 // The SillyTavern window: a frameless window with our own top bar (with
-// Windows' native min/max/close drawn over its right end) and the page in
-// a view below it. In full screen the page fills the window and the bar
-// slides in over it when the mouse touches the top edge.
+// Windows' native min/max/close drawn over its right end) and the pages in
+// views below it, one per tab. In full screen the page fills the window and
+// the bar slides in over it when the mouse touches the top edge.
 import { BaseWindow, WebContentsView, Menu, ipcMain, screen } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -16,8 +16,8 @@ const byBar = new Map(); // bar webContents id → StWindow
 
 export class StWindow {
     // opts: url, width, height, fullScreen, layer, colors, icon,
-    //       webPreferences, setupPage(webContents), menu(stWindow) → template,
-    //       onClose({ width, height, fullScreen })
+    //       webPreferences, setupPage(webContents, stWindow), tabsEnabled() → bool,
+    //       menu(stWindow) → template, onClose({ width, height, fullScreen })
     constructor(opts) {
         this.opts = opts;
         this.layer = opts.layer;
@@ -26,7 +26,8 @@ export class StWindow {
         // Tracked from the events: isFullScreen() still reports the old
         // state while 'enter-full-screen' is being emitted.
         this.fullScreen = false;
-        this.state = { title: 'SillyTavern', favicon: '', loading: true };
+        this.tabs = [];     // { view, id, title, favicon, loading }
+        this.active = null; // the shown tab
 
         const win = this.win = new BaseWindow({
             width: opts.width, height: opts.height, minWidth: 640, minHeight: 420,
@@ -35,23 +36,13 @@ export class StWindow {
             titleBarStyle: 'hidden', titleBarOverlay: overlay(opts.colors),
         });
 
-        this.page = new WebContentsView({ webPreferences: opts.webPreferences });
-        this.page.setBackgroundColor(opts.colors.bg);
         this.bar = new WebContentsView({
             webPreferences: { preload: path.join(__dirname, 'bar-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
         });
         this.bar.setBackgroundColor('#00000000');
-        win.contentView.addChildView(this.page);
-        win.contentView.addChildView(this.bar); // added last = drawn on top
+        win.contentView.addChildView(this.bar);
         byBar.set(this.bar.webContents.id, this);
-
-        const wc = this.page.webContents;
-        opts.setupPage(wc);
-        wc.on('page-title-updated', (_e, title) => { this.state.title = title; win.setTitle(title); this.push(); });
-        wc.on('page-favicon-updated', (_e, icons) => { this.state.favicon = icons[0] || ''; this.push(); });
-        wc.on('did-start-loading', () => { this.state.loading = true; this.push(); });
-        wc.on('did-stop-loading', () => { this.state.loading = false; this.push(); });
-        for (const c of [wc, this.bar.webContents]) c.on('before-input-event', (e, input) => this.onKey(e, input));
+        this.bar.webContents.on('before-input-event', (e, input) => this.onKey(e, input));
 
         win.on('resize', () => this.layout());
         win.on('enter-full-screen', () => this.fullScreenChanged(true));
@@ -64,15 +55,16 @@ export class StWindow {
         });
         // Views aren't owned by the window: close their pages explicitly.
         win.on('closed', () => {
+            this.closing = true;
             this.stopHoverPoll();
             byBar.delete(this.bar.webContents.id);
             this.bar.webContents.close();
-            wc.close();
+            for (const t of this.tabs) if (!t.view.webContents.isDestroyed()) t.view.webContents.close();
         });
 
         this.bar.webContents.loadFile(path.join(__dirname, 'stbar.html'));
         this.bar.webContents.once('did-finish-load', () => this.push());
-        wc.loadURL(opts.url);
+        this.newTab();
         layer.apply(win, this.layer);
         if (opts.fullScreen) win.setFullScreen(true);
         this.layout();
@@ -85,7 +77,9 @@ export class StWindow {
         this.win.show();
         this.win.focus();
     }
-    reload() { this.page.webContents.reload(); }
+    reload() { this.active?.view.webContents.reload(); }
+    // After a server restart every SillyTavern tab is a dead page.
+    reloadAll() { for (const t of this.tabs) t.view.webContents.reload(); }
     toggleFullScreen() { this.win.setFullScreen(!this.fullScreen); }
     setLayer(mode) {
         this.layer = mode;
@@ -93,18 +87,87 @@ export class StWindow {
         this.push();
     }
     setColors(colors) {
-        this.page.setBackgroundColor(colors.bg);
+        for (const t of this.tabs) t.view.setBackgroundColor(colors.bg);
         this.win.setBackgroundColor(colors.bg);
         this.win.setTitleBarOverlay(overlay(colors));
         this.opts.colors = colors;
         this.push();
     }
 
+    // ---------- tabs ----------
+    // A fresh SillyTavern page (first tab, the + button, Ctrl+T).
+    newTab() {
+        const view = new WebContentsView({ webPreferences: this.opts.webPreferences });
+        this.addTab(view, true);
+        view.webContents.loadURL(this.opts.url);
+    }
+    // A page SillyTavern or an extension opened with window.open. Taking
+    // over Electron's prepared webContents keeps window.opener working, so
+    // an extension can still write into the about:blank page it opened.
+    adoptTab(options, { background = false } = {}) {
+        const view = new WebContentsView({ webContents: options.webContents, webPreferences: options.webPreferences });
+        this.addTab(view, !background);
+        return view.webContents;
+    }
+    addTab(view, activate) {
+        const wc = view.webContents;
+        const tab = { view, id: wc.id, title: 'Loading…', favicon: '', loading: true };
+        view.setBackgroundColor(this.opts.colors.bg);
+        view.setVisible(false);
+        this.tabs.splice(this.active ? this.tabs.indexOf(this.active) + 1 : this.tabs.length, 0, tab);
+        this.win.contentView.addChildView(view);
+        this.win.contentView.addChildView(this.bar); // keep the bar on top
+        this.opts.setupPage(wc, this);
+        wc.on('page-title-updated', (_e, title) => {
+            tab.title = title;
+            if (tab === this.active) this.win.setTitle(title);
+            this.push();
+        });
+        wc.on('page-favicon-updated', (_e, icons) => { tab.favicon = icons[0] || ''; this.push(); });
+        wc.on('did-start-loading', () => { tab.loading = true; this.push(); });
+        wc.on('did-stop-loading', () => { tab.loading = false; if (!tab.title || tab.title === 'Loading…') tab.title = wc.getTitle() || wc.getURL(); this.push(); });
+        wc.on('before-input-event', (e, input) => this.onKey(e, input));
+        // Closed by us, by the page (window.close()) or by its opener.
+        wc.once('destroyed', () => this.removeTab(tab));
+        if (activate || !this.active) this.activate(tab);
+        this.layout();
+        this.push();
+        return tab;
+    }
+    activate(tab) {
+        if (!tab) return;
+        this.active?.view.setVisible(false);
+        this.active = tab;
+        tab.view.setVisible(true);
+        this.win.setTitle(tab.title);
+        tab.view.webContents.focus();
+        this.layout();
+        this.push();
+    }
+    closeTab(tab) {
+        if (tab && !tab.view.webContents.isDestroyed()) tab.view.webContents.close();
+    }
+    removeTab(tab) {
+        const i = this.tabs.indexOf(tab);
+        if (i < 0) return;
+        this.tabs.splice(i, 1);
+        if (this.closing) return;
+        this.win.contentView.removeChildView(tab.view);
+        if (!this.tabs.length) { this.win.close(); return; }
+        if (tab === this.active) { this.active = null; this.activate(this.tabs[Math.min(i, this.tabs.length - 1)]); }
+        this.push();
+    }
+    tabById(id) { return this.tabs.find(t => t.id === id); }
+    cycleTabs(step) {
+        const i = this.tabs.indexOf(this.active);
+        this.activate(this.tabs[(i + step + this.tabs.length) % this.tabs.length]);
+    }
+
     // ---------- layout ----------
     layout() {
         const [width, height] = this.win.getContentSize();
         const full = this.fullScreen;
-        this.page.setBounds(full ? { x: 0, y: 0, width, height } : { x: 0, y: BAR_H, width, height: height - BAR_H });
+        this.active?.view.setBounds(full ? { x: 0, y: 0, width, height } : { x: 0, y: BAR_H, width, height: height - BAR_H });
         // Hidden by moving it above the window, so it keeps painting.
         const shown = !full || this.revealed;
         this.bar.setBounds({ x: 0, y: shown ? 0 : -BAR_H, width, height: BAR_H });
@@ -149,7 +212,9 @@ export class StWindow {
     push() {
         if (this.bar.webContents.isDestroyed()) return;
         this.bar.webContents.send('bar:state', {
-            ...this.state,
+            tabs: this.tabs.map(t => ({ id: t.id, title: t.title, favicon: t.favicon, loading: t.loading })),
+            active: this.active?.id,
+            tabsEnabled: this.opts.tabsEnabled(),
             fullScreen: this.fullScreen,
             layer: this.layer,
             colors: this.opts.colors,
@@ -161,10 +226,32 @@ export class StWindow {
         this.menuOpen = true;
         Menu.buildFromTemplate(template).popup({ window: this.win, ...at, callback: () => { this.menuOpen = false; } });
     }
+    tabMenu(tab, at) {
+        const others = this.tabs.filter(t => t !== tab);
+        this.popupMenu([
+            { label: 'Reload tab', click: () => tab.view.webContents.reload() },
+            { label: 'Close tab', accelerator: 'Ctrl+W', registerAccelerator: false, enabled: this.tabs.length > 1, click: () => this.closeTab(tab) },
+            { label: 'Close other tabs', enabled: others.length > 0, click: () => others.forEach(t => this.closeTab(t)) },
+            { type: 'separator' },
+            ...this.opts.menu(this),
+        ], at);
+    }
     onKey(e, input) {
         if (input.type !== 'keyDown') return;
-        if (input.key === 'F11') { e.preventDefault(); this.toggleFullScreen(); }
-        else if (input.key === 'F5' || (input.control && input.key.toLowerCase() === 'r' && !input.alt)) { e.preventDefault(); this.reload(); }
+        const key = input.key.toLowerCase();
+        const handled = () => { e.preventDefault(); return true; };
+        if (input.key === 'F11') return handled() && this.toggleFullScreen();
+        if (input.key === 'F5' || (input.control && key === 'r' && !input.alt)) return handled() && this.reload();
+        if (!input.control || input.alt) return;
+        if (input.key === 'Tab' && this.tabs.length > 1) return handled() && this.cycleTabs(input.shift ? -1 : 1);
+        if (!this.opts.tabsEnabled()) return;
+        if (key === 't' && !input.shift) return handled() && this.newTab();
+        // Ctrl+W never closes the last tab: that would close SillyTavern by accident.
+        if (key === 'w' && this.tabs.length > 1) return handled() && this.closeTab(this.active);
+        if (/^[1-9]$/.test(input.key) && this.tabs.length > 1) {
+            const n = Number(input.key);
+            return handled() && this.activate(n === 9 ? this.tabs.at(-1) : this.tabs[n - 1]);
+        }
     }
 }
 
@@ -172,11 +259,16 @@ function overlay(c) {
     return { color: c.panel, symbolColor: c.text, height: BAR_H };
 }
 
-ipcMain.on('bar:action', (e, action, at) => {
+ipcMain.on('bar:action', (e, action, data = {}) => {
     const w = byBar.get(e.sender.id);
     if (!w) return;
-    if (action === 'menu') w.popupMenu(undefined, at);
-    else if (action === 'layer-menu') w.popupMenu(w.opts.menu(w).filter(i => i.layerItem), at);
+    const tab = w.tabById(data.id);
+    if (action === 'menu') w.popupMenu(undefined, data.at);
+    else if (action === 'layer-menu') w.popupMenu(w.opts.menu(w).filter(i => i.layerItem), data.at);
     else if (action === 'reload') w.reload();
     else if (action === 'fullscreen') w.toggleFullScreen();
+    else if (action === 'tab-new') w.newTab();
+    else if (action === 'tab-select') w.activate(tab);
+    else if (action === 'tab-close') w.closeTab(tab);
+    else if (action === 'tab-menu' && tab) w.tabMenu(tab, data.at);
 });

@@ -80,7 +80,7 @@ The SillyTavern window only ever shows your local server. Links to other sites o
 
 ## The SillyTavern window
 
-SillyTavern gets its own window with a slim top bar: the page title, **Reload**, **Window layer**, **Full screen** and a **menu** button, next to the usual minimize / maximize / close.
+SillyTavern gets its own window with a slim top bar: your tabs, **Reload**, **Window layer**, **Full screen** and a **menu** button, next to the usual minimize / maximize / close.
 
 | Want to | Do this |
 |---|---|
@@ -89,6 +89,11 @@ SillyTavern gets its own window with a slim top bar: the page title, **Reload**,
 | Keep SillyTavern **behind** your other apps, even while you use it | Right-click the top bar → **Stay in background**. Handy for a full-screen SillyTavern "wallpaper" with your other windows on top. |
 | Go back to a normal window | Right-click the top bar → **Normal window (default)** |
 | Reload the page | **F5**, **Ctrl+R**, or the reload button |
+| Open another SillyTavern tab | **+** in the tab strip or **Ctrl+T** |
+| Switch tabs | Click a tab, **Ctrl+Tab** / **Ctrl+Shift+Tab**, or **Ctrl+1**…**Ctrl+9** (9 = last tab) |
+| Close a tab | Its **×**, a middle click, or **Ctrl+W**. Ctrl+W never closes the last tab, so it can't close SillyTavern by accident |
+
+**Tabs:** pages that SillyTavern or an extension opens (Character Library, for example) open as tabs in this window, like in a browser, and keep working with the page that opened them. Small popup windows that ask for a size still open as windows. Right-click a tab for **Reload tab**, **Close tab** and **Close other tabs**. Don't want tabs? Turn off **Open new pages as tabs** in the right-click menu or in Settings, and new pages open as separate windows again.
 
 The window layer is also under **Settings → SillyTavern window** in the launcher, and it's remembered, along with the window size and full screen.
 
@@ -155,6 +160,7 @@ Themes are only colors and an image, never CSS or code, so an imported theme can
 | Check for updates on launch | On | Shows "update available" on Home. Never updates by itself |
 | Back up before updating | On | Zip your data before every update or channel switch |
 | Automatic backups to keep | 10 | Older automatic backups are removed; manual backups never are |
+| Open new pages as tabs | On | Pages SillyTavern or extensions open become tabs; off = separate windows |
 | Window layer | Normal | **On top** or **In background** (see [The SillyTavern window](#the-sillytavern-window)). Applies right away |
 | Console font | Pixel (VT323), 18 | Any font installed on your PC, and its size, for the Console page and activity logs. Applies right away |
 
@@ -219,7 +225,7 @@ npm install
 | `st-preload.js` | Runs in every frame of SillyTavern windows; injects matching userscripts with the GM_* shim |
 | `launcher.html` | Launcher UI — one self-contained file, no external dependencies |
 | `themes.js` | Built-in themes, custom theme storage, validation, import/export |
-| `shell.js` | The SillyTavern window: frameless window, top bar, full screen with the hover bar, keyboard shortcuts |
+| `shell.js` | The SillyTavern window: frameless window, tabs, top bar, full screen with the hover bar, keyboard shortcuts |
 | `stbar.html` / `bar-preload.js` | The top bar's page and its bridge to `shell.js` |
 | `winlayer.js` | Normal / always on top / stay in background (calls Windows' `SetWindowPos` through `koffi`) |
 | `fonts/` | Bundled pixel fonts (Pixelify Sans, VT323) with their OFL licenses |
@@ -233,6 +239,7 @@ npm install
 - **Single-instance lock:** all startup wiring must stay inside `if (gotLock)`, or a second launch starts a server inside an app that is already quitting.
 - **Stopping the server on Windows** needs `taskkill /PID <pid> /T /F` to also kill the processes SillyTavern starts.
 - **The SillyTavern window is a `BaseWindow` with views**, not a `BrowserWindow`. Views aren't owned by the window: close their `webContents` when it closes (see `shell.js`).
+- **Tabs take over the page Electron prepared for `window.open`** (`createWindow` in `lockToServer`, then `adoptTab` in `shell.js`). A fresh page would break `window.opener`, and extensions write into the `about:blank` page they open.
 - **`isFullScreen()` lags behind the `enter-full-screen` event** on Windows; `shell.js` tracks full screen from the events instead.
 - **Electron ignores `setAlwaysOnTop` and `moveTop` while a window is full screen**, so `winlayer.js` also sets the z-order with `SetWindowPos`, and the layer is re-applied after every full-screen change.
 - **Chromium stops drawing windows it thinks are covered** (native occlusion). "Stay in background" covers the window on purpose, which left the top bar blank, so `main.js` turns that feature off.
@@ -268,7 +275,6 @@ The server runs as a hidden child process on `127.0.0.1`. The app talks to it on
 - [ ] System tray mode (close to tray, server keeps running)
 - [ ] Linux/macOS support
 - [ ] Show/restore the SillyTavern window from the launcher when it's hidden
-- [ ] Tabs: pages that SillyTavern or an extension opens become tabs instead of windows (optional)
 - [ ] Several SillyTavern at once: same install on another port, a read-only "dummy" copy for browsing presets, or another install
 - [ ] Extensions for the app itself
 
