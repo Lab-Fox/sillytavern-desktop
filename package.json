@@ -1,7 +1,7 @@
 {
   "name": "sillytavern-desktop",
   "productName": "SillyTavern Desktop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Standalone desktop app for SillyTavern — built-in browser, no cmd required",
   "license": "AGPL-3.0",
   "author": "Built with love by ENI for LO",
