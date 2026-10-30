@@ -2,213 +2,1052 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:">
 <title>SillyTavern Desktop</title>
 <style>
+  /* ---------- fonts (bundled, OFL — see fonts/) ---------- */
+  @font-face { font-family: "Pixelify Sans"; src: url("fonts/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Pixelify Sans"; src: url("fonts/pixelify-sans-latin-600-normal.woff2") format("woff2"); font-weight: 600; }
+  @font-face { font-family: "Pixelify Sans"; src: url("fonts/pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; }
+  @font-face { font-family: "VT323"; src: url("fonts/vt323-latin-400-normal.woff2") format("woff2"); }
+
+  /* ---------- theme ----------
+     A theme sets only the base colors (applyTheme() in the script);
+     every other shade is mixed from them, so custom themes stay simple. */
   :root {
-    --bg: #0f0e14;
-    --panel: #1a1922;
-    --panel2: #212030;
-    --accent: #7c6cf0;
-    --accent2: #9d8cff;
-    --good: #4ade80;
-    --bad: #f87171;
-    --text: #e8e6f0;
-    --muted: #8b87a3;
-    --border: #2e2c3f;
+    --bg: #1c1d21; --panel: #26272d; --border: #3d3e47; --accent: #d65a52;
+    --text: #d9d7d0; --title: #efede6; --muted: #9c9ba4;
+    --on-accent: #1d0f0e; --good: #8fcf8f; --warn: #e6c36a; --bad: #f28a6c;
+
+    --surface: color-mix(in srgb, var(--bg) 55%, var(--panel));
+    --panel2: color-mix(in srgb, var(--panel) 72%, var(--border));
+    --shadow: color-mix(in srgb, var(--bg) 55%, #000);
+    --accent2: color-mix(in srgb, var(--accent) 62%, #fff);
+    --faint: color-mix(in srgb, var(--muted) 55%, var(--bg));
+    --tint: color-mix(in srgb, var(--accent) 14%, transparent);
+    --well: color-mix(in srgb, var(--bg) 80%, #000);
+    --px: 2px;            /* pixel unit: borders, shadows, offsets */
+    --pixel-font: "Pixelify Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "VT323", "Cascadia Code", Consolas, monospace;
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--text);
-    font-family: "Segoe UI", system-ui, sans-serif;
-    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
-    user-select: none;
+    font: 15px/1.5 var(--pixel-font); letter-spacing: .2px;
+    display: flex; overflow: hidden; user-select: none;
+    -webkit-font-smoothing: none;
   }
+  button { font: inherit; color: inherit; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: square; stroke-linejoin: miter; flex-shrink: 0; shape-rendering: crispEdges; }
+  img.logo { image-rendering: pixelated; flex-shrink: 0; display: block; }
+
+  /* ---------- pixel primitives ---------- */
+  .card, .btn, input[type=text], input[type=number], input[type=search], .pill, .seg, #console, .path, .tag, .theme-card {
+    border: var(--px) solid var(--border);
+  }
+  .card { box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
+
+  /* ---------- sidebar ---------- */
+  aside {
+    width: 228px; flex-shrink: 0; background: var(--surface);
+    border-right: var(--px) solid var(--border); display: flex; flex-direction: column; padding: 18px 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 2px 6px 20px; }
+  .brand img.logo { width: 44px; height: 44px; }
+  .brand b { display: block; font-size: 17px; font-weight: 700; color: var(--title); line-height: 1.15; }
+  .brand span { font-size: 13px; color: var(--muted); }
+  nav { display: flex; flex-direction: column; gap: 3px; }
+  nav button {
+    display: flex; align-items: center; gap: 11px; width: 100%;
+    background: none; border: var(--px) solid transparent; padding: 8px 10px;
+    color: var(--muted); cursor: pointer; text-align: left; font-size: 15.5px;
+  }
+  nav button:hover { background: var(--panel); color: var(--text); }
+  nav button.active { background: var(--panel2); color: var(--title); border-color: var(--border); box-shadow: inset calc(var(--px) * 2) 0 0 var(--accent); }
+  nav button.active svg { color: var(--accent); }
+  nav .badge { margin-left: auto; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; padding: 0 6px; line-height: 18px; }
+  .side-foot { margin-top: auto; border-top: var(--px) solid var(--border); padding-top: 12px; }
+  .side-foot .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--faint); padding: 0 10px 6px; }
+  .side-foot button { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; padding: 5px 10px; color: var(--muted); cursor: pointer; font-size: 14px; }
+  .side-foot button:hover { color: var(--accent2); background: var(--panel); }
+  .side-foot svg.i { width: 16px; height: 16px; }
+
+  /* ---------- main ---------- */
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   header {
-    padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 12px;
+    display: flex; align-items: center; gap: 12px; padding: 14px 26px;
+    border-bottom: var(--px) solid var(--border); background: var(--surface);
   }
-  .logo {
-    width: 34px; height: 34px; border-radius: 9px;
-    background: linear-gradient(135deg, var(--accent), #c084fc);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; flex-shrink: 0;
-  }
-  header h1 { font-size: 17px; font-weight: 600; letter-spacing: .3px; }
-  header .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
-  .status {
+  header h1 { font-size: 22px; font-weight: 700; color: var(--title); letter-spacing: .5px; }
+  .pill {
     margin-left: auto; display: flex; align-items: center; gap: 8px;
-    font-size: 12px; color: var(--muted);
-    background: var(--panel); border: 1px solid var(--border);
-    padding: 6px 12px; border-radius: 999px;
+    background: var(--panel); padding: 4px 12px; font-size: 14px; color: var(--muted);
   }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
-  .dot.on { background: var(--good); box-shadow: 0 0 8px var(--good); }
+  .dot { width: 10px; height: 10px; background: var(--faint); }
+  .dot.on { background: var(--good); animation: blink 1.6s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .55; } }
+  .busy {
+    display: none; align-items: center; gap: 10px; padding: 8px 26px;
+    background: var(--tint); border-bottom: var(--px) solid var(--accent);
+    color: var(--accent2); font-size: 14px;
+  }
+  .busy.show { display: flex; }
+  .spin { width: 12px; height: 12px; background: var(--accent2); animation: spin 1s steps(4) infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .page { display: none; flex: 1; overflow-y: auto; padding: 22px 26px 30px; }
+  .page.show { display: block; }
+  .page.fill.show { display: flex; flex-direction: column; }
+  .lead { color: var(--muted); margin: -4px 0 18px; max-width: 660px; }
 
-  main { flex: 1; display: flex; min-height: 0; }
-  .actions {
-    width: 300px; padding: 18px; display: flex; flex-direction: column;
-    gap: 10px; border-right: 1px solid var(--border); overflow-y: auto;
-  }
+  /* ---------- building blocks ---------- */
+  .card { background: var(--panel); padding: 18px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; white-space: nowrap; color: var(--muted); font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .act { margin-left: auto; text-transform: none; letter-spacing: .2px; }
+  .grid { display: grid; gap: 16px; }
+  .g2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .stack { display: flex; flex-direction: column; gap: 16px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13.5px; }
+  .mono { font-family: var(--mono); font-size: 17px; letter-spacing: 0; }
+
   .btn {
-    display: flex; align-items: center; gap: 12px;
-    background: var(--panel); border: 1px solid var(--border);
-    color: var(--text); padding: 13px 16px; border-radius: 10px;
-    font-size: 13.5px; cursor: pointer; text-align: left;
-    transition: background .12s, border-color .12s, transform .05s;
-    font-family: inherit;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--panel2); color: var(--text);
+    padding: 6px 13px; cursor: pointer; font-size: 15px; white-space: nowrap;
+    box-shadow: var(--px) var(--px) 0 var(--shadow);
+    transition: none;
   }
-  .btn:hover { background: var(--panel2); border-color: var(--accent); }
-  .btn:active { transform: scale(.985); }
-  .btn .ico { font-size: 17px; width: 22px; text-align: center; }
-  .btn small { display: block; color: var(--muted); font-size: 10.5px; margin-top: 2px; }
-  .btn.primary {
-    background: linear-gradient(135deg, var(--accent), #6d5ce0);
-    border-color: transparent; font-weight: 600;
-  }
-  .btn.primary:hover { filter: brightness(1.12); }
-  .btn.danger:hover { border-color: var(--bad); }
+  .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--title); }
+  .btn:active:not(:disabled) { transform: translate(var(--px), var(--px)); box-shadow: none; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent2); color: var(--on-accent); font-weight: 700; }
+  .btn.primary:hover:not(:disabled) { background: var(--accent2); color: var(--on-accent); }
+  .btn.ghost { background: transparent; box-shadow: none; }
+  .btn.danger:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }
+  .btn.sm { padding: 3px 10px; font-size: 14px; }
+  .link { background: none; border: 0; color: var(--accent2); cursor: pointer; font-size: 14px; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+  .link:hover { color: var(--title); }
+  .tag { display: inline-block; font-size: 13px; padding: 0 7px; background: var(--panel2); color: var(--muted); white-space: nowrap; }
+  .tag.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, transparent); }
+  .tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
+  .tag.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 55%, transparent); }
+  .tag.fox { color: var(--accent2); border-color: var(--accent); }
 
-  .right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  .console-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  .console-head {
-    padding: 10px 16px; font-size: 11px; color: var(--muted);
-    text-transform: uppercase; letter-spacing: 1.2px;
-    border-bottom: 1px solid var(--border);
-    display: flex; justify-content: space-between; align-items: center;
+  /* ---------- home ---------- */
+  .hero {
+    display: flex; align-items: center; gap: 22px; padding: 22px;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 6px, color-mix(in srgb, var(--accent) 5%, transparent) 6px 8px),
+      var(--panel);
   }
-  .console-head button {
-    background: none; border: 1px solid var(--border); color: var(--muted);
-    font-size: 10px; padding: 3px 10px; border-radius: 6px; cursor: pointer;
-  }
-  .console-head button:hover { color: var(--text); border-color: var(--accent); }
+  .hero img.logo { width: 88px; height: 88px; border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
+  .hero h3 { font-size: 24px; color: var(--title); font-weight: 700; line-height: 1.2; }
+  .hero .sub { color: var(--muted); margin: 4px 0 14px; }
+  .hero .btn.primary { padding: 9px 20px; font-size: 16px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .update-box { margin-top: 14px; padding-top: 14px; border-top: var(--px) dashed var(--border); display: flex; align-items: center; gap: 10px; }
+  .quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .quick .btn { justify-content: flex-start; padding: 8px 10px; }
+  .quick .btn svg { color: var(--accent); }
+  .mini-log { font-family: var(--mono); font-size: 17px; color: var(--muted); line-height: 1.25; max-height: 160px; overflow: hidden; }
+  .mini-log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---------- lists ---------- */
+  .list { display: flex; flex-direction: column; }
+  .item { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-top: var(--px) dashed var(--border); }
+  .item:first-child { border-top: 0; }
+  .item .main { flex: 1; min-width: 0; }
+  .item .title { color: var(--title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .meta { color: var(--muted); font-size: 13.5px; }
+  .empty { color: var(--muted); text-align: center; padding: 28px 10px; }
+  .check-ico { width: 22px; height: 22px; display: grid; place-items: center; flex-shrink: 0; border: var(--px) solid currentColor; }
+  .check-ico svg.i { width: 13px; height: 13px; stroke-width: 3; }
+  .check-ico.ok { color: var(--good); }
+  .check-ico.warn { color: var(--warn); }
+  .check-ico.bad { color: var(--bad); }
+  .fix { color: var(--accent2); font-size: 13.5px; }
+  .tool { display: flex; flex-direction: column; gap: 6px; }
+  .tool b { color: var(--title); font-weight: 600; }
+  .tool p { color: var(--muted); font-size: 14px; flex: 1; }
+  .tool .btn { align-self: flex-start; margin-top: 6px; }
+
+  /* ---------- console ---------- */
+  .console-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .console-bar input { flex: 1; }
+  .seg { display: flex; background: var(--panel); padding: 2px; }
+  .seg button { background: none; border: 0; padding: 2px 11px; cursor: pointer; color: var(--muted); font-size: 14px; }
+  .seg button.on { background: var(--accent); color: var(--on-accent); }
   #console {
-    flex: 1; overflow-y: auto; padding: 12px 16px;
-    font-family: "Cascadia Code", Consolas, monospace; font-size: 11.5px;
-    line-height: 1.55; white-space: pre-wrap; word-break: break-all;
-    color: #b9b6cc; user-select: text;
+    flex: 1; min-height: 0; overflow-y: auto; background: var(--well);
+    padding: 10px 14px; font-family: var(--mono); font-size: 18px; line-height: 1.25; letter-spacing: 0;
+    white-space: pre-wrap; word-break: break-word; color: var(--text); user-select: text;
   }
-  #console .err { color: var(--bad); }
-  #console .ok { color: var(--good); }
+  .l-err { color: var(--bad); }
+  .l-warn { color: var(--warn); }
+  .l-ok { color: var(--good); }
 
-  .settings-pane {
-    display: none; padding: 18px; gap: 14px; flex-direction: column;
-    overflow-y: auto;
+  /* ---------- forms ---------- */
+  .field label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+  input[type=text], input[type=number], input[type=search] {
+    width: 100%; background: var(--well); color: var(--title);
+    padding: 6px 10px; font: inherit; outline: none; user-select: text;
   }
-  .settings-pane.show { display: flex; }
-  .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .8px; }
-  .field input[type=text], .field input[type=number] {
-    width: 100%; background: var(--panel); border: 1px solid var(--border);
-    color: var(--text); padding: 9px 12px; border-radius: 8px; font-size: 13px;
-    font-family: inherit; outline: none;
-  }
-  .field input:focus { border-color: var(--accent); }
-  .check { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
-  .check input { accent-color: var(--accent); width: 15px; height: 15px; }
-  .hint { font-size: 11px; color: var(--muted); line-height: 1.5; }
-  .actions::-webkit-scrollbar, #console::-webkit-scrollbar, .settings-pane::-webkit-scrollbar { width: 8px; }
-  .actions::-webkit-scrollbar-thumb, #console::-webkit-scrollbar-thumb, .settings-pane::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  input:focus { border-color: var(--accent); }
+  .switch { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 10px 0; border-top: var(--px) dashed var(--border); }
+  .switch:first-of-type { border-top: 0; }
+  .switch input { appearance: none; width: 36px; height: 20px; background: var(--well); border: var(--px) solid var(--border); position: relative; flex-shrink: 0; cursor: pointer; margin-top: 2px; }
+  .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--muted); }
+  .switch input:checked { background: var(--accent); border-color: var(--accent2); }
+  .switch input:checked::after { transform: translateX(16px); background: var(--on-accent); }
+  .switch b { display: block; font-weight: 600; color: var(--title); }
+  .switch span { font-size: 13.5px; color: var(--muted); }
+
+  /* ---------- themes ---------- */
+  .themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+  .theme-card { background: var(--panel2); padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--px) var(--px) 0 var(--shadow); }
+  .theme-card:hover { border-color: var(--accent2); }
+  .theme-card.on { border-color: var(--accent); box-shadow: 0 0 0 var(--px) var(--accent), calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
+  .theme-card .top { display: flex; align-items: center; gap: 10px; }
+  .theme-card img.logo { width: 32px; height: 32px; }
+  .theme-card b { color: var(--title); font-weight: 600; }
+  .swatches { display: flex; height: 14px; border: var(--px) solid var(--shadow); }
+  .swatches i { flex: 1; }
+  .theme-card .acts { display: flex; gap: 6px; }
+  .editor { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .color-field { display: flex; align-items: center; gap: 10px; }
+  .color-field input[type=color] { width: 36px; height: 30px; border: var(--px) solid var(--border); background: var(--well); padding: 1px; cursor: pointer; }
+  .color-field span { font-size: 14px; color: var(--muted); }
+  .logo-pick { display: flex; align-items: center; gap: 12px; }
+  .logo-pick img.logo { width: 48px; height: 48px; border: var(--px) solid var(--border); background: var(--well); }
+
+  /* ---------- welcome / setup ---------- */
+  .setup { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: none; overflow-y: auto; }
+  .setup.show { display: block; }
+  .setup-inner { max-width: 800px; margin: 0 auto; padding: 36px 28px 40px; }
+  .setup-head { display: flex; align-items: center; gap: 18px; margin-bottom: 24px; }
+  .setup-head img.logo { width: 72px; height: 72px; border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
+  .setup-head h1 { font-size: 26px; color: var(--title); font-weight: 700; }
+  .setup-head p { color: var(--muted); }
+  .setup-head .btn { margin-left: auto; align-self: flex-start; }
+  .step { display: flex; align-items: center; gap: 10px; }
+  .step-num { width: 22px; height: 22px; background: var(--accent); color: var(--on-accent); font-size: 13px; font-weight: 700; display: grid; place-items: center; flex-shrink: 0; letter-spacing: 0; }
+  .step-num.done { background: var(--good); }
+  .step-num svg.i { width: 13px; height: 13px; stroke-width: 3; }
+  .item.current .title { color: var(--accent2); }
+  .setup .mini-log { max-height: 150px; }
+  .path { font-family: var(--mono); font-size: 18px; color: var(--title); background: var(--well); padding: 4px 10px; word-break: break-all; user-select: text; letter-spacing: 0; }
+
+  ::-webkit-scrollbar { width: 12px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border: 3px solid var(--bg); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  @media (max-width: 960px) { .g3 { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
 <body>
-  <header>
-    <div class="logo">🍺</div>
-    <div>
-      <h1>SillyTavern Desktop</h1>
-      <div class="sub">standalone build · no cmd · built-in browser</div>
+  <aside>
+    <div class="brand">
+      <img class="logo" data-logo alt="">
+      <div><b>SillyTavern</b><span>Desktop</span></div>
     </div>
-    <div class="status"><span class="dot" id="dot"></span><span id="statusText">Server stopped</span></div>
-  </header>
+    <nav id="nav">
+      <button data-page="home" class="active"><svg class="i"><use href="#i-home"/></svg>Home<span class="badge" id="navUpdate" hidden>1</span></button>
+      <button data-page="backups"><svg class="i"><use href="#i-archive"/></svg>Backups</button>
+      <button data-page="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions<span class="badge" id="navExt" hidden></span></button>
+      <button data-page="maintenance"><svg class="i"><use href="#i-pulse"/></svg>Maintenance</button>
+      <button data-page="console"><svg class="i"><use href="#i-terminal"/></svg>Console</button>
+      <button data-page="settings"><svg class="i"><use href="#i-sliders"/></svg>Settings</button>
+    </nav>
+    <div class="side-foot">
+      <div class="lbl">Community</div>
+      <button data-link="docs"><svg class="i"><use href="#i-book"/></svg>Documentation</button>
+      <button data-link="discord"><svg class="i"><use href="#i-chat"/></svg>Discord</button>
+      <button data-link="reddit"><svg class="i"><use href="#i-users"/></svg>r/SillyTavernAI</button>
+      <button data-link="desktop"><svg class="i"><use href="#i-external"/></svg>About this app</button>
+    </div>
+  </aside>
 
   <main>
-    <div class="actions">
-      <button class="btn primary" id="btnOpen"><span class="ico">▶</span><span>Open SillyTavern<small id="openSub">starts server + opens window</small></span></button>
-      <button class="btn" id="btnStop"><span class="ico">⏹</span><span>Stop server<small>kills the hidden node process</small></span></button>
-      <button class="btn" id="btnUpdate"><span class="ico">⟳</span><span>Update SillyTavern<small>git pull — safe, wrapper survives</small></span></button>
-      <button class="btn" id="btnBackup"><span class="ico">💾</span><span>Back up data<small>zips your data/ folder</small></span></button>
-      <button class="btn" id="btnBackups"><span class="ico">🗄</span><span>Open backups folder<small>backups/desktop/ in your install</small></span></button>
-      <button class="btn" id="btnData"><span class="ico">📂</span><span>Open data folder<small>chats, characters, settings</small></span></button>
-      <button class="btn" id="btnVersion"><span class="ico">🏷</span><span>Show current version<small>latest local commit</small></span></button>
-      <button class="btn" id="btnSettings"><span class="ico">⚙</span><span>Settings<small>path, port, behavior</small></span></button>
-    </div>
+    <header>
+      <h1 id="pageTitle">Home</h1>
+      <div class="pill"><span class="dot" id="dot"></span><span id="statusText">Server stopped</span></div>
+      <button class="btn sm" id="btnPower"><svg class="i"><use href="#i-play"/></svg><span>Start</span></button>
+    </header>
+    <div class="busy" id="busy"><div class="spin"></div><span id="busyText"></span></div>
 
-    <div class="right">
-      <div class="console-wrap" id="consoleWrap">
-        <div class="console-head"><span>Server console</span><button id="btnClear">clear</button></div>
-        <div id="console"></div>
+    <!-- ===== Home ===== -->
+    <section class="page show" id="page-home">
+      <div class="stack">
+        <div class="card hero">
+          <img class="logo" data-logo alt="">
+          <div style="flex:1">
+            <h3 id="heroTitle">Ready when you are</h3>
+            <div class="sub" id="heroSub">Start the server and open SillyTavern in its own window.</div>
+            <div class="row">
+              <button class="btn primary" id="btnOpen"><svg class="i"><use href="#i-play"/></svg>Open SillyTavern</button>
+              <span class="muted small mono" id="heroUrl"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid g2">
+          <div class="card">
+            <h2>Your SillyTavern<button class="link act" id="btnCheck">Check for updates</button></h2>
+            <dl class="kv">
+              <dt>Version</dt><dd id="infoVersion">—</dd>
+              <dt>Branch</dt><dd id="infoBranch">—</dd>
+              <dt>Last change</dt><dd id="infoCommit">—</dd>
+            </dl>
+            <div class="update-box">
+              <span id="updateTag" class="tag">Checking…</span>
+              <span class="muted small" id="updateHint"></span>
+              <button class="btn sm primary" id="btnUpdate" data-task style="margin-left:auto" hidden><svg class="i"><use href="#i-download"/></svg>Update now</button>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Quick access</h2>
+            <div class="quick">
+              <button class="btn" data-task id="btnQuickBackup"><svg class="i"><use href="#i-archive"/></svg>Back up</button>
+              <button class="btn" data-place="characters"><svg class="i"><use href="#i-user"/></svg>Characters</button>
+              <button class="btn" data-place="chats"><svg class="i"><use href="#i-chat"/></svg>Chats</button>
+              <button class="btn" data-place="data"><svg class="i"><use href="#i-folder"/></svg>Data folder</button>
+              <button class="btn" data-place="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions</button>
+              <button class="btn" data-place="config"><svg class="i"><use href="#i-sliders"/></svg>config.yaml</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Recent activity<button class="link act" data-goto="console">Open console</button></h2>
+          <div class="mini-log" id="miniLog"></div>
+        </div>
       </div>
-      <div class="settings-pane" id="settingsPane">
-        <div class="field">
-          <label>SillyTavern folder</label>
-          <input type="text" id="setPath" placeholder="F:\SillyTavern-Launcher\SillyTavern">
+    </section>
+
+    <!-- ===== Backups ===== -->
+    <section class="page" id="page-backups">
+      <p class="lead">Backups zip your <span class="mono">data</span> folder: characters, chats, settings, presets and extensions. One is made automatically before every update. Restoring never deletes anything — your current data is moved aside first.</p>
+      <div class="card">
+        <h2>Saved backups
+          <span class="act row">
+            <button class="btn sm ghost" data-place="backups"><svg class="i"><use href="#i-folder"/></svg>Open folder</button>
+            <button class="btn sm primary" data-task id="btnBackup"><svg class="i"><use href="#i-archive"/></svg>Back up now</button>
+          </span>
+        </h2>
+        <div class="list" id="backupList"></div>
+      </div>
+    </section>
+
+    <!-- ===== Extensions ===== -->
+    <section class="page" id="page-extensions">
+      <p class="lead">Third-party extensions installed in SillyTavern. Extensions installed from SillyTavern's own menu can be updated here in one go. Install new ones from the Extensions menu inside SillyTavern.</p>
+      <div class="stack">
+        <div class="card">
+          <h2>Installed extensions
+            <span class="act row">
+              <button class="btn sm ghost" id="btnExtCheck"><svg class="i"><use href="#i-refresh"/></svg>Check for updates</button>
+              <button class="btn sm primary" data-task id="btnExtUpdate"><svg class="i"><use href="#i-download"/></svg>Update all</button>
+            </span>
+          </h2>
+          <div class="list" id="extList"></div>
         </div>
-        <div class="field">
-          <label>Port</label>
-          <input type="number" id="setPort" placeholder="8000">
+        <div class="card">
+          <h2>Userscripts</h2>
+          <div class="row">
+            <p class="muted" style="flex:1">Some extensions need a companion <span class="mono">.user.js</span> script (normally installed in Tampermonkey). This app runs them itself — drop them in the userscripts folder and restart.</p>
+            <button class="btn sm" data-place="userscripts"><svg class="i"><use href="#i-folder"/></svg>Open folder</button>
+          </div>
         </div>
-        <label class="check"><input type="checkbox" id="setAuto"> Start server automatically when app opens</label>
-        <label class="check"><input type="checkbox" id="setConfirm"> Confirm before quitting while server runs</label>
-        <div class="hint">The port is passed to the server on start, overriding config.yaml. Path and port changes apply the next time the server starts — stop it first if it's running.</div>
-        <div><button class="btn primary" id="btnSaveSettings" style="justify-content:center"><span class="ico">✓</span>Save settings</button></div>
+      </div>
+    </section>
+
+    <!-- ===== Maintenance ===== -->
+    <section class="page" id="page-maintenance">
+      <div class="stack">
+        <div class="card">
+          <h2>Back end<button class="btn sm primary act" data-task id="btnUpdateBackend"><svg class="i"><use href="#i-download"/></svg>Update Node.js &amp; Git</button></h2>
+          <div class="list" id="backendList"></div>
+          <p class="muted small" style="margin-top:8px">Installs the latest Node.js (LTS) and Git with Windows' package manager, then reinstalls SillyTavern's dependencies so everything matches.</p>
+        </div>
+        <div class="card">
+          <h2>Health check<button class="link act" id="btnHealth">Run again</button></h2>
+          <div class="list" id="healthList"></div>
+        </div>
+        <div class="card">
+          <h2>Repair tools</h2>
+          <div class="grid g3">
+            <div class="tool">
+              <b>Install missing dependencies</b>
+              <p>Fixes "Cannot find module" errors, usually after an update. Safe to run any time.</p>
+              <button class="btn sm" data-task data-repair="deps">Run npm install</button>
+            </div>
+            <div class="tool">
+              <b>Reset package-lock.json</b>
+              <p>The most common reason an update fails. Restores the official file so updating works again.</p>
+              <button class="btn sm" data-task data-repair="reset-lock">Reset file</button>
+            </div>
+            <div class="tool">
+              <b>Reinstall dependencies</b>
+              <p>Deletes <span class="mono">node_modules</span> and downloads everything again. For stubborn errors. Takes a few minutes.</p>
+              <button class="btn sm danger" data-task data-repair="clean-deps">Reinstall</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Release channel</h2>
+          <div class="row">
+            <p class="muted" style="flex:1"><b style="color:var(--cream)">Release</b> is the stable version most people use. <b style="color:var(--cream)">Staging</b> gets new features first and is updated daily, but can break. You're on <span class="tag fox" id="branchTag">—</span></p>
+            <button class="btn sm" data-task data-branch="release">Use release</button>
+            <button class="btn sm" data-task data-branch="staging">Use staging</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Console ===== -->
+    <section class="page fill" id="page-console">
+      <div class="console-bar">
+        <div class="seg" id="logFilter">
+          <button data-f="all" class="on">All</button>
+          <button data-f="err">Problems</button>
+        </div>
+        <input type="search" id="logSearch" placeholder="Search the log…">
+        <button class="btn sm" id="btnCopyLog"><svg class="i"><use href="#i-copy"/></svg>Copy</button>
+        <button class="btn sm" data-place="logs"><svg class="i"><use href="#i-folder"/></svg>Log file</button>
+        <button class="btn sm ghost" id="btnClearLog">Clear view</button>
+      </div>
+      <div id="console"></div>
+    </section>
+
+    <!-- ===== Settings ===== -->
+    <section class="page" id="page-settings">
+      <div class="card" style="margin-bottom:16px">
+        <h2>Appearance
+          <span class="act row">
+            <button class="btn sm ghost" id="btnImportTheme"><svg class="i"><use href="#i-download"/></svg>Import theme…</button>
+            <button class="btn sm" id="btnNewTheme"><svg class="i"><use href="#i-sliders"/></svg>New theme</button>
+          </span>
+        </h2>
+        <div class="themes" id="themeList"></div>
+        <div id="themeEditor" hidden style="margin-top:18px;padding-top:16px;border-top:var(--px) dashed var(--border)">
+          <div class="row" style="margin-bottom:14px">
+            <div class="field" style="flex:1;max-width:320px"><label>Theme name</label><input type="text" id="themeName" maxlength="40" placeholder="My theme"></div>
+            <div class="logo-pick">
+              <img class="logo" id="themeLogoPreview" alt="">
+              <div class="stack" style="gap:6px">
+                <span class="muted small">Logo (shown pixelated)</span>
+                <div class="row">
+                  <button class="btn sm" id="btnThemeLogo">Upload image…</button>
+                  <button class="btn sm ghost" data-logo-preset="st">ST</button>
+                  <button class="btn sm ghost" data-logo-preset="fox">Fox</button>
+                </div>
+              </div>
+              <input type="file" id="themeLogoFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+            </div>
+          </div>
+          <div class="editor" id="themeColors"></div>
+          <p class="muted small" style="margin-top:12px">Changes preview live. Other shades are mixed from these colors automatically.</p>
+          <div class="row" style="margin-top:12px">
+            <button class="btn primary" id="btnSaveTheme"><svg class="i"><use href="#i-check"/></svg>Save theme</button>
+            <button class="btn ghost" id="btnCancelTheme">Cancel</button>
+            <span class="muted small" id="themeError" style="color:var(--bad)"></span>
+          </div>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="stack">
+          <div class="card stack">
+            <h2>SillyTavern install</h2>
+            <div class="path" id="curPath">—</div>
+            <div class="row">
+              <button class="btn sm" data-task id="btnChangeInstall"><svg class="i"><use href="#i-refresh"/></svg>Change…</button>
+              <button class="btn sm" data-task id="btnMoveST"><svg class="i"><use href="#i-folder"/></svg>Move to another folder…</button>
+              <button class="btn sm ghost" data-place="st"><svg class="i"><use href="#i-external"/></svg>Open</button>
+            </div>
+            <p class="muted small">This app can live anywhere — it remembers where SillyTavern is. <b style="color:var(--cream)">Move</b> relocates the whole install, backups included.</p>
+          </div>
+          <div class="card stack">
+            <h2>Server</h2>
+            <div class="field">
+              <label>Port</label>
+              <input type="number" id="setPort" min="1" max="65535">
+            </div>
+            <p class="muted small">The port is passed to the server on start, overriding config.yaml. Changes apply the next time the server starts.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Behavior</h2>
+          <label class="switch"><input type="checkbox" id="setAuto"><div><b>Start automatically</b><span>Start the server and open SillyTavern when the app launches.</span></div></label>
+          <label class="switch"><input type="checkbox" id="setCheck"><div><b>Check for updates on launch</b><span>Shows "update available" on Home. Never updates by itself.</span></div></label>
+          <label class="switch"><input type="checkbox" id="setBackup"><div><b>Back up before updating</b><span>Zip your data before every update or channel switch.</span></div></label>
+          <label class="switch"><input type="checkbox" id="setConfirm"><div><b>Confirm before quitting</b><span>Ask before quitting while the server runs.</span></div></label>
+          <div class="field" style="padding-top:10px;border-top:1px solid var(--border)">
+            <label>Automatic backups to keep (manual backups are never removed)</label>
+            <input type="number" id="setKeep" min="1" max="100" style="max-width:120px">
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px"><button class="btn primary" id="btnSave"><svg class="i"><use href="#i-check"/></svg>Save settings</button></div>
+    </section>
+  </main>
+
+  <!-- ===== Welcome / choose install ===== -->
+  <div class="setup" id="setup">
+    <div class="setup-inner stack">
+      <div class="setup-head">
+        <img class="logo" data-logo alt="">
+        <div>
+          <h1 id="setupTitle">Welcome to SillyTavern Desktop</h1>
+          <p id="setupLead">Let's get SillyTavern running. Two quick steps — everything happens right here.</p>
+        </div>
+        <button class="btn sm ghost" id="btnSetupClose" hidden>Back</button>
+      </div>
+
+      <div class="card">
+        <h2><span class="step"><span class="step-num" id="reqNum">1</span>What SillyTavern needs</span></h2>
+        <div class="list" id="reqList"></div>
+        <div class="row" style="margin-top:12px">
+          <span class="muted small" id="reqHint" style="flex:1"></span>
+          <button class="btn sm primary" data-task id="btnInstallReq" hidden><svg class="i"><use href="#i-download"/></svg>Install for me</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="step"><span class="step-num" id="stNum">2</span>Your SillyTavern</span></h2>
+        <div class="list" id="installList"></div>
+        <div class="row" style="margin-top:12px">
+          <span class="muted small" style="flex:1" id="installHint"></span>
+          <button class="btn sm" data-task id="btnBrowse"><svg class="i"><use href="#i-folder"/></svg>Find it myself…</button>
+          <button class="btn sm primary" data-task id="btnInstallST"><svg class="i"><use href="#i-download"/></svg>Install SillyTavern</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Progress</h2>
+        <div class="mini-log" id="setupLog"></div>
       </div>
     </div>
-  </main>
+  </div>
+
+  <!-- ===== icons ===== -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="fox" viewBox="0 0 64 64">
+        <path d="M6 6 L22 20 H42 L58 6 L55 34 L32 58 L9 34 Z" fill="#f28c38"/>
+        <path d="M10 10 L20 20 L14 26 Z M54 10 L44 20 L50 26 Z" fill="#7a3a12"/>
+        <path d="M9 34 L22 31 L32 42 L42 31 L55 34 L32 58 Z" fill="#fff3e6"/>
+        <path d="M22 20 H42 L32 30 Z" fill="#ffb26b" opacity=".55"/>
+        <ellipse cx="23" cy="31" rx="2.6" ry="3.2" fill="#2a1a10"/>
+        <ellipse cx="41" cy="31" rx="2.6" ry="3.2" fill="#2a1a10"/>
+        <path d="M28.5 50 H35.5 L32 54.5 Z" fill="#2a1a10"/>
+      </symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></symbol>
+      <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M9 3h6v3a2 2 0 1 0 4 0V3h2v7h-3a2 2 0 1 0 0 4h3v7h-7v-3a2 2 0 1 0-4 0v3H3v-7h3a2 2 0 1 0 0-4H3V3z"/></symbol>
+      <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M22 12h-4l-3 8-6-16-3 8H2"/></symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-5-6-5M12 19h8"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8M21 3v5h-5"/></symbol>
+      <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+      <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2zM4 20a2 2 0 0 0 2 2h13v-4"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
+    </defs>
+  </svg>
 
 <script>
   const $ = id => document.getElementById(id);
-  const cons = $('console');
-  let running = false;
+  const D = window.desktop;
+  const icon = name => `<svg class="i"><use href="#i-${name}"/></svg>`;
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const state = { running: false, startedAt: 0, busy: '', url: '', page: 'home', logs: [], filter: 'all', search: '' };
 
+  // ---------- navigation ----------
+  const TITLES = { home: 'Home', backups: 'Backups', extensions: 'Extensions', maintenance: 'Maintenance', console: 'Console', settings: 'Settings' };
+  function go(page) {
+    state.page = page;
+    document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+    document.querySelectorAll('.page').forEach(p => p.classList.toggle('show', p.id === `page-${page}`));
+    $('pageTitle').textContent = TITLES[page];
+    loadPage(page);
+  }
+  document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.page));
+  document.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => go(b.dataset.goto));
+  document.querySelectorAll('[data-link]').forEach(b => b.onclick = () => D.openLink(b.dataset.link));
+  document.addEventListener('click', e => {
+    const p = e.target.closest('[data-place]');
+    if (p) D.openPlace(p.dataset.place);
+  });
+
+  function loadPage(page) {
+    if (page === 'home') loadInfo();
+    if (page === 'backups') loadBackups();
+    if (page === 'extensions') loadExtensions(false);
+    if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); }
+    if (page === 'console') renderConsole();
+    if (page === 'settings') loadSettingsForm();
+  }
+
+  // ---------- server status ----------
+  function uptime() {
+    if (!state.startedAt) return '';
+    const m = Math.floor((Date.now() - state.startedAt) / 60000);
+    return m < 1 ? 'just now' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+  }
+  function renderStatus() {
+    $('dot').classList.toggle('on', state.running);
+    $('statusText').textContent = state.running ? `Running · ${uptime()}` : 'Server stopped';
+    $('btnPower').innerHTML = state.running ? `${icon('stop')}<span>Stop</span>` : `${icon('play')}<span>Start</span>`;
+    $('heroTitle').textContent = state.running ? 'SillyTavern is running' : 'Ready when you are';
+    $('heroSub').textContent = state.running
+      ? 'Your server is up. Open the window any time — closing it keeps the server running.'
+      : 'Start the server and open SillyTavern in its own window.';
+    $('heroUrl').textContent = state.running ? state.url : '';
+  }
+  function setBusy(label) {
+    state.busy = label;
+    $('busy').classList.toggle('show', !!label);
+    $('busyText').textContent = label ? `${label}… you can watch progress in the Console.` : '';
+    document.querySelectorAll('[data-task]').forEach(b => b.disabled = !!label);
+    if (!label && $('setup').classList.contains('show')) loadSetup();
+  }
+  $('btnPower').onclick = () => state.running ? D.stopServer() : D.startServer();
+  $('btnOpen').onclick = () => D.openST();
+  setInterval(renderStatus, 30000);
+
+  // ---------- version info ----------
+  async function loadInfo(info) {
+    info = info || await D.stInfo();
+    $('infoVersion').textContent = info.version ? `SillyTavern ${info.version}` : 'Not found';
+    $('infoBranch').innerHTML = info.branch ? `<span class="tag fox">${esc(info.branch)}</span>` : '—';
+    $('branchTag').textContent = info.branch || 'unknown';
+    $('infoCommit').textContent = info.commit ? `${info.commitDate} · ${info.commit}` : '—';
+    const tag = $('updateTag');
+    const upd = $('btnUpdate');
+    if (!info.isGit) {
+      tag.className = 'tag warn'; tag.textContent = 'Not a git install';
+      $('updateHint').textContent = 'Updates need a SillyTavern installed with git.';
+      upd.hidden = true;
+    } else if (info.behind > 0) {
+      tag.className = 'tag fox'; tag.textContent = `Update available`;
+      $('updateHint').textContent = `${info.behind} new change${info.behind === 1 ? '' : 's'} on ${info.branch}`;
+      upd.hidden = false;
+    } else if (info.behind === 0) {
+      tag.className = 'tag good'; tag.textContent = 'Up to date';
+      $('updateHint').textContent = '';
+      upd.hidden = true;
+    } else {
+      tag.className = 'tag'; tag.textContent = 'Unknown';
+      $('updateHint').textContent = 'Click "Check for updates".';
+      upd.hidden = true;
+    }
+    const nb = $('navUpdate');
+    nb.hidden = !(info.behind > 0);
+    nb.textContent = '1';
+  }
+  $('btnCheck').onclick = async () => {
+    $('updateTag').className = 'tag'; $('updateTag').textContent = 'Checking…';
+    loadInfo(await D.checkUpdates());
+  };
+  $('btnUpdate').onclick = () => D.update();
+
+  // ---------- backups ----------
+  async function loadBackups() {
+    const list = await D.listBackups();
+    const el = $('backupList');
+    if (!list.length) { el.innerHTML = `<div class="empty">No backups yet. Click <b>Back up now</b> to make your first one.</div>`; return; }
+    el.innerHTML = list.map(b => `
+      <div class="item">
+        <div class="main">
+          <div class="title">${esc(new Date(b.mtime).toLocaleString())}</div>
+          <div class="meta mono">${esc(b.name)}</div>
+        </div>
+        <span class="tag ${b.auto ? '' : 'fox'}">${b.auto ? 'Automatic' : 'Manual'}</span>
+        <span class="muted small" style="width:70px;text-align:right">${esc(b.sizeText)}</span>
+        <button class="btn sm" data-task data-restore="${esc(b.name)}">${icon('restore')}Restore</button>
+        <button class="btn sm ghost danger" data-del="${esc(b.name)}" title="Delete">${icon('trash')}</button>
+      </div>`).join('');
+    el.querySelectorAll('[data-restore]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => D.restoreBackup(b.dataset.restore); });
+    el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => D.deleteBackup(b.dataset.del));
+  }
+  $('btnBackup').onclick = () => D.backup();
+  $('btnQuickBackup').onclick = () => D.backup();
+
+  // ---------- extensions ----------
+  async function loadExtensions(fetch) {
+    const el = $('extList');
+    if (fetch) el.innerHTML = `<div class="empty">Checking each extension for updates…</div>`;
+    const list = await D.listExtensions(fetch);
+    const behind = list.filter(e => e.behind > 0).length;
+    $('navExt').hidden = !behind;
+    $('navExt').textContent = behind;
+    if (!list.length) { el.innerHTML = `<div class="empty">No third-party extensions installed.</div>`; return; }
+    el.innerHTML = list.map(e => {
+      const status = !e.isGit ? '<span class="tag">Manual install</span>'
+        : e.behind > 0 ? `<span class="tag fox">${e.behind} update${e.behind === 1 ? '' : 's'}</span>`
+        : e.behind === 0 ? '<span class="tag good">Up to date</span>' : '<span class="tag">Unknown</span>';
+      const meta = [e.version && `v${e.version}`, e.author, e.scope === 'all users' ? 'all users' : `user: ${e.scope}`].filter(Boolean).map(esc).join(' · ');
+      return `<div class="item"><div class="main"><div class="title">${esc(e.name)}</div><div class="meta">${meta}</div></div>${status}</div>`;
+    }).join('');
+  }
+  $('btnExtCheck').onclick = () => loadExtensions(true);
+  $('btnExtUpdate').onclick = () => D.updateExtensions();
+
+  // ---------- maintenance ----------
+  async function loadHealth() {
+    const el = $('healthList');
+    el.innerHTML = `<div class="empty">Checking…</div>`;
+    const checks = await D.healthCheck();
+    el.innerHTML = checks.map(c => `
+      <div class="item">
+        <span class="check-ico ${c.status}">${icon(c.status === 'ok' ? 'check' : c.status === 'warn' ? 'alert' : 'x')}</span>
+        <div class="main"><div class="title">${esc(c.label)}</div><div class="meta">${esc(c.detail)}</div>${c.fix ? `<div class="fix">${esc(c.fix)}</div>` : ''}</div>
+      </div>`).join('');
+  }
+  $('btnHealth').onclick = loadHealth;
+  document.querySelectorAll('[data-repair]').forEach(b => b.onclick = () => D.repair(b.dataset.repair));
+  document.querySelectorAll('[data-branch]').forEach(b => b.onclick = () => D.switchBranch(b.dataset.branch));
+
+  // ---------- console ----------
+  const lineClass = l => /error|failed|cannot|refused/i.test(l) ? 'l-err' : /warn|deprecat/i.test(l) ? 'l-warn' : /complete|finished|listening|up to date|loaded|restored/i.test(l) ? 'l-ok' : '';
+  function lineDiv(l) {
+    const d = document.createElement('div');
+    d.className = lineClass(l);
+    d.textContent = l;
+    return d;
+  }
+  function visible(l) {
+    if (state.filter === 'err' && !/l-(err|warn)/.test(lineClass(l))) return false;
+    return !state.search || l.toLowerCase().includes(state.search);
+  }
+  function renderConsole() {
+    const c = $('console');
+    c.replaceChildren(...state.logs.filter(visible).map(lineDiv));
+    c.scrollTop = c.scrollHeight;
+  }
+  function renderMiniLog() {
+    $('miniLog').replaceChildren(...state.logs.slice(-7).map(lineDiv));
+    if (!state.logs.length) $('miniLog').innerHTML = '<div class="muted">Nothing yet.</div>';
+  }
   function append(line) {
-    const div = document.createElement('div');
-    if (/error|failed|exited/i.test(line)) div.className = 'err';
-    else if (/complete|finished|started|listening|running/i.test(line)) div.className = 'ok';
-    div.textContent = line;
-    cons.appendChild(div);
-    while (cons.childElementCount > 600) cons.removeChild(cons.firstChild);
-    cons.scrollTop = cons.scrollHeight;
+    state.logs.push(line);
+    if (state.logs.length > 2000) state.logs.shift();
+    renderMiniLog();
+    if (state.page === 'console' && visible(line)) {
+      const c = $('console');
+      const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
+      c.appendChild(lineDiv(line));
+      if (atBottom) c.scrollTop = c.scrollHeight;
+    }
   }
+  document.querySelectorAll('#logFilter button').forEach(b => b.onclick = () => {
+    state.filter = b.dataset.f;
+    document.querySelectorAll('#logFilter button').forEach(x => x.classList.toggle('on', x === b));
+    renderConsole();
+  });
+  $('logSearch').oninput = e => { state.search = e.target.value.toLowerCase(); renderConsole(); };
+  $('btnCopyLog').onclick = async () => { await D.copyLogs(); $('btnCopyLog').innerHTML = `${icon('check')}Copied`; setTimeout(() => $('btnCopyLog').innerHTML = `${icon('copy')}Copy`, 1500); };
+  $('btnClearLog').onclick = () => { state.logs = []; renderConsole(); renderMiniLog(); };
 
-  function setRunning(v) {
-    running = v;
-    $('dot').classList.toggle('on', v);
-    $('statusText').textContent = v ? 'Server running' : 'Server stopped';
-    $('openSub').textContent = v ? 'server already up — opens window' : 'starts server + opens window';
+  // ---------- settings ----------
+  let current = {};
+  function loadSettingsForm() {
+    $('curPath').textContent = current.sillytavernPath || 'Not set';
+    $('setPort').value = current.port;
+    $('setAuto').checked = current.autoStart;
+    $('setCheck').checked = current.checkUpdatesOnLaunch;
+    $('setBackup').checked = current.backupBeforeUpdate;
+    $('setConfirm').checked = current.confirmBeforeQuit;
+    $('setKeep').value = current.backupKeep;
   }
-
-  window.desktop.onLog(append);
-  window.desktop.onStarted(() => setRunning(true));
-  window.desktop.onStopped(() => setRunning(false));
-
-  $('btnOpen').onclick = async () => { append('→ launching SillyTavern...'); await window.desktop.openST(); };
-  $('btnStop').onclick = () => window.desktop.stopServer();
-  $('btnUpdate').onclick = () => window.desktop.update();
-  $('btnBackup').onclick = () => window.desktop.backup();
-  $('btnBackups').onclick = () => window.desktop.openBackupsFolder();
-  $('btnData').onclick = () => window.desktop.openDataFolder();
-  $('btnVersion').onclick = () => window.desktop.gitVersion();
-  $('btnClear').onclick = () => cons.innerHTML = '';
-  $('btnSettings').onclick = () => {
-    $('settingsPane').classList.toggle('show');
-    $('consoleWrap').style.display = $('settingsPane').classList.contains('show') ? 'none' : 'flex';
-  };
-  $('btnSaveSettings').onclick = async () => {
-    await window.desktop.saveSettings({
-      sillytavernPath: $('setPath').value,
-      port: parseInt($('setPort').value, 10) || 8000,
+  $('btnSave').onclick = async () => {
+    const s = {
+      port: Math.min(65535, Math.max(1, parseInt($('setPort').value, 10) || 8000)),
       autoStart: $('setAuto').checked,
+      checkUpdatesOnLaunch: $('setCheck').checked,
+      backupBeforeUpdate: $('setBackup').checked,
       confirmBeforeQuit: $('setConfirm').checked,
-    });
-    append('✓ Settings saved.');
+      backupKeep: Math.min(100, Math.max(1, parseInt($('setKeep').value, 10) || 10)),
+    };
+    await D.saveSettings(s);
+    current = { ...current, ...s };
+    $('btnSave').innerHTML = `${icon('check')}Saved`;
+    setTimeout(() => $('btnSave').innerHTML = `${icon('check')}Save settings`, 1500);
   };
+
+  // ---------- welcome / setup ----------
+  // Shown on first launch when no install is known, or from Settings → Change.
+  let setupForced = false;
+  const reqRow = (name, r, min) => {
+    const status = r.ok ? 'ok' : 'bad';
+    const detail = r.ok ? `Version ${r.version}` : r.installed ? `Version ${r.version} is too old — SillyTavern needs ${min} or newer` : 'Not installed';
+    return `<div class="item"><span class="check-ico ${status}">${icon(r.ok ? 'check' : 'x')}</span><div class="main"><div class="title">${name}</div><div class="meta">${esc(detail)}</div></div></div>`;
+  };
+  async function loadSetup() {
+    const st = await D.setupState();
+    const show = !st.ready || setupForced;
+    $('setup').classList.toggle('show', show);
+    if (!show) return st;
+    $('btnSetupClose').hidden = !st.ready;
+    $('setupTitle').textContent = st.ready ? 'Choose your SillyTavern' : 'Welcome to SillyTavern Desktop';
+    $('setupLead').textContent = st.ready
+      ? 'Switch to another install on this PC, point to a folder, or install a fresh copy.'
+      : st.current ? `SillyTavern is no longer at ${st.current}. Pick where it is now, or install it again.` : "Let's get SillyTavern running. Two quick steps — everything happens right here.";
+
+    const req = st.requirements;
+    const reqOk = req.node.ok && req.git.ok;
+    $('reqList').innerHTML = reqRow('Node.js', req.node, 'v20') + reqRow('Git', req.git, '');
+    $('reqNum').classList.toggle('done', reqOk);
+    $('reqNum').innerHTML = reqOk ? icon('check') : '1';
+    $('btnInstallReq').hidden = reqOk || !req.canAutoInstall;
+    $('reqHint').innerHTML = reqOk ? 'All set.'
+      : req.canAutoInstall ? 'Click <b>Install for me</b> — Windows may ask for permission once.'
+      : 'Install them from <button class="link" data-link="node">nodejs.org</button> and <button class="link" data-link="git">git-scm.com</button>, then restart this app.';
+    $('reqHint').querySelectorAll('[data-link]').forEach(b => b.onclick = () => D.openLink(b.dataset.link));
+
+    const list = st.installs;
+    $('stNum').classList.toggle('done', st.ready);
+    $('stNum').innerHTML = st.ready ? icon('check') : '2';
+    $('installList').innerHTML = list.length ? list.map(i => {
+      const cur = st.ready && i.path.toLowerCase() === st.current.toLowerCase();
+      return `<div class="item ${cur ? 'current' : ''}">
+        <div class="main"><div class="title mono">${esc(i.path)}</div><div class="meta">SillyTavern ${esc(i.version)}${i.isGit ? '' : ' · not a git install (updates unavailable)'}</div></div>
+        ${cur ? '<span class="tag fox">In use</span>' : `<button class="btn sm" data-task data-use="${esc(i.path)}">Use this</button>`}
+      </div>`;
+    }).join('') : `<div class="empty">No SillyTavern found on this PC.</div>`;
+    $('installList').querySelectorAll('[data-use]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => D.useInstall(b.dataset.use).then(ok => finishSetup(ok, st.ready)); });
+    $('installHint').textContent = list.length ? '' : (reqOk ? 'Install a fresh copy, or point to one you already have.' : 'Finish step 1 first to install SillyTavern.');
+    $('btnInstallST').disabled = !!state.busy || !reqOk;
+    $('btnInstallST').classList.toggle('primary', !list.length);
+    $('setupLog').replaceChildren(...state.logs.slice(-8).map(lineDiv));
+    return st;
+  }
+  // First-time setup ends by opening SillyTavern, like a normal launch would.
+  async function finishSetup(ok, wasReady) {
+    if (!ok) return;
+    setupForced = false;
+    refreshAll();
+    if (!wasReady && current.autoStart) D.openST();
+  }
+  $('btnInstallReq').onclick = () => D.installRequirements();
+  $('btnInstallST').onclick = async () => {
+    const wasReady = (await D.setupState()).ready;
+    finishSetup(await D.installST(), wasReady);
+  };
+  $('btnBrowse').onclick = async () => {
+    const wasReady = (await D.setupState()).ready;
+    const r = await D.browseInstall();
+    if (r.error) append(`ERROR: ${r.error}`);
+    finishSetup(r.ok, wasReady);
+  };
+  $('btnSetupClose').onclick = () => { setupForced = false; loadSetup(); };
+  $('btnChangeInstall').onclick = () => { setupForced = true; loadSetup(); };
+  $('btnMoveST').onclick = () => D.moveST();
+
+  // ---------- back end ----------
+  async function loadBackend() {
+    const req = (await D.setupState()).requirements;
+    const row = (name, r) => `<div class="item"><span class="check-ico ${r.ok ? 'ok' : 'bad'}">${icon(r.ok ? 'check' : 'x')}</span><div class="main"><div class="title">${name}</div><div class="meta">${r.installed ? `Version ${esc(r.version)}` : 'Not installed'}</div></div></div>`;
+    $('backendList').innerHTML = row('Node.js', req.node) + row('Git', req.git);
+    $('btnUpdateBackend').hidden = !req.canAutoInstall;
+  }
+  $('btnUpdateBackend').onclick = () => D.updateBackend();
+
+  function refreshAll() {
+    stLogoSrc = null;
+    loadThemes();
+    D.getState().then(s => { current = s.settings; if (state.page === 'settings') loadSettingsForm(); });
+    loadSetup().then(st => { if (st.ready) { loadInfo(); loadExtensions(false); } });
+    if (state.page !== 'home') loadPage(state.page);
+  }
+
+  // ---------- themes ----------
+  // A theme is base colors + a logo. Logos are shrunk to 32px and shown
+  // with pixelated scaling, so any image becomes pixel art.
+  const VAR_OF = { bg: '--bg', panel: '--panel', border: '--border', accent: '--accent', text: '--text', title: '--title', muted: '--muted', onAccent: '--on-accent', good: '--good', warn: '--warn', bad: '--bad' };
+  const EDIT_KEYS = [['bg', 'Background'], ['panel', 'Panels'], ['border', 'Borders'], ['accent', 'Accent'], ['text', 'Text'], ['title', 'Headings'], ['muted', 'Secondary text']];
+  const FALLBACK = { onAccent: '#140c0a', good: '#8fcf8f', warn: '#e6c36a', bad: '#f28a6c' };
+  const svgUrl = (body, vb) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}">${body}</svg>`);
+  const FOX_SVG = svgUrl(document.getElementById('fox').innerHTML, '0 0 64 64');
+  // Used for the SillyTavern theme until an install (with its icon) is known.
+  const ST_SVG = svgUrl('<rect width="16" height="16" fill="#2a2b30"/><rect x="1" y="1" width="14" height="14" fill="none" stroke="#c0453e"/><path fill="#f0eee8" d="M4 4h4v1H4zM3 5h1v2H3zM4 7h3v1H4zM7 8h1v2H7zM3 10h4v1H3zM9 4h5v1H9zM11 5h1v6h-1z"/>', '0 0 16 16');
+  const logoCache = new Map();
+
+  function pixelate(src, size = 32) {
+    if (logoCache.has(src)) return logoCache.get(src);
+    const p = new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = c.height = size;
+        const g = c.getContext('2d');
+        g.imageSmoothingQuality = 'high';
+        const s = Math.min(size / img.width, size / img.height);
+        const w = img.width * s, h = img.height * s;
+        g.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        resolve(c.toDataURL('image/png'));
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    });
+    logoCache.set(src, p);
+    return p;
+  }
+  let stLogoSrc = null;
+  async function logoSrc(logo) {
+    if (logo === 'fox') return pixelate(FOX_SVG);
+    if (logo === 'st') {
+      stLogoSrc = stLogoSrc || await D.stLogo() || ST_SVG;
+      return pixelate(stLogoSrc);
+    }
+    return pixelate(logo);
+  }
+  // Readable text on the accent color: dark on light accents, light on dark.
+  function textOn(hex) {
+    const n = parseInt(hex.slice(1).replace(/^(.)(.)(.)$/, '$1$1$2$2$3$3'), 16);
+    const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+    return lum > 0.55 ? '#14100e' : '#f7f3ee';
+  }
+  async function applyTheme(t) {
+    const root = document.documentElement.style;
+    const colors = { ...FALLBACK, onAccent: textOn(t.colors.accent), ...t.colors };
+    for (const [k, v] of Object.entries(VAR_OF)) if (colors[k]) root.setProperty(v, colors[k]);
+    const src = await logoSrc(t.logo);
+    document.querySelectorAll('img[data-logo]').forEach(i => i.src = src);
+  }
+
+  let themeState = { active: 'sillytavern', themes: [] };
+  const activeTheme = () => themeState.themes.find(t => t.id === themeState.active) || themeState.themes[0];
+  async function loadThemes() {
+    themeState = await D.listThemes();
+    if (!editing) applyTheme(activeTheme());
+    renderThemeList();
+  }
+  async function renderThemeList() {
+    const el = $('themeList');
+    const cards = await Promise.all(themeState.themes.map(async t => {
+      const c = { ...FALLBACK, ...t.colors };
+      const sw = [c.bg, c.panel, c.border, c.accent, c.text].map(x => `<i style="background:${x}"></i>`).join('');
+      const acts = t.builtin
+        ? `<button class="btn sm ghost" data-copy="${esc(t.id)}">Customize</button><button class="btn sm ghost" data-export="${esc(t.id)}">Export</button>`
+        : `<button class="btn sm ghost" data-edit="${esc(t.id)}">Edit</button><button class="btn sm ghost" data-export="${esc(t.id)}">Export</button><button class="btn sm ghost danger" data-deltheme="${esc(t.id)}" title="Delete">${icon('trash')}</button>`;
+      return `<div class="theme-card ${t.id === themeState.active ? 'on' : ''}" data-theme="${esc(t.id)}">
+        <div class="top"><img class="logo" src="${await logoSrc(t.logo)}" alt=""><div><b>${esc(t.name)}</b><div class="muted small">${t.builtin ? 'Built-in' : esc(t.author || 'Custom')}${t.id === themeState.active ? ' · in use' : ''}</div></div></div>
+        <div class="swatches">${sw}</div>
+        <div class="acts">${acts}</div>
+      </div>`;
+    }));
+    el.innerHTML = cards.join('');
+    el.querySelectorAll('[data-theme]').forEach(c => c.onclick = e => { if (!e.target.closest('button') && !editing) D.setTheme(c.dataset.theme); });
+    el.querySelectorAll('[data-export]').forEach(b => b.onclick = () => D.exportTheme(b.dataset.export));
+    el.querySelectorAll('[data-deltheme]').forEach(b => b.onclick = () => D.deleteTheme(b.dataset.deltheme));
+    el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(themeState.themes.find(t => t.id === b.dataset.edit), b.dataset.edit));
+    el.querySelectorAll('[data-copy]').forEach(b => {
+      const t = themeState.themes.find(x => x.id === b.dataset.copy);
+      b.onclick = () => openEditor({ ...t, name: `My ${t.name}` }, null);
+    });
+  }
+
+  // ----- editor (live preview; Cancel restores the active theme) -----
+  let editing = null; // { id, theme }
+  function openEditor(base, id) {
+    editing = { id, theme: { name: base.name, author: base.author || '', colors: { ...base.colors }, logo: base.logo } };
+    $('themeEditor').hidden = false;
+    $('themeName').value = editing.theme.name;
+    $('themeError').textContent = '';
+    $('themeColors').innerHTML = EDIT_KEYS.map(([k, label]) =>
+      `<label class="color-field"><input type="color" data-color="${k}" value="${editing.theme.colors[k]}"><span>${label}</span></label>`).join('');
+    $('themeColors').querySelectorAll('[data-color]').forEach(inp => inp.oninput = () => {
+      editing.theme.colors[inp.dataset.color] = inp.value;
+      if (inp.dataset.color === 'accent') delete editing.theme.colors.onAccent; // recomputed for contrast
+      applyTheme(editing.theme);
+    });
+    previewEditorLogo();
+    applyTheme(editing.theme);
+    $('themeEditor').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  async function previewEditorLogo() {
+    const src = await logoSrc(editing.theme.logo);
+    $('themeLogoPreview').src = src;
+    applyTheme(editing.theme);
+  }
+  function closeEditor() {
+    editing = null;
+    $('themeEditor').hidden = true;
+    applyTheme(activeTheme());
+  }
+  $('btnNewTheme').onclick = () => openEditor({ ...activeTheme(), name: 'My theme', author: '' }, null);
+  $('btnCancelTheme').onclick = closeEditor;
+  $('btnThemeLogo').onclick = () => $('themeLogoFile').click();
+  document.querySelectorAll('[data-logo-preset]').forEach(b => b.onclick = () => { editing.theme.logo = b.dataset.logoPreset; previewEditorLogo(); });
+  // Uploaded logos are stored at 64px: small files, and pixel art anyway.
+  $('themeLogoFile').onchange = () => {
+    const f = $('themeLogoFile').files[0];
+    $('themeLogoFile').value = '';
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = c.height = 64;
+        const s = Math.min(64 / img.width, 64 / img.height);
+        c.getContext('2d').drawImage(img, (64 - img.width * s) / 2, (64 - img.height * s) / 2, img.width * s, img.height * s);
+        editing.theme.logo = c.toDataURL('image/png');
+        previewEditorLogo();
+      };
+      img.onerror = () => { $('themeError').textContent = 'That image could not be read.'; };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(f);
+  };
+  $('btnSaveTheme').onclick = async () => {
+    editing.theme.name = $('themeName').value.trim();
+    const r = await D.saveTheme(editing.theme, editing.id);
+    if (r.error) { $('themeError').textContent = r.error; return; }
+    editing = null;
+    $('themeEditor').hidden = true;
+  };
+  $('btnImportTheme').onclick = async () => {
+    const r = await D.importTheme();
+    if (r.error) append(`ERROR: Theme import failed: ${r.error}`);
+  };
+
+  // ---------- events ----------
+  D.onLog(line => { append(line); if ($('setup').classList.contains('show')) $('setupLog').replaceChildren(...state.logs.slice(-8).map(lineDiv)); });
+  D.onStarted(() => D.getState().then(s => { state.running = true; state.startedAt = s.startedAt; state.url = s.url; renderStatus(); }));
+  D.onStopped(() => { state.running = false; state.startedAt = 0; renderStatus(); });
+  D.onBusy(setBusy);
+  D.onRefresh(refreshAll);
+  D.onTheme(loadThemes);
 
   (async () => {
-    const state = await window.desktop.getState();
-    state.logs.forEach(append);
-    setRunning(state.running);
-    $('setPath').value = state.settings.sillytavernPath;
-    $('setPort').value = state.settings.port;
-    $('setAuto').checked = state.settings.autoStart;
-    $('setConfirm').checked = state.settings.confirmBeforeQuit;
+    await loadThemes();
+    const s = await D.getState();
+    current = s.settings;
+    Object.assign(state, { running: s.running, startedAt: s.startedAt, url: s.url, logs: [...s.logs] });
+    renderStatus();
+    renderMiniLog();
+    setBusy(s.busy);
+    const st = await loadSetup();
+    if (st.ready) { loadInfo(); loadExtensions(false); }
   })();
 </script>
 </body>

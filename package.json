@@ -13,6 +13,8 @@
     "dist:installer": "electron-builder --win nsis"
   },
   "devDependencies": {
+    "@fontsource/pixelify-sans": "^5.3.0",
+    "@fontsource/vt323": "^5.3.0",
     "electron": "^41.1.1",
     "electron-builder": "^26.0.12"
   },
@@ -22,12 +24,20 @@
     "files": [
       "main.js",
       "preload.js",
+      "st-preload.js",
+      "userscripts.js",
+      "maintenance.js",
+      "setup.js",
+      "themes.js",
+      "fonts/**",
       "launcher.html",
       "icon.ico",
       "package.json"
     ],
     "win": {
-      "target": ["portable"],
+      "target": [
+        "portable"
+      ],
       "icon": "icon.ico"
     },
     "portable": {
@@ -37,5 +47,9 @@
       "oneClick": true,
       "artifactName": "SillyTavern-Desktop-Setup.exe"
     }
+  },
+  "dependencies": {
+    "yauzl": "^3.4.0",
+    "yazl": "^3.3.1"
   }
 }

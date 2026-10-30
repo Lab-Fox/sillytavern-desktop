@@ -11,6 +11,8 @@ It's a **wrapper, not a fork**: it runs your existing SillyTavern install as-is 
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Using the launcher](#using-the-launcher)
+- [Extensions, plugins & userscripts](#extensions-plugins--userscripts)
+- [Themes](#themes)
 - [Settings](#settings)
 - [Where things are stored](#where-things-are-stored)
 - [Troubleshooting](#troubleshooting)
@@ -23,62 +25,121 @@ It's a **wrapper, not a fork**: it runs your existing SillyTavern install as-is 
 
 ## Requirements
 
-| Need | Why |
-|---|---|
-| Windows 10 or 11 | Only Windows is built and tested right now |
-| A SillyTavern install made with `git clone` | The app runs it and updates it with `git pull` |
-| [Node.js](https://nodejs.org/) 20 or newer, on `PATH` | Runs the SillyTavern server (same requirement as SillyTavern itself) |
-| [git](https://git-scm.com/), on `PATH` | Only for **Update** and **Show current version** |
+Just **Windows 10 or 11**. The app sets up everything else for you:
 
-Installed SillyTavern with [SillyTavern-Launcher](https://github.com/SillyTavern/SillyTavern-Launcher)? You already have all of this.
+| SillyTavern needs | If it's missing |
+|---|---|
+| [Node.js](https://nodejs.org/) 20 or newer | The welcome screen installs the latest LTS with **Install for me** |
+| [Git](https://git-scm.com/) | Installed the same way |
+| SillyTavern itself | **Install SillyTavern** downloads it into a folder you choose |
+
+Installing uses **winget**, Windows' built-in package manager. Windows may ask for permission once. On a PC without winget, the welcome screen links to the Node.js and Git download pages instead.
 
 ## Quick start
 
-1. Download `SillyTavern-Desktop.exe` from the [latest release](../../releases/latest).
-2. Put it where the app can find SillyTavern automatically. Any of these work:
+1. Download `SillyTavern-Desktop.exe` from the [latest release](../../releases/latest) and put it anywhere: Desktop, Downloads, a USB stick.
+2. Double-click it.
+   - **Already have SillyTavern?** The app searches this PC (your user folders, every drive, SillyTavern-Launcher installs) and uses it automatically. If it finds several, it asks which one.
+   - **New to SillyTavern?** The welcome screen walks you through it: **Install for me** (Node.js and Git), then **Install SillyTavern**. That's it.
+   - **Not found?** Click **Find it myself…** and select your SillyTavern folder, or the folder that contains it.
+3. SillyTavern opens in its own window. The first start can take a minute.
 
-   ```
-   SillyTavern-Launcher\
-   ├── SillyTavern\                ← your install (must contain server.js)
-   └── ST-Desktop\
-       └── dist\
-           └── SillyTavern-Desktop.exe   ← recommended spot
-   ```
-
-   The exe looks for a `SillyTavern` folder next to itself, one level up, or two levels up.
-3. Double-click the exe. The launcher opens, the server starts in the background, and the SillyTavern window appears once the server is ready (the first start can take a minute).
-
-Exe somewhere else? Open **⚙ Settings**, paste the full path of your SillyTavern folder, and click **Save settings**. It's remembered from then on.
+The app remembers your choice. If you later move or delete SillyTavern, the welcome screen comes back and helps you find it again.
 
 ## Using the launcher
 
-| Button | What it does |
-|---|---|
-| ▶ **Open SillyTavern** | Starts the server if needed, then opens (or focuses) the SillyTavern window |
-| ⏹ **Stop server** | Stops the server and everything it started. If the server was started outside this app, the app just disconnects from it |
-| ⟳ **Update SillyTavern** | Runs `git pull` in your install. Stop the server first |
-| 💾 **Back up data** | Zips your `data/` folder into `backups/desktop/` inside your install |
-| 🗄 **Open backups folder** | Opens `backups/desktop/` in Explorer |
-| 📂 **Open data folder** | Opens `data/` — chats, characters, settings |
-| 🏷 **Show current version** | Prints the latest local SillyTavern commit to the console |
-| ⚙ **Settings** | Shows the settings panel (click again to return to the console) |
+The launcher has six pages in the sidebar. **Start / Stop** in the top-right corner works from any page.
 
-The **server console** on the right shows everything the server prints — errors in red, success messages in green.
+| Page | What you can do there |
+|---|---|
+| **Home** | Open SillyTavern, see your version and branch, and get an **Update now** button when an update is out. Quick buttons for backup, characters, chats, data, extensions and `config.yaml`. |
+| **Backups** | Back up your data, see every backup with its date and size, and **restore** or delete one. |
+| **Extensions** | Every third-party extension with its version and whether an update is waiting. **Update all** updates them in one go. |
+| **Maintenance** | **Update Node.js & Git** in one click, a **health check** (Node.js, git, npm, dependencies, changed files, disk space), one-click **repair tools**, and switching between the **release** and **staging** channels. |
+| **Console** | Everything the server prints. Show only problems, search, copy the whole log for a bug report, or open the log file. |
+| **Settings** | **Appearance** (themes), which SillyTavern install to use (**Change…**), **Move to another folder…**, the port, and behavior switches. |
+
+**Updating is safe by default.** **Update now** stops the server, backs up your data, runs `git pull` and then `npm install` (the step people most often forget), and starts the server again. If the update is blocked, the console says why and which repair tool fixes it.
+
+**Backups** go to `backups/desktop/` inside your SillyTavern folder. They skip caches SillyTavern can rebuild, and handle any filename, emoji included. Automatic backups made before updates are pruned to the number you choose in Settings; manual backups are never removed. **Restoring never deletes anything:** your current `data` folder is moved to `backups/desktop/data-before-restore-<date>` first.
+
+**Repair tools**
+
+| Tool | Use it when |
+|---|---|
+| Install missing dependencies | `Cannot find module …` errors, usually right after an update |
+| Reset package-lock.json | An update fails because `package-lock.json` changed (the most common cause) |
+| Reinstall dependencies | Errors that survive the first fix. Deletes `node_modules` and downloads everything again; your data is not touched |
 
 The SillyTavern window only ever shows your local server. Links to other sites open in your normal browser.
 
 **Closing:** closing all windows stops the server and quits. Quitting another way while the server runs asks for confirmation (can be turned off).
 
-**Already running SillyTavern elsewhere?** If something is already serving on the configured port, the app uses that server instead of starting a second one.
+**Already running SillyTavern elsewhere?** If something is already serving on the configured port, the app uses that server instead of starting a second one. Updates and repairs then ask you to stop that server yourself first.
+
+## Extensions, plugins & userscripts
+
+The app runs your normal SillyTavern, so community add-ons work as usual:
+
+| Kind | Where it goes | Notes |
+|---|---|---|
+| **UI extensions** | Install from SillyTavern's Extensions menu | Nothing special — they run in the SillyTavern window |
+| **Server plugins** | `<SillyTavern folder>\plugins\` | Needs `enableServerPlugins: true` in `config.yaml`, as usual |
+| **Userscripts** (`.user.js`) | **Extensions → Userscripts → Open folder** in the launcher | Built-in replacement for Tampermonkey/Violentmonkey |
+
+**Userscripts.** Some extensions ship a companion userscript you'd normally install in a browser add-on — for example Character Library's `cl-janitor-bridge.user.js`, which lets it reach JanitorAI/JannyAI through Cloudflare. The app's built-in browser has its own userscript manager instead:
+
+1. Go to **Extensions → Userscripts → Open folder** and drop the `.user.js` file in.
+2. Restart the app. The console lists what loaded, e.g. `Userscripts loaded: Character Library - JanitorAI Bridge 1.3.1`.
+
+Supported: `@match`, `@include`, `@exclude`, `@run-at`, `@noframes`, `@connect` (enforced), and the common `GM_*` / `GM.*` APIs — `xmlhttpRequest` (cross-site, with the window's cookies), `openInTab` (background tabs stay hidden), `getValue`/`setValue`/`deleteValue`/`listValues`, `addStyle`, `info`. Menu commands are accepted but not shown anywhere.
+
+> ⚠ **Don't put `.user.js` files in SillyTavern's `plugins/` folder.** SillyTavern tries to run them as server code and fails with errors like `location is not defined`. The app warns about this in the console when the server starts.
+
+Only install userscripts you trust — like browser userscripts, they can make requests to any site their `@connect` allows.
+
+## Themes
+
+The launcher has a retro pixel look, designed to be easy on the eyes: a readable pixel font (Pixelify Sans), a pixel console font (VT323), soft contrast, and no scanlines or glow. Pick a theme in **Settings → Appearance**:
+
+| Theme | Look |
+|---|---|
+| **SillyTavern** (default) | Charcoal with a soft crimson accent and SillyTavern's own logo (read from your install) |
+| **Fox** | Warm browns, fox orange and a pixel fox |
+
+**Make your own:** click **New theme** (or **Customize** on a built-in one). Pick seven colors, then upload a logo or reuse the ST or Fox logo. Changes preview live, and every logo is shown as pixel art. Click **Save theme** to keep it.
+
+**Share themes:** **Export** saves a theme as a `.json` file; **Import theme…** loads one. A theme file looks like this:
+
+```json
+{
+  "format": 1,
+  "name": "Midnight",
+  "author": "you",
+  "colors": {
+    "bg": "#14161f", "panel": "#1c1f2b", "border": "#30364a", "accent": "#7aa2f7",
+    "text": "#c8cde0", "title": "#eef0f8", "muted": "#8a90a8"
+  },
+  "logo": "st"
+}
+```
+
+- `colors`: these seven are required. `onAccent`, `good`, `warn` and `bad` are optional; everything else is mixed from these.
+- `logo`: `"st"`, `"fox"`, or a `data:image/png;base64,…` image (PNG, JPEG, GIF or WebP, max 512 KB).
+
+Themes are only colors and an image, never CSS or code, so an imported theme can't change anything except how the launcher looks. Custom themes are stored in `%APPDATA%\SillyTavern Desktop\themes\`.
 
 ## Settings
 
 | Setting | Default | Notes |
 |---|---|---|
-| SillyTavern folder | Auto-detected | The folder that contains `server.js` |
+| SillyTavern install | Found automatically | **Change…** picks another install on this PC or a folder; **Move to another folder…** relocates it |
 | Port | `8000` | Passed to the server with `--port`, overriding `config.yaml` |
 | Start server automatically | On | Start the server and open SillyTavern as soon as the app launches |
 | Confirm before quitting | On | Ask before quitting while the server runs |
+| Check for updates on launch | On | Shows "update available" on Home. Never updates by itself |
+| Back up before updating | On | Zip your data before every update or channel switch |
+| Automatic backups to keep | 10 | Older automatic backups are removed; manual backups never are |
 
 Path and port changes take effect the next time the server starts — stop it first if it's running.
 
@@ -89,6 +150,8 @@ Path and port changes take effect the next time the server starts — stop it fi
 | App settings | `%APPDATA%\SillyTavern Desktop\settings.json` |
 | App log (everything shown in the console) | `%APPDATA%\SillyTavern Desktop\desktop-debug.log` |
 | Window size | Saved in `settings.json` when the SillyTavern window closes |
+| Custom themes | `%APPDATA%\SillyTavern Desktop	hemes\` |
+| Userscripts | `%APPDATA%\SillyTavern Desktop\userscripts\` (saved values: `userscript-values.json` next to it) |
 | Backups | `<SillyTavern folder>\backups\desktop\st-backup-<date>.zip` |
 | Your chats, characters, etc. | Untouched, in `<SillyTavern folder>\data\` |
 
@@ -98,10 +161,13 @@ To reset the app, quit it and delete `%APPDATA%\SillyTavern Desktop\`.
 
 | Console says | Fix |
 |---|---|
-| `server.js not found at …` | Set the right folder in **Settings** — the one containing `server.js` |
-| `failed to launch node` | Install Node.js 20+ and make sure `node -v` works in a new terminal |
+| `SillyTavern not found at …` | The welcome screen opens — pick your install from the list or click **Find it myself…** |
+| `plugins/<name>.user.js is a browser userscript…` or `location is not defined` | Move that file from `plugins/` into the userscripts folder and restart |
+| An extension says its userscript/bridge isn't installed | Put the `.user.js` in the userscripts folder and restart the app |
+| `failed to launch node` | **Settings → Change…** shows what's missing; **Install for me** installs Node.js |
 | `git not found` | Install git (only needed for Update / version) |
-| `Stop the server before updating.` | Click **Stop server**, then **Update** |
+| `Update blocked by a changed package-lock.json` | **Maintenance → Reset package-lock.json**, then update again |
+| `Cannot find module …` after an update | **Maintenance → Install missing dependencies** |
 | `Timed out waiting for the server to respond.` | Read the lines above it. Often a missing `npm install` in SillyTavern after an update — run `npm install` in the SillyTavern folder |
 | The window never opens and the port is in use by another program | Change the **Port** in Settings |
 
@@ -109,7 +175,7 @@ Still stuck? Check `desktop-debug.log` and open an [issue](../../issues).
 
 ## Development
 
-Clone the repo **next to** your SillyTavern folder — in dev mode the app expects `../SillyTavern`:
+Clone the repo anywhere — like the exe, `npm start` finds your SillyTavern install on its own (or shows the welcome screen):
 
 ```bash
 cd SillyTavern-Launcher
@@ -130,7 +196,13 @@ npm install
 |---|---|
 | `main.js` | Electron main process: server start/stop/attach, git, backups, windows, IPC |
 | `preload.js` | The only bridge between the launcher UI and `main.js` (`window.desktop.*`) |
+| `setup.js` | Finding SillyTavern anywhere on the PC, installing Node.js/Git with winget, fresh SillyTavern install, moving an install |
+| `maintenance.js` | Version info, safe update, repair tools, branch switching, backups (zip/unzip in JS), extensions, health check |
+| `userscripts.js` | Built-in userscript manager: parses `.user.js` headers, URL matching, GM_* backend (requests, background tabs, values) |
+| `st-preload.js` | Runs in every frame of SillyTavern windows; injects matching userscripts with the GM_* shim |
 | `launcher.html` | Launcher UI — one self-contained file, no external dependencies |
+| `themes.js` | Built-in themes, custom theme storage, validation, import/export |
+| `fonts/` | Bundled pixel fonts (Pixelify Sans, VT323) with their OFL licenses |
 | `icon.ico` / `icon.png` | App icon (`.ico` is used by Windows and the build; `.png` is the source image) |
 | `package.json` | App metadata and electron-builder config |
 
@@ -160,6 +232,8 @@ npm install
 │  └──────────────────────────────────────────┘  │
 └────────────────────────────────────────────────┘
 ```
+
+Windows the SillyTavern page opens (e.g. Character Library's tab) get the same rules as the main window. The app reports a plain Chrome user agent so Cloudflare-protected sites used by extensions treat it like a normal browser.
 
 The server runs as a hidden child process on `127.0.0.1`. The app talks to it only over HTTP, so SillyTavern can change internally without breaking the wrapper.
 
