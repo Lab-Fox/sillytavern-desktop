@@ -94,7 +94,7 @@ export async function latest() {
 }
 
 // ---------- download + unpack ----------
-async function fetchTo(src, file, onProgress) {
+export async function fetchTo(src, file, onProgress = () => {}) {
     const res = await net.fetch(src.url);
     if (!res.ok) throw new Error(`the download answered ${res.status}`);
     const total = src.size || Number(res.headers.get('content-length')) || 0;
@@ -105,6 +105,7 @@ async function fetchTo(src, file, onProgress) {
         transform(chunk, _enc, done) {
             hash.update(chunk);
             got += chunk.length;
+            if (src.maxBytes && got > src.maxBytes) { done(new Error('the file is bigger than it should be')); return; }
             const pct = total ? Math.floor((got * 100) / total) : 0;
             if (pct !== shown) { shown = pct; onProgress(pct); }
             done(null, chunk);
@@ -114,7 +115,7 @@ async function fetchTo(src, file, onProgress) {
     if (hash.digest('hex') !== src.sha256) throw new Error('the file does not match its published SHA256');
 }
 
-async function unzip(file, dest, strip) {
+export async function unzip(file, dest, strip) {
     const zip = await yauzl.openPromise(file, { lazyEntries: true });
     try {
         for await (const entry of zip.eachEntry()) {
@@ -135,7 +136,7 @@ async function unzip(file, dest, strip) {
 
 // Old copy → .old, new copy in place, then the old one goes. A copy still in
 // use (a server running on it) can't be renamed; the caller stops servers first.
-function swapIn(tmp, dest) {
+export function swapIn(tmp, dest) {
     const old = `${dest}.old`;
     fs.rmSync(old, { recursive: true, force: true });
     if (fs.existsSync(dest)) fs.renameSync(dest, old);

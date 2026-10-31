@@ -140,6 +140,9 @@ contextBridge.exposeInMainWorld('desktop', {
     extPanel: id => invoke('ext:panel', id),
     extInvoke: (id, channel, ...args) => invoke('ext:invoke', id, channel, args),
     extAddExample: () => invoke('ext:add-example'),
+    extRemove: id => invoke('ext:remove', id),
+    addons: fresh => invoke('addons', fresh),
+    addonInstall: id => invoke('addon-install', id),
     // events
     onLog: on('server-log'),
     onStarted: on('server-started'),

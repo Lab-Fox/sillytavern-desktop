@@ -639,7 +639,17 @@
         <button data-ext-tab="desktop">Desktop app</button>
       </div>
       <div id="extDesktop" class="stack" hidden>
-        <p class="lead">Add-ons for this app itself (not for SillyTavern): they can add buttons to the top bar's menu, change how SillyTavern pages look, and show a panel here. Each one is a folder with a <span class="mono">manifest.json</span>.</p>
+        <p class="lead">Add-ons for this app itself (not for SillyTavern): they can add entries to the right-click menu and the window's menu, add features to SillyTavern pages, and show a panel here. Anyone can make one: each is a folder with a <span class="mono">manifest.json</span>.</p>
+        <div class="card">
+          <h2>Get add-ons
+            <span class="act row">
+              <button class="btn sm ghost" id="btnAddonsRefresh"><svg class="i"><use href="#i-refresh"/></svg>Refresh</button>
+            </span>
+          </h2>
+          <div class="list" id="addonList"><div class="empty">Loading the add-on list…</div></div>
+          <p class="muted small" id="addonErr" style="margin-top:8px;color:var(--warn)" hidden></p>
+          <p class="muted small" style="margin-top:10px">Add-ons from the community list (<button class="link" data-link="addonRepo">sillytavern-desktop-extensions on GitHub</button>). Each download is checked against the list's SHA256. Made one? Share it there.</p>
+        </div>
         <div class="card">
           <h2>Desktop extensions
             <span class="act row">
@@ -867,7 +877,7 @@
           <h2>SillyTavern window</h2>
           <div class="field">
             <label>Window layer</label>
-            <div class="seg" id="setLayer" style="width:max-content">
+            <div class="seg" id="setLayer" style="width:max-content;max-width:100%;flex-wrap:wrap">
               <button data-layer="normal">Normal</button>
               <button data-layer="top">On top</button>
               <button data-layer="bottom">In background</button>
@@ -875,7 +885,12 @@
           </div>
           <p class="muted small"><b style="color:var(--title)">On top</b> keeps SillyTavern above every other app. <b style="color:var(--title)">In background</b> keeps it behind other apps, even while you use it — handy for a full-screen SillyTavern under your other windows. <b style="color:var(--title)">Normal</b> is the default. All three are also in the right-click menu of the window's top bar.</p>
           <label class="switch" style="border-top:var(--px) dashed var(--border)"><input type="checkbox" id="setTabs"><div><b>Open new pages as tabs</b><span>Pages SillyTavern or an extension opens become tabs in the SillyTavern window, like a browser (Ctrl+T new tab, Ctrl+W close, Ctrl+Tab switch). Off: they open as separate windows.</span></div></label>
-          <p class="muted small"><b style="color:var(--title)">F11</b> toggles full screen. In full screen, move the mouse to the top edge to show the bar.</p>
+          <p class="muted small"><b style="color:var(--title)">F11</b> toggles full screen. In full screen, move the mouse to the top edge to show the bar. Drag tabs to reorder them, or out of the bar into a window of their own.</p>
+          <div class="field" style="padding-top:10px;border-top:var(--px) dashed var(--border)">
+            <label>Right-click → Search selected text with</label>
+            <select id="setSearch" style="max-width:220px"><option value="google">Google</option><option value="duckduckgo">DuckDuckGo</option><option value="bing">Bing</option></select>
+          </div>
+          <label class="switch" style="border:0;padding:0"><input type="checkbox" id="setInspect"><div><b>Show "Inspect element" in the right-click menu</b><span>Opens Chromium's developer tools on what you clicked. For making themes, userscripts and extensions.</span></div></label>
         </div>
         <div class="card stack">
           <h2>Console font</h2>
@@ -1571,15 +1586,56 @@
       const meta = [e.version && `v${e.version}`, e.author].filter(Boolean).map(esc).join(' · ');
       const status = e.error ? `<div class="meta" style="color:var(--bad)">${esc(e.error)}</div>` : e.description ? `<div class="meta">${esc(e.description)}</div>` : '';
       return `<div class="item"><div class="main"><div class="title">${esc(e.name)} <span class="muted small">${meta}</span></div>${status}</div>
+        <button class="btn sm ghost danger" data-dx-remove="${esc(e.id)}" title="Remove"><svg class="i"><use href="#i-trash"/></svg></button>
         <label class="switch" style="border:0;padding:0" title="${e.enabled ? 'Turn off' : 'Turn on'}"><input type="checkbox" data-dx="${esc(e.id)}"${e.enabled ? ' checked' : ''}></label></div>`;
-    }).join('') : `<div class="empty">No desktop extensions yet. <b style="color:var(--title)">Add example</b> installs one to try, or put an extension's folder in the extensions folder.</div>`;
+    }).join('') : `<div class="empty">No desktop extensions yet. Install one from <b style="color:var(--title)">Get add-ons</b>, try <b style="color:var(--title)">Add example</b>, or put an extension's folder in the extensions folder.</div>`;
     $('dxList').querySelectorAll('[data-dx]').forEach(c => c.onchange = async () => {
       c.disabled = true;
       await D.extSetEnabled(c.dataset.dx, c.checked);
       loadDesktopExtensions();
     });
+    $('dxList').querySelectorAll('[data-dx-remove]').forEach(b => b.onclick = async () => {
+      if (await D.extRemove(b.dataset.dxRemove)) loadDesktopExtensions();
+    });
     loadDesktopPanels(list);
+    loadAddons();
   }
+
+  // ----- "Get add-ons": the community catalog -----
+  let addonsUses = {};
+  const addonBusy = new Set();
+  async function loadAddons(fresh = false) {
+    const r = await D.addons(fresh);
+    addonsUses = r.uses || {};
+    $('addonErr').hidden = !r.error;
+    $('addonErr').textContent = r.error || '';
+    $('addonList').innerHTML = r.addons.length ? r.addons.map(a => {
+      const meta = [a.version && `v${a.version}`, a.author].filter(Boolean).map(esc).join(' · ');
+      const uses = a.uses.length ? `<div class="meta tagline">${a.uses.map(u => `<span class="tag">${esc(addonsUses[u] || u)}</span>`).join(' ')}</div>` : '';
+      const home = a.homepage ? ` <button class="link" data-addon-home="${esc(a.homepage)}">More</button>` : '';
+      let act;
+      if (addonBusy.has(a.id)) act = `<button class="btn sm" disabled>Installing…</button>`;
+      else if (a.tooOld) act = `<span class="muted small" title="Update this app first">Needs app ${esc(a.minAppVersion)}</span>`;
+      else if (a.update) act = `<button class="btn sm primary" data-addon="${esc(a.id)}"><svg class="i"><use href="#i-download"/></svg>Update to ${esc(a.version)}</button>`;
+      else if (a.installed) act = `<span class="tag good">Installed</span>`;
+      else act = `<button class="btn sm" data-addon="${esc(a.id)}"><svg class="i"><use href="#i-download"/></svg>Install</button>`;
+      return `<div class="item"><div class="main"><div class="title">${esc(a.name)} <span class="muted small">${meta}</span></div>
+        <div class="meta">${esc(a.description)}${home}</div>${uses}</div>${act}</div>`;
+    }).join('') : `<div class="empty">${r.error ? 'No add-ons to show right now.' : 'The add-on list is empty for now.'}</div>`;
+    $('addonList').querySelectorAll('[data-addon-home]').forEach(b => b.onclick = () => D.openUrl(b.dataset.addonHome));
+    $('addonList').querySelectorAll('[data-addon]').forEach(b => b.onclick = () => installAddon(b.dataset.addon));
+  }
+  async function installAddon(id) {
+    addonBusy.add(id);
+    loadAddons();
+    const r = await D.addonInstall(id);
+    addonBusy.delete(id);
+    if (r.error) append(r.error);
+    // New: offer to turn it on (the app asks, showing it runs code).
+    else if (!r.wasOn) await D.extSetEnabled(id, true);
+    loadDesktopExtensions();
+  }
+  $('btnAddonsRefresh').onclick = () => loadAddons(true);
   // A panel is the extension's script, run with `panel` (its card body) and
   // `ext` ({ id, invoke(channel, ...args) } to reach its main part).
   window.__dxMount = {};
@@ -1700,12 +1756,18 @@
     }
     document.querySelectorAll('#setLayer button').forEach(b => b.classList.toggle('on', b.dataset.layer === (current.windowLayer || 'normal')));
     $('setTabs').checked = current.tabs !== false;
+    $('setSearch').value = current.searchEngine || 'google';
+    $('setInspect').checked = !!current.inspectMenu;
     renderLogFontForm();
     renderUiFontForm();
     if (!unsaved.lan) fillLanForm();
   }
   document.querySelectorAll('#setLayer button').forEach(b => b.onclick = () => D.setLayer(b.dataset.layer));
   $('setTabs').onchange = () => D.setTabs($('setTabs').checked);
+  // Right-click menu options apply at once (the next menu uses them).
+  const saveNow = async s => { await D.saveSettings(s); current = { ...current, ...s }; };
+  $('setSearch').onchange = () => saveNow({ searchEngine: $('setSearch').value });
+  $('setInspect').onchange = () => saveNow({ inspectMenu: $('setInspect').checked });
 
   // ----- console font: presets first, then every installed font -----
   const LOG_FONTS = [['', 'Pixel (default)', 18], ['Departure Mono', 'Departure Mono (pixel)', 14], ['Cascadia Mono', 'Cascadia Mono', 14], ['Consolas', 'Consolas', 14], ['Courier New', 'Courier New', 14], ['Segoe UI', 'Segoe UI', 14]];

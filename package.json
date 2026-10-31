@@ -45,6 +45,8 @@
       "importer.js",
       "backupsched.js",
       "remote.js",
+      "contextmenu.js",
+      "addons.js",
       "bar-preload.js",
       "examples/**",
       "fonts/**",

@@ -12,7 +12,7 @@ import { setupUserscripts } from './userscripts.js';
 import * as mx from './maintenance.js';
 import * as setup from './setup.js';
 import * as themes from './themes.js';
-import { StWindow } from './shell.js';
+import { StWindow, windowOf } from './shell.js';
 import { MODES as LAYERS } from './winlayer.js';
 import * as instances from './instances.js';
 import * as ext from './extensions.js';
@@ -27,6 +27,8 @@ import * as rt from './runtime.js';
 import * as imp from './importer.js';
 import * as bs from './backupsched.js';
 import * as remote from './remote.js';
+import * as cm from './contextmenu.js';
+import * as addons from './addons.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -87,6 +89,8 @@ const DEFAULT_SETTINGS = {
     backupScheduleKeep: 7,      // scheduled backups kept per profile
     ownRuntime: false,          // use this app's own Node.js and Git (runtime.js) instead of the PC's
     extInstallNoticeSeen: false, // the "extensions run code" note before installing from the app
+    searchEngine: 'google',     // right-click → Search for selected text (contextmenu.js SEARCH_ENGINES)
+    inspectMenu: false,         // "Inspect element" in the right-click menu (for extension makers)
     theme: 'sillytavern',       // launcher theme id (see themes.js)
 };
 function loadSettings() {
@@ -153,11 +157,25 @@ const LOG_FLUSH_MS = 60;
 const LOG_MAX_BYTES = 2 * 1024 * 1024; // then the old log moves to desktop-debug.old.log
 let pendingLog = [];
 let logStream = null;
+let logBytes = 0; // size of the current log file, counted while writing
 
+// Checked while the app runs too: a long session used to grow the log far
+// past the limit, since the size was only looked at on launch.
 function openLog() {
-    try { if (fs.statSync(DEBUG_LOG).size > LOG_MAX_BYTES) fs.renameSync(DEBUG_LOG, DEBUG_LOG.replace(/\.log$/, '.old.log')); } catch { /* no log yet */ }
+    logBytes = 0;
+    try {
+        const size = fs.statSync(DEBUG_LOG).size;
+        if (size > LOG_MAX_BYTES) fs.renameSync(DEBUG_LOG, DEBUG_LOG.replace(/\.log$/, '.old.log'));
+        else logBytes = size;
+    } catch { /* no log yet */ }
     logStream = fs.createWriteStream(DEBUG_LOG, { flags: 'a' });
     logStream.on('error', () => { /* disk hiccup — don't die over it */ });
+}
+function rotateLog() {
+    const old = logStream;
+    logStream = null;
+    // Renamed once the old stream's last write is on disk.
+    old.end(() => { if (!logStream) openLog(); });
 }
 
 function flushLog({ sync = false } = {}) {
@@ -168,6 +186,8 @@ function flushLog({ sync = false } = {}) {
     if (sync) { try { fs.appendFileSync(DEBUG_LOG, text); } catch { /* quitting anyway */ } } else {
         if (!logStream) openLog();
         logStream.write(text);
+        logBytes += Buffer.byteLength(text);
+        if (logBytes > LOG_MAX_BYTES) rotateLog();
     }
     if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('server-log', lines);
 }
@@ -416,6 +436,7 @@ function createLauncherWindow() {
     });
     Menu.setApplicationMenu(null);
     launcherWin.loadFile('launcher.html');
+    attachLauncherMenu(launcherWin.webContents);
     fitLauncherToZoom();
     // With the tray on, closing only hides the launcher.
     launcherWin.on('close', e => {
@@ -504,17 +525,20 @@ function isLocal(url) {
     } catch { return false; }
 }
 
+// A remote SillyTavern's pages stay on its own address; local ones on this PC.
+const insideOf = instance => url => {
+    if (!instance?.origin) return isLocal(url);
+    try { return new URL(url).origin === instance.origin; } catch { return false; }
+};
+
 // --- ST-specialized browser behavior ---
 // Keeps a page on the local server; external links go to the real browser.
 // host: the StWindow the page lives in, which takes new pages as tabs.
 // instance: the SillyTavern the page belongs to; pages it opens stay in it.
 function lockToServer(wc, host, instance) {
     ext.attachPage(wc);
-    // A remote SillyTavern's pages stay on its own address; local ones on this PC.
-    const inside = url => {
-        if (!instance?.origin) return isLocal(url);
-        try { return new URL(url).origin === instance.origin; } catch { return false; }
-    };
+    attachPageMenu(wc, host, instance);
+    const inside = insideOf(instance);
     wc.on('will-navigate', (e, url) => { if (!inside(url)) { e.preventDefault(); openExternalSafe(url); } });
     wc.setWindowOpenHandler(({ url, disposition }) => {
         // about:blank is how extensions open a tab and fill it in afterwards.
@@ -524,8 +548,10 @@ function lockToServer(wc, host, instance) {
         }
         const allow = { action: 'allow', overrideBrowserWindowOptions: { icon: path.join(__dirname, 'icon.ico'), autoHideMenuBar: true, webPreferences: instance.webPreferences } };
         // Real popups (window.open with a size) stay windows, as in a browser.
-        if (settings.tabs && host && disposition !== 'new-window') {
-            allow.createWindow = options => host.adoptTab(options, { background: disposition === 'background-tab', instance });
+        // The window the tab is in now (tabs can be dragged to other windows).
+        const owner = host && (windowOf(wc) || host);
+        if (settings.tabs && owner && !owner.isDestroyed() && disposition !== 'new-window') {
+            allow.createWindow = options => owner.adoptTab(options, { background: disposition === 'background-tab', instance });
             // Electron closes opened pages with their opener; tabs shouldn't
             // vanish when the tab that opened them is closed.
             allow.outlivesOpener = true;
@@ -533,6 +559,32 @@ function lockToServer(wc, host, instance) {
         return allow;
     });
     wc.on('did-create-window', child => { child.setMenu(null); lockToServer(child.webContents, null, instance); });
+}
+
+// Right-click menu of a SillyTavern page. Links and images of the same
+// SillyTavern open as tabs of its window (a popup's: the first window).
+function attachPageMenu(wc, host, instance) {
+    cm.attach(wc, {
+        inside: insideOf(instance),
+        openTab: url => {
+            const own = windowOf(wc) || host;
+            const w = own && !own.isDestroyed() ? own : [...stWins].find(x => !x.isDestroyed());
+            if (w) { w.openUrl(url, instance); w.focus(); }
+        },
+        openExternal: openExternalSafe,
+        search: () => settings.searchEngine,
+        inspect: () => settings.inspectMenu,
+        extra: (p, page) => ext.contextItems(p, page),
+    });
+}
+
+// The launcher: only its text fields get a menu (cut, copy, paste).
+function attachLauncherMenu(wc) {
+    wc.on('context-menu', (_e, p) => {
+        if (!p.isEditable && !p.selectionText?.trim()) return;
+        const t = cm.build(wc, { ...p, linkURL: '', mediaType: 'none' }, { openExternal: openExternalSafe, inspect: () => settings.inspectMenu });
+        if (t.length) Menu.buildFromTemplate(t).popup({ window: launcherWin });
+    });
 }
 
 // ---------- SillyTavern instances ----------
@@ -710,12 +762,14 @@ function openSillyTavernWindow() {
     createStWindow(mainInstance());
 }
 
-function createStWindow(instance) {
+// extra: { tab, x, y } for a tab dragged out of another window.
+function createStWindow(instance, extra = {}) {
     const w = new StWindow({
         instance,
-        width: settings.windowWidth,
-        height: settings.windowHeight,
-        fullScreen: settings.windowFullScreen,
+        ...extra,
+        width: extra.width ?? settings.windowWidth,
+        height: extra.height ?? settings.windowHeight,
+        fullScreen: extra.tab ? false : settings.windowFullScreen,
         layer: settings.windowLayer,
         colors: themes.get(settings.theme).colors,
         font: () => themes.uiFontCss(settings.uiFont),
@@ -724,8 +778,11 @@ function createStWindow(instance) {
         tabsEnabled: () => settings.tabs,
         menu: stWindowMenu,
         newMenu: newSillyTavernMenu,
+        detach: detachTab,
         // Remember size and full screen — saved once on close, not on every resize
+        // (not from windows made for a dragged-out tab)
         onClose: ({ width, height, fullScreen }) => {
+            if (extra.tab) return;
             Object.assign(settings, { windowWidth: width, windowHeight: height, windowFullScreen: fullScreen });
             saveSettings(settings);
         },
@@ -736,6 +793,29 @@ function createStWindow(instance) {
     w.win.on('closed', () => { stWins.delete(w); pushWindowState(); });
     pushWindowState();
     return w;
+}
+
+// A tab dragged out of a window's tab strip (at = screen point, or null from
+// the tab's menu): onto another SillyTavern window's tabs, or into a new
+// window there. The page moves as it is, nothing reloads.
+function detachTab(from, tab, at) {
+    const target = at && [...stWins].find(o => o !== from && !o.isDestroyed() && o.barContains(at));
+    if (target) {
+        from.releaseTab(tab);
+        target.takeTab(tab);
+        return;
+    }
+    if (from.tabs.length < 2) return; // already alone in its window
+    const b = from.win.getNormalBounds();
+    const wa = screen.getDisplayNearestPoint(at || { x: b.x, y: b.y }).workArea;
+    // At most 80% of the screen (the source may be maximized), all of it on screen.
+    const width = Math.min(b.width, Math.round(wa.width * 0.8));
+    const height = Math.min(b.height, Math.round(wa.height * 0.8));
+    const pos = at ? { x: at.x - 120, y: at.y - 16 } : { x: b.x + 32, y: b.y + 32 };
+    pos.x = Math.max(wa.x, Math.min(pos.x, wa.x + wa.width - width));
+    pos.y = Math.max(wa.y, Math.min(pos.y, wa.y + wa.height - height));
+    from.releaseTab(tab);
+    createStWindow(tab.instance, { tab, width, height, ...pos });
 }
 
 // What the launcher's Home shows: Open, Show or Restore, and Minimize.
@@ -820,6 +900,7 @@ const LINKS = {
     // The release on offer (a preview isn't on GitHub's "latest" page), else the latest.
     desktopReleases: () => appUpdate.releasePage(),
     extensionDocs: 'https://github.com/Lab-Fox/sillytavern-desktop/blob/main/EXTENSIONS.md',
+    addonRepo: 'https://github.com/Lab-Fox/sillytavern-desktop-extensions',
 };
 
 ipcMain.handle('get-state', () => ({
@@ -1227,6 +1308,49 @@ ipcMain.handle('ext:set-enabled', async (_e, id, on) => {
     return true;
 });
 ipcMain.handle('ext:reload', () => ext.reloadAll());
+// "Get add-ons": the catalog with what's installed (addons.js).
+ipcMain.handle('addons', async (_e, fresh) => {
+    const cat = await addons.catalog({ fresh: !!fresh });
+    const installed = new Map(ext.list().map(e => [e.id, e]));
+    return {
+        error: cat.error || '', uses: addons.USES,
+        addons: cat.addons.map(a => {
+            const have = installed.get(a.id);
+            const tooOld = !!a.minAppVersion && addons.isNewer(a.minAppVersion, app.getVersion());
+            return { ...a, installed: have?.version || (have ? '?' : ''), enabled: !!have?.enabled, update: !!have && addons.isNewer(a.version, have.version), tooOld };
+        }),
+    };
+});
+const addonBusy = new Set();
+ipcMain.handle('addon-install', async (_e, id) => {
+    const entry = (await addons.catalog()).addons.find(a => a.id === id);
+    if (!entry) return { error: 'This add-on is not in the list (any more).' };
+    if (addonBusy.has(id)) return { error: 'Already installing.' };
+    addonBusy.add(id);
+    const wasOn = !!settings.desktopExtensions[id];
+    try {
+        if (wasOn) await ext.deactivate(id);
+        await addons.install(entry, app.getVersion());
+        return { id, wasOn };
+    } catch (e) {
+        logLine(`ERROR: could not install the add-on "${entry.name}": ${e.message}`);
+        return { error: `Could not install it: ${e.message}` };
+    } finally {
+        if (wasOn) await ext.activate(id);
+        addonBusy.delete(id);
+    }
+});
+ipcMain.handle('ext:remove', async (_e, id) => {
+    if (!ext.isValidId(id)) return false;
+    const e = ext.list().find(x => x.id === id);
+    if (!(await confirm(`Remove "${e.name}"?`, 'Its folder is deleted, including the settings and files it saved. You can install it again later.', 'Remove'))) return false;
+    await ext.deactivate(id);
+    delete settings.desktopExtensions[id];
+    saveSettings(settings);
+    try { addons.remove(id); } catch (err) { logLine(`ERROR: could not remove "${e.name}": ${err.message}`); return false; }
+    return true;
+});
+ipcMain.handle('ext:page-invoke', (e, id, channel, args) => ext.pageInvoke(e.sender, id, channel, Array.isArray(args) ? args : []));
 ipcMain.handle('ext:panel', (_e, id) => (ext.isValidId(id) && settings.desktopExtensions[id] ? ext.panelCode(id) : null));
 ipcMain.handle('ext:invoke', (_e, id, channel, args) => ext.invoke(id, channel, Array.isArray(args) ? args : []));
 ipcMain.handle('ext:add-example', () => ext.addExample(EXAMPLE_EXTENSION));
@@ -1750,6 +1874,7 @@ if (gotLock) {
                 openTab: p => openInstance({ ...mainInstance(), url: new URL(p.replace(/^\/*/, '/'), mainInstance().url).href }),
             },
         });
+        addons.initAddons({ logLine, userData: USER_DATA, extensionsDir: ext.extensionsDir() });
         themes.initThemes(USER_DATA);
         appUpdate.initAppUpdate({ userData: USER_DATA, logLine, preview: () => settings.appPreview, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
         bs.initBackupSchedule({

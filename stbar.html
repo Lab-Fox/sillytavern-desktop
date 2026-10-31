@@ -76,6 +76,10 @@
   button.on { color: var(--accent); border-color: var(--accent); background: var(--tint); }
   svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: square; shape-rendering: crispEdges; }
   .controls { flex-shrink: 0; }
+  /* Dragging a tab: it follows the mouse, the others slide out of its way. */
+  .tabs.sorting .tab { transition: transform .15s ease-out; }
+  .tabs.sorting .tab.dragging { transition: none; z-index: 2; background: var(--bg); border-color: var(--accent); color: var(--title); }
+  .tab.dragging.out { opacity: .55; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -116,17 +120,80 @@
     el.className = 'tab';
     el.dataset.id = id;
     el.innerHTML = '<img alt="" hidden><i hidden></i><span></span><b class="chip"></b><button title="Close tab (Ctrl+W)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>';
-    el.onmousedown = e => { if (e.button === 0 && !e.target.closest('button')) bar.action('tab-select', { id }); };
+    el.onpointerdown = e => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      bar.action('tab-select', { id });
+      startDrag(el, id, e);
+    };
     el.onauxclick = e => { if (e.button === 1) bar.action('tab-close', { id }); }; // middle click
     el.querySelector('button').onclick = () => bar.action('tab-close', { id });
     tabEls.set(id, el);
     return el;
   }
+  // ----- dragging tabs -----
+  // Along the strip: reorder. Away from the bar (down or up): the tab moves
+  // into its own window, or onto another SillyTavern window's tabs.
+  const OUT = 28; // px beyond the bar before a drop leaves the window
+  let drag = null;
+  function startDrag(el, id, e) {
+    el.setPointerCapture(e.pointerId);
+    drag = { el, id, x0: e.clientX, moved: false, out: false, index: 0 };
+    el.onpointermove = moveDrag;
+    el.onpointerup = el.onpointercancel = endDrag;
+  }
+  function moveDrag(e) {
+    const d = drag;
+    if (!d) return;
+    const dx = e.clientX - d.x0;
+    if (!d.moved) {
+      if (Math.abs(dx) < 6 && e.clientY >= -4 && e.clientY <= innerHeight + 4) return;
+      d.moved = true;
+      d.all = [...tabEls.values()].filter(t => t.isConnected).sort((a, b) => a.offsetLeft - b.offsetLeft);
+      d.from = d.all.indexOf(d.el);
+      d.rects = d.all.map(t => ({ left: t.offsetLeft, width: t.offsetWidth }));
+      d.step = d.rects[d.from].width + 2; // + the strip's gap
+      $('tabs').classList.add('sorting');
+      d.el.classList.add('dragging');
+    }
+    const r = d.rects[d.from];
+    // Stay within the strip while sorting.
+    const min = d.rects[0].left - r.left, max = d.rects.at(-1).left + d.rects.at(-1).width - (r.left + r.width);
+    const x = Math.max(min, Math.min(max, dx));
+    const mid = r.left + x + r.width / 2;
+    let index = 0;
+    d.rects.forEach((q, i) => { if (i !== d.from && q.left + q.width / 2 < mid) index++; });
+    d.index = index;
+    d.all.forEach((t, i) => {
+      if (t === d.el) return;
+      const shift = d.from < index && i > d.from && i <= index ? -d.step : d.from > index && i >= index && i < d.from ? d.step : 0;
+      t.style.transform = shift ? `translateX(${shift}px)` : '';
+    });
+    d.out = e.clientY > innerHeight + OUT || e.clientY < -OUT;
+    d.el.classList.toggle('out', d.out);
+    d.el.style.transform = `translate(${x}px, ${d.out ? Math.max(-8, Math.min(8, e.clientY - innerHeight / 2)) : 0}px)`;
+  }
+  function endDrag(e) {
+    const d = drag;
+    drag = null;
+    d.el.onpointermove = d.el.onpointerup = d.el.onpointercancel = null;
+    if (!d.moved) return;
+    $('tabs').classList.remove('sorting');
+    d.el.classList.remove('dragging', 'out');
+    d.all.forEach(t => { t.style.transform = ''; });
+    if (e.type === 'pointercancel') return;
+    if (d.out) { bar.action('tab-detach', { id: d.id, x: e.screenX, y: e.screenY }); return; }
+    if (d.index === d.from) return;
+    // Show the new order at once; the window confirms it with the next state.
+    const others = d.all.filter(t => t !== d.el);
+    $('tabs').insertBefore(d.el, others[d.index] || $('btnNewTab'));
+    bar.action('tab-move', { id: d.id, index: d.index });
+  }
+
   function renderTabs(s) {
     const box = $('tabs');
     const ids = new Set(s.tabs.map(t => t.id));
     for (const [id, el] of tabEls) if (!ids.has(id)) { el.remove(); tabEls.delete(id); }
-    for (const t of s.tabs) {
+    s.tabs.forEach((t, i) => {
       const el = tabEl(t.id);
       const img = el.querySelector('img');
       el.classList.toggle('on', t.id === s.active);
@@ -139,8 +206,10 @@
       img.hidden = t.loading || !t.favicon;
       if (t.favicon && img.getAttribute('src') !== t.favicon) img.src = t.favicon;
       el.querySelector('button').hidden = s.tabs.length < 2;
-      box.insertBefore(el, $('btnNewTab'));
-    }
+      // Only when out of place: moving a node drops a drag's pointer capture.
+      // Mid-drag the order is the user's.
+      if (!drag?.moved && box.children[i] !== el) box.insertBefore(el, box.children[i]);
+    });
     box.classList.toggle('solo', s.tabs.length < 2 && !s.tabsEnabled);
     $('btnNewTab').hidden = !s.tabsEnabled;
     // More tabs than fit: keep the active one in view.

@@ -49,7 +49,8 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 - Opens SillyTavern in its own window. The server runs hidden in the background.
 
 **A better SillyTavern window**
-- Tabs for pages that SillyTavern or its extensions open, plus full screen (**F11**), **always on top**, or **stay in background**.
+- Tabs for pages that SillyTavern or its extensions open: drag them into any order, or out into a window of their own. Plus full screen (**F11**), **always on top**, or **stay in background**.
+- A **right-click menu** like a browser's: cut, copy, paste, paste as plain text, spelling suggestions, open links and images in a new tab, save or copy images, search the web for selected text.
 - Several SillyTavern at once, including a **read-only copy** to browse chats and presets without changing anything, and other installs on your PC side by side.
 - **SillyTavern on another computer** (another PC, a home server, a VPS) as a tab, with its login saved encrypted and a warning for unencrypted addresses.
 
@@ -175,9 +176,13 @@ The history lives in `st-history.json` in the app's data folder; release notes c
 | Go full screen | **F11**. Move the mouse to the top edge to show the bar. |
 | Keep it above or behind other apps | Right-click the top bar → **Always on top** or **Stay in background** (back with **Normal window**) |
 | Open a tab | **+** or **Ctrl+T** |
-| Switch tabs | **Ctrl+Tab**, or **Ctrl+1**…**Ctrl+9** |
+| Switch tabs | **Ctrl+Tab**, **Ctrl+PgUp** / **Ctrl+PgDn**, or **Ctrl+1**…**Ctrl+9** |
+| Reorder tabs | Drag a tab along the bar, or **Ctrl+Shift+PgUp** / **Ctrl+Shift+PgDn** |
+| Give a tab its own window | Drag it down out of the bar, or right-click it → **Move to new window**. Drag it onto another SillyTavern window's tabs to move it there. The page moves as it is, nothing reloads |
 | Close a tab | **×**, middle-click, or **Ctrl+W** (never closes the last tab) |
 | Reload | **F5** or **Ctrl+R** |
+
+**Right-click** on a SillyTavern page for a menu like a browser's: on text boxes cut, copy, paste, **paste as plain text** and select all, with spelling suggestions and **Add to dictionary** on an underlined word; on selected text copy and **search the web** (Google, DuckDuckGo or Bing, in Settings); on links **open in a new tab**, open in your browser or copy; on images **open in a new tab**, **save**, **copy** the image or its address. Desktop extensions can add their own entries. (Pages that draw their own right-click menu keep it.)
 
 Links to other websites open in your normal browser. Pages that SillyTavern or an extension opens (Character Library, for example) become tabs; turn that off in Settings if you prefer separate windows.
 
@@ -209,7 +214,7 @@ Only devices on your own home network can connect. Your `config.yaml` is never c
 | **SillyTavern extensions** | **Extensions → Find extensions** in the launcher, or SillyTavern's own Extensions menu, as usual. The launcher rates, updates and undoes them (see below). |
 | **Server plugins** | SillyTavern's `plugins` folder, as usual (needs `enableServerPlugins: true` in `config.yaml`) |
 | **Userscripts** (`.user.js`) | **Extensions → Userscripts → Open folder**, then restart the app. Replaces Tampermonkey. |
-| **Desktop extensions** | Extensions for this app: menu items, page tweaks, their own settings panel. **Extensions → Desktop app**. They stay off until you turn them on. |
+| **Desktop extensions** | Extensions for this app: right-click and menu entries, features in SillyTavern pages, their own settings panel. Install them from **Extensions → Desktop app → Get add-ons** (each download is checked against its published SHA256; updates keep their settings), or add your own. They stay off until you turn them on. |
 
 Don't put `.user.js` files in SillyTavern's `plugins` folder: SillyTavern would try to run them as server code. The app warns you if it finds one.
 
@@ -278,6 +283,7 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | Port | `8000` | The port SillyTavern runs on |
 | Phone & tablet | Off | Let devices on your Wi-Fi open SillyTavern, with an optional password ([how](#on-your-phone-or-tablet)) |
 | Window layer, tabs | Normal, on | The SillyTavern window's defaults (also in its right-click menu) |
+| Right-click search, Inspect element | Google, off | Which site **Search for "…"** uses, and an **Inspect element** entry (developer tools) for making themes and extensions |
 | App font, Size | Departure Mono, 100 % | The font of the launcher and the SillyTavern window's top bar, and the launcher's size |
 | Console font | Pixel | Any font on your PC, and its size |
 
@@ -403,7 +409,9 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `instances.js` | Extra SillyTavern servers, the read-only filter, a browser session per instance |
 | `winlayer.js` | Always on top / stay in background (Windows' `SetWindowPos` through `koffi`) |
 | `userscripts.js`, `st-preload.js` | Built-in userscript manager and the `GM_*` APIs in SillyTavern pages |
-| `extensions.js` | Desktop extensions: loading, the `api` object, menu items, panels |
+| `extensions.js` | Desktop extensions: loading, the `api` object, menu and right-click entries, page calls, downloads, panels |
+| `addons.js` | "Get add-ons": the desktop extension catalog, SHA256-checked install and update, remove |
+| `contextmenu.js` | The right-click menu of SillyTavern pages and the launcher's text fields |
 | `appupdate.js` | Self-update from GitHub releases (SHA256-checked) |
 | `lan.js` | Phone access: local networks, the server's environment variables, QR codes (`qrcode-generator`) |
 | `themes.js` | Built-in and custom themes, import/export |
@@ -455,6 +463,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] What's new: release notes and changes before and after updates, history per install
 - [x] Scheduled backups, import by drag & drop / Open with, the app's own Node.js and Git
 - [x] Preview versions of the app, SillyTavern on another computer, a clearer pixel font and font/size settings
+- [x] Right-click menu, dragging tabs (also into their own window), installing desktop extensions from a list
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)
 

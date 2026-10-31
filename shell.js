@@ -13,13 +13,18 @@ const CONTROLS_W = 138; // the three native caption buttons
 const HOVER_POLL_MS = 80;
 
 const byBar = new Map(); // bar webContents id → StWindow
+const byPage = new Map(); // tab webContents id → StWindow (tabs can move between windows)
+export const windowOf = wc => byPage.get(wc.id) || null;
 
 export class StWindow {
     // opts: instance (the SillyTavern its first tab shows), width, height,
     //       fullScreen, layer, colors, icon, tabsEnabled() → bool,
     //       setupPage(webContents, stWindow, instance),
     //       menu(stWindow) → template, newMenu(stWindow) → template,
-    //       onClose({ width, height, fullScreen })
+    //       onClose({ width, height, fullScreen }),
+    //       detach(stWindow, tab, { x, y } | null): a tab dragged out of the bar,
+    //       tab: start with this tab (moved from another window) instead of a new one,
+    //       x, y: where the window goes
     //
     // An instance is one SillyTavern a tab can show: { kind, url,
     // webPreferences, chip, tip, info, readOnly, server?, onUnused? }.
@@ -38,6 +43,7 @@ export class StWindow {
 
         const win = this.win = new BaseWindow({
             width: opts.width, height: opts.height, minWidth: 640, minHeight: 420,
+            ...(opts.x != null ? { x: opts.x, y: opts.y } : {}),
             title: 'SillyTavern', icon: opts.icon, show: false,
             backgroundColor: opts.colors.bg,
             titleBarStyle: 'hidden', titleBarOverlay: overlay(opts.colors),
@@ -66,12 +72,16 @@ export class StWindow {
             this.stopHoverPoll();
             byBar.delete(this.bar.webContents.id);
             this.bar.webContents.close();
-            for (const t of this.tabs) if (!t.view.webContents.isDestroyed()) t.view.webContents.close();
+            for (const t of this.tabs) {
+                byPage.delete(t.id);
+                if (!t.view.webContents.isDestroyed()) t.view.webContents.close();
+            }
         });
 
         this.bar.webContents.loadFile(path.join(__dirname, 'stbar.html'));
         this.bar.webContents.once('did-finish-load', () => this.push());
-        this.newTab(opts.instance);
+        if (opts.tab) this.takeTab(opts.tab);
+        else this.newTab(opts.instance);
         layer.apply(win, this.layer);
         if (opts.fullScreen) win.setFullScreen(true);
         this.layout();
@@ -118,6 +128,13 @@ export class StWindow {
         });
         return tab;
     }
+    // A given page of a SillyTavern (right-click → Open link in new tab).
+    openUrl(url, instance = this.opts.instance) {
+        const view = new WebContentsView({ webPreferences: instance.webPreferences });
+        const tab = this.addTab(view, true, instance);
+        view.webContents.loadURL(url);
+        return tab;
+    }
     // A page SillyTavern or an extension opened with window.open. Taking
     // over Electron's prepared webContents keeps window.opener working, so
     // an extension can still write into the about:blank page it opened.
@@ -128,39 +145,80 @@ export class StWindow {
     }
     addTab(view, activate, instance) {
         const wc = view.webContents;
-        const tab = { view, id: wc.id, instance, title: 'Loading…', favicon: '', loading: true };
+        const tab = { view, id: wc.id, instance, title: 'Loading…', favicon: '', loading: true, lastCrash: 0 };
         instance.refs = (instance.refs || 0) + 1;
+        this.opts.setupPage(wc, this, instance);
+        this.insertTab(tab, this.active ? this.tabs.indexOf(this.active) + 1 : this.tabs.length, activate);
+        return tab;
+    }
+    // Puts a tab (new, or moved from another window) into this window.
+    insertTab(tab, index, activate = true) {
+        const { view } = tab;
         view.setBackgroundColor(this.opts.colors.bg);
         view.setVisible(false);
-        this.tabs.splice(this.active ? this.tabs.indexOf(this.active) + 1 : this.tabs.length, 0, tab);
+        this.tabs.splice(Math.max(0, Math.min(index, this.tabs.length)), 0, tab);
         this.win.contentView.addChildView(view);
         this.win.contentView.addChildView(this.bar); // keep the bar on top
-        this.opts.setupPage(wc, this, instance);
-        wc.on('page-title-updated', (_e, title) => {
+        this.bindTab(tab);
+        if (activate || !this.active) this.activate(tab);
+        this.layout();
+        this.push();
+    }
+    // This window's listeners on a tab's page; tab.unbind() removes them
+    // when the tab moves to another window.
+    bindTab(tab) {
+        const wc = tab.view.webContents;
+        byPage.set(tab.id, this);
+        const offs = [];
+        const on = (ev, fn, once) => { wc[once ? 'once' : 'on'](ev, fn); offs.push(() => wc.removeListener(ev, fn)); };
+        on('page-title-updated', (_e, title) => {
             tab.title = title;
             if (tab === this.active) this.win.setTitle(windowTitle(tab));
             this.push();
         });
-        wc.on('page-favicon-updated', (_e, icons) => { tab.favicon = icons[0] || ''; this.push(); });
-        wc.on('did-start-loading', () => { tab.loading = true; this.push(); });
-        wc.on('did-stop-loading', () => { tab.loading = false; if (!tab.title || tab.title === 'Loading…') tab.title = wc.getTitle() || wc.getURL(); this.push(); });
-        wc.on('before-input-event', (e, input) => this.onKey(e, input));
+        on('page-favicon-updated', (_e, icons) => { tab.favicon = icons[0] || ''; this.push(); });
+        on('did-start-loading', () => { tab.loading = true; this.push(); });
+        on('did-stop-loading', () => { tab.loading = false; if (!tab.title || tab.title === 'Loading…') tab.title = wc.getTitle() || wc.getURL(); this.push(); });
+        on('before-input-event', (e, input) => this.onKey(e, input));
         // A crashed page (e.g. out of memory on a huge chat) would stay blank:
         // reload it once, and only show a message if it crashes again soon.
-        let lastCrash = 0;
-        wc.on('render-process-gone', (_e, d) => {
+        on('render-process-gone', (_e, d) => {
             if (d.reason === 'clean-exit' || wc.isDestroyed()) return;
-            const again = Date.now() - lastCrash < 30000;
-            lastCrash = Date.now();
+            const again = Date.now() - tab.lastCrash < 30000;
+            tab.lastCrash = Date.now();
             if (again) wc.loadURL(statusPage(this.opts.colors, `This page crashed twice (${d.reason}). Press F5 to try again.`));
             else wc.reload();
         });
         // Closed by us, by the page (window.close()) or by its opener.
-        wc.once('destroyed', () => this.removeTab(tab));
-        if (activate || !this.active) this.activate(tab);
-        this.layout();
+        on('destroyed', () => this.removeTab(tab), true);
+        tab.unbind = () => { offs.forEach(f => f()); if (byPage.get(tab.id) === this) byPage.delete(tab.id); };
+    }
+    // Takes a tab out of this window without closing its page (it moves to
+    // another window). The window closes when it was the last one.
+    releaseTab(tab) {
+        const i = this.tabs.indexOf(tab);
+        if (i < 0) return null;
+        this.tabs.splice(i, 1);
+        tab.unbind();
+        this.win.contentView.removeChildView(tab.view);
+        if (!this.tabs.length) { this.win.close(); return tab; }
+        if (tab === this.active) { this.active = null; this.activate(this.tabs[Math.min(i, this.tabs.length - 1)]); }
         this.push();
         return tab;
+    }
+    takeTab(tab, index = this.tabs.length) { this.insertTab(tab, index, true); this.focus(); }
+    moveTab(tab, index) {
+        const i = this.tabs.indexOf(tab);
+        if (i < 0) return;
+        this.tabs.splice(i, 1);
+        this.tabs.splice(Math.max(0, Math.min(index, this.tabs.length)), 0, tab);
+        this.push();
+    }
+    // Screen point on this window's tab strip? (a tab dropped from another window)
+    barContains({ x, y }) {
+        if (this.win.isDestroyed() || this.win.isMinimized() || !this.win.isVisible()) return false;
+        const b = this.win.getContentBounds();
+        return x >= b.x && x < b.x + b.width - CONTROLS_W && y >= b.y - 8 && y < b.y + BAR_H + 12;
     }
     activate(tab) {
         if (!tab) return;
@@ -179,6 +237,7 @@ export class StWindow {
         const i = this.tabs.indexOf(tab);
         if (i < 0) return;
         this.tabs.splice(i, 1);
+        byPage.delete(tab.id);
         if (--tab.instance.refs === 0) tab.instance.onUnused?.();
         if (this.closing) return;
         this.win.contentView.removeChildView(tab.view);
@@ -265,6 +324,7 @@ export class StWindow {
             { label: 'Reload tab', click: () => reloadTab(tab) },
             { label: 'Close tab', accelerator: 'Ctrl+W', registerAccelerator: false, enabled: this.tabs.length > 1, click: () => this.closeTab(tab) },
             { label: 'Close other tabs', enabled: others.length > 0, click: () => others.forEach(t => this.closeTab(t)) },
+            { label: 'Move to new window', enabled: others.length > 0, click: () => this.opts.detach?.(this, tab, null) },
             { type: 'separator' },
             ...this.opts.menu(this),
         ], at);
@@ -277,6 +337,12 @@ export class StWindow {
         if (input.key === 'F5' || (input.control && key === 'r' && !input.alt)) return handled() && this.reload();
         if (!input.control || input.alt) return;
         if (input.key === 'Tab' && this.tabs.length > 1) return handled() && this.cycleTabs(input.shift ? -1 : 1);
+        // Ctrl+PgUp/PgDn: previous/next tab; with Shift: move the tab left/right.
+        if ((input.key === 'PageUp' || input.key === 'PageDown') && this.tabs.length > 1) {
+            const step = input.key === 'PageUp' ? -1 : 1;
+            if (!input.shift) return handled() && this.cycleTabs(step);
+            return handled() && this.moveTab(this.active, this.tabs.indexOf(this.active) + step);
+        }
         if (!this.opts.tabsEnabled()) return;
         if (key === 't' && !input.shift) return handled() && this.newTab();
         // Ctrl+W never closes the last tab: that would close SillyTavern by accident.
@@ -320,4 +386,7 @@ ipcMain.on('bar:action', (e, action, data = {}) => {
     else if (action === 'tab-select') w.activate(tab);
     else if (action === 'tab-close') w.closeTab(tab);
     else if (action === 'tab-menu' && tab) w.tabMenu(tab, data.at);
+    else if (action === 'tab-move' && tab) w.moveTab(tab, Number(data.index) || 0);
+    // Dropped outside the tab strip: onto another window's tabs, or a new window.
+    else if (action === 'tab-detach' && tab) w.opts.detach?.(w, tab, { x: Math.round(Number(data.x) || 0), y: Math.round(Number(data.y) || 0) });
 });

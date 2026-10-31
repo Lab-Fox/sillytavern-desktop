@@ -10,6 +10,9 @@ import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { createRequire } from 'module';
+import crypto from 'crypto';
+import { net, session } from 'electron';
+import { contextsOf } from './contextmenu.js';
 
 const require = createRequire(import.meta.url);
 
@@ -47,15 +50,17 @@ function readManifest(id) {
 
 export function list() {
     let ids = [];
-    try { ids = fs.readdirSync(dir, { withFileTypes: true }).filter(d => d.isDirectory() && ID.test(d.name)).map(d => d.name); } catch { /* no folder yet */ }
+    // (.old: left over from an update that was interrupted)
+    try { ids = fs.readdirSync(dir, { withFileTypes: true }).filter(d => d.isDirectory() && ID.test(d.name) && !d.name.endsWith('.old')).map(d => d.name); } catch { /* no folder yet */ }
     return ids.map(id => {
-        const e = { id, name: id, version: '', author: '', description: '', enabled: host.isEnabled(id), active: loaded.has(id) && !loaded.get(id).error, hasPanel: false, error: loaded.get(id)?.error || '' };
+        const e = { id, name: id, version: '', author: '', description: '', uses: [], enabled: host.isEnabled(id), active: loaded.has(id) && !loaded.get(id).error, hasPanel: false, fromCatalog: fs.existsSync(path.join(dir, id, '.desktop-addon.json')), error: loaded.get(id)?.error || '' };
         try {
             const m = readManifest(id);
             Object.assign(e, {
                 name: String(m.name || id).slice(0, 60), version: String(m.version || '').slice(0, 20),
                 author: String(m.author || '').slice(0, 60), description: String(m.description || '').slice(0, 300),
                 hasPanel: !!m.panel,
+                uses: (Array.isArray(m.uses) ? m.uses : []).map(String).slice(0, 12),
             });
             if (m.minAppVersion && newer(m.minAppVersion, host.appVersion)) e.error = `Needs SillyTavern Desktop ${m.minAppVersion} or newer.`;
         } catch (err) { e.error = `Broken manifest.json: ${err.message}`; }
@@ -76,7 +81,7 @@ export async function activateEnabled() {
 
 export async function activate(id) {
     if (loaded.has(id)) await deactivate(id);
-    const reg = { menu: [], styles: [], scripts: [], handlers: new Map(), events: [] };
+    const reg = { menu: [], context: [], styles: [], scripts: [], handlers: new Map(), pageHandlers: new Map(), events: [] };
     const entry = { manifest: null, module: null, reg, error: '' };
     loaded.set(id, entry);
     try {
@@ -117,6 +122,8 @@ export async function reloadAll() {
 function undo(entry) {
     const { reg } = entry;
     reg.menu.length = 0;
+    reg.context.length = 0;
+    reg.pageHandlers.clear();
     for (const s of reg.styles) removeStyle(s);
     reg.styles.length = 0;
     reg.scripts.length = 0;
@@ -173,6 +180,32 @@ function makeApi(id, entry) {
             },
             run: code => Promise.all([...pages].map(wc => runIn(wc, String(code), id))),
             count: () => pages.size,
+            // Page code calls it with SillyTavernDesktop.invoke(<id>, channel, ...args).
+            // fn(page, ...args): page = { url, run(code), insertText(text) }.
+            handle(channel, fn) { reg.pageHandlers.set(String(channel), fn); },
+        }),
+        // Entries in the right-click menu of SillyTavern pages.
+        contextMenu: Object.freeze({
+            add(item) {
+                const it = {
+                    label: String(item.label || '').slice(0, 80),
+                    contexts: (Array.isArray(item.contexts) && item.contexts.length ? item.contexts : ['all']).map(String),
+                    when: typeof item.when === 'function' ? item.when : null,
+                    click: item.click,
+                };
+                reg.context.push(it);
+                return { remove: () => { const i = reg.context.indexOf(it); if (i >= 0) reg.context.splice(i, 1); } };
+            },
+        }),
+        // A file from the web into <extension>/downloads/ (kept on updates).
+        download: (url, o = {}) => downloadFor(id, url, o),
+        // Words SillyTavern's red underline accepts (Chromium's own dictionary,
+        // in every session SillyTavern pages use). Words stay after the
+        // extension turns off; remove them yourself if you need to.
+        spellcheck: Object.freeze({
+            add: words => forSessions(s => words.forEach(w => s.addWordToSpellCheckerDictionary(String(w)))),
+            remove: words => forSessions(s => words.forEach(w => s.removeWordFromSpellCheckerDictionary(String(w)))),
+            list: () => session.defaultSession.listWordsInSpellCheckerDictionary(),
         }),
         // Items under "Extensions" in the SillyTavern window's menu.
         menu: Object.freeze({
@@ -227,6 +260,99 @@ export function menuItems() {
         items.push({ label: it.label, click: () => { try { it.click?.(); } catch (err) { host.logLine(`ERROR in extension menu item: ${err.message}`); } } });
     }
     return items;
+}
+
+// Right-click entries for what was clicked (p: Electron's context-menu params).
+// An extension with more than two matching entries gets a submenu.
+export function contextItems(p, wc) {
+    const ctx = contextsOf(p);
+    const info = Object.freeze({
+        contexts: [...ctx],
+        selectionText: p.selectionText || '',
+        linkURL: p.linkURL || '',
+        srcURL: p.srcURL || '',
+        pageURL: p.pageURL || '',
+        frameURL: p.frameURL || '',
+        isEditable: !!p.isEditable,
+        misspelledWord: p.misspelledWord || '',
+        suggestions: [...(p.dictionarySuggestions || [])],
+        page: pageHandle(wc),
+    });
+    const sel = info.selectionText.replace(/\s+/g, ' ').trim();
+    const shown = sel.length > 24 ? `${sel.slice(0, 23)}…` : sel;
+    const items = [];
+    for (const [id, entry] of loaded) {
+        const mine = [];
+        for (const it of entry.reg.context) {
+            if (!it.contexts.some(c => ctx.has(c))) continue;
+            try { if (it.when && !it.when(info)) continue; } catch (err) { say(id, `ERROR in a menu entry's "when": ${err.message}`); continue; }
+            mine.push({
+                label: it.label.replace(/%s/g, shown),
+                click: () => { Promise.resolve().then(() => it.click?.(info)).catch(err => say(id, `ERROR in a right-click entry: ${err.message}`)); },
+            });
+        }
+        if (mine.length > 2) items.push({ label: entry.manifest?.name || id, submenu: mine });
+        else items.push(...mine);
+    }
+    return items;
+}
+
+const pageHandle = wc => Object.freeze({
+    url: wc.getURL(),
+    run: code => runIn(wc, String(code), 'page'),
+    insertText: text => { if (!wc.isDestroyed()) wc.insertText(String(text)); },
+});
+
+// From page code: SillyTavernDesktop.invoke(id, channel, ...args) (st-preload.js).
+export async function pageInvoke(wc, id, channel, args) {
+    if (!pages.has(wc)) throw new Error('only SillyTavern pages can call desktop extensions');
+    const fn = loaded.get(String(id))?.reg.pageHandlers.get(String(channel));
+    if (!fn) throw new Error(`Desktop extension "${id}" has no page handler "${channel}" (is it turned on?).`);
+    return fn(pageHandle(wc), ...args);
+}
+
+// Every session a SillyTavern page uses (main, read-only, other installs, remotes).
+function forSessions(fn) {
+    const all = new Set([session.defaultSession]);
+    for (const wc of pages) if (!wc.isDestroyed()) all.add(wc.session);
+    for (const s of all) fn(s);
+}
+
+const MAX_DOWNLOAD = 200 * 1024 * 1024; // 200 MiB
+// https only; the name stays inside downloads/; optional SHA256 check.
+// Written to a .partial file first, so a broken download never replaces a good file.
+async function downloadFor(id, url, { file, sha256, maxBytes = MAX_DOWNLOAD } = {}) {
+    const u = new URL(String(url));
+    if (u.protocol !== 'https:') throw new Error('downloads must use https');
+    const base = path.join(dir, id, 'downloads');
+    const name = String(file || path.basename(u.pathname) || 'download').replace(/\\/g, '/');
+    const out = path.resolve(base, name);
+    if (!out.startsWith(path.resolve(base) + path.sep)) throw new Error('the file name must stay inside downloads/');
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    const res = await net.fetch(u.href, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`the download answered ${res.status}`);
+    const hash = crypto.createHash('sha256');
+    const tmp = `${out}.partial`;
+    const fd = fs.openSync(tmp, 'w');
+    let bytes = 0;
+    try {
+        for await (const chunk of res.body) {
+            bytes += chunk.length;
+            if (bytes > maxBytes) throw new Error(`the file is bigger than ${Math.round(maxBytes / 1048576)} MiB`);
+            hash.update(chunk);
+            fs.writeSync(fd, chunk);
+        }
+    } catch (e) {
+        fs.closeSync(fd);
+        fs.rmSync(tmp, { force: true });
+        throw e;
+    }
+    fs.closeSync(fd);
+    const digest = hash.digest('hex');
+    if (sha256 && digest !== String(sha256).toLowerCase()) { fs.rmSync(tmp, { force: true }); throw new Error('the file does not match its SHA256'); }
+    fs.renameSync(tmp, out);
+    say(id, `downloaded ${name} (${bytes} bytes).`);
+    return { path: out, bytes, sha256: digest };
 }
 
 export async function invoke(id, channel, args) {

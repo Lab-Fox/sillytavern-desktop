@@ -7,6 +7,14 @@ const { contextBridge, ipcRenderer, webFrame } = require('electron');
 const readOnlyShim = ipcRenderer.sendSync('st:read-only');
 if (readOnlyShim) webFrame.executeJavaScript(readOnlyShim);
 
+// Page code of desktop extensions reaches their main part through this
+// (only handlers an extension registered with api.pages.handle answer).
+if (process.isMainFrame) {
+    contextBridge.exposeInMainWorld('SillyTavernDesktop', {
+        invoke: (id, channel, ...args) => ipcRenderer.invoke('ext:page-invoke', String(id), String(channel), args),
+    });
+}
+
 const scripts = ipcRenderer.sendSync('us:for-url', location.href, process.isMainFrame);
 
 if (scripts.length) {
