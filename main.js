@@ -18,6 +18,10 @@ import * as instances from './instances.js';
 import * as ext from './extensions.js';
 import * as appUpdate from './appupdate.js';
 import * as lan from './lan.js';
+import * as prof from './profiles.js';
+import * as dl from './downloader.js';
+import * as hist from './history.js';
+import * as mig from './migrate.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -45,6 +49,7 @@ function exeBases() {
 // install (see ensureInstall) or asks the user, so the exe can live anywhere.
 const DEFAULT_SETTINGS = {
     sillytavernPath: '',
+    profiles: [],               // [{ id, name, path }] — SillyTavern folders to switch between (profiles.js)
     port: 8000,
     host: '127.0.0.1',
     windowWidth: 1280,
@@ -82,6 +87,8 @@ function saveSettings(s) {
     fs.renameSync(`${SETTINGS_FILE}.tmp`, SETTINGS_FILE);
 }
 let settings = loadSettings();
+// Settings from before profiles: the folder in use becomes the first profile.
+if (prof.normalize(settings)) saveSettings(settings);
 // What the launcher gets: everything but the phone-access password.
 const publicSettings = () => ({ ...settings, lanPassword: settings.lanPassword ? '********' : '' });
 let userscriptsDir = path.join(USER_DATA, 'userscripts');
@@ -187,6 +194,8 @@ async function startServer() {
     if (settings.lanAccess) {
         const where = lan.phoneAddresses(settings.port).map(a => a.url).join(' or ');
         logLine(where ? `Phone access is on: open ${where} on a device on the same network.` : 'Phone access is on, but this PC is not on a home network right now.');
+        const older = dl.olderStatus(instances.describe(stRoot).version);
+        if (older) logLine(`WARNING: phone access is on with SillyTavern ${instances.describe(stRoot).version}, which is ${older.newer} release${older.newer === 1 ? '' : 's'} behind ${older.latest}${older.fixes.length ? ', and newer releases fixed security problems' : ''}. Other devices on your network can reach it; update it or turn phone access off.`);
         if (lan.hasWhitelistTxt(stRoot)) logLine('WARNING: SillyTavern\'s whitelist.txt decides who may connect, not this app. Add your network there, or remove the file.');
     }
     // Pass the port explicitly so the Settings value is what the server binds to.
@@ -333,7 +342,9 @@ async function runTask(label, fn, { needsStopped = true } = {}) {
 }
 
 async function confirm(message, detail, okLabel) {
-    const { response } = await dialog.showMessageBox(launcherWin, {
+    // From the tray or the SillyTavern window the launcher may be hidden: no owner then.
+    const owner = launcherWin && !launcherWin.isDestroyed() && launcherWin.isVisible() ? [launcherWin] : [];
+    const { response } = await dialog.showMessageBox(...owner, {
         type: 'question', buttons: [okLabel, 'Cancel'], defaultId: 0, cancelId: 1, message, detail,
     });
     return response === 0;
@@ -392,6 +403,7 @@ function trayMenu() {
         { label: !w.open ? 'Open SillyTavern' : w.minimized ? 'Restore SillyTavern' : 'Show SillyTavern', click: () => (serverState.running ? openSillyTavernWindow() : startAndOpen()) },
         ...(w.open && !w.minimized ? [{ label: 'Minimize SillyTavern', click: minimizeStWindows }] : []),
         { label: 'Show launcher', click: showLauncher },
+        ...(settings.profiles.length > 1 ? [{ label: 'Profile', submenu: profileMenu() }] : []),
         { type: 'separator' },
         serverState.running
             ? { label: 'Stop server', enabled: !busyTask, click: stopServer }
@@ -489,10 +501,11 @@ function mainInstance() {
     const url = `http://${settings.host}:${settings.port}/`;
     if (!mainInst || mainInst.url !== url) mainInst = { kind: 'main', url, webPreferences: stWebPreferences() };
     const d = instances.describe(stRoot());
+    const name = prof.active(settings)?.name;
     return Object.assign(mainInst, {
         chip: `:${settings.port}`,
-        tip: `SillyTavern ${versionText(d)} on port ${settings.port}`,
-        info: `${versionText(d)} · :${settings.port}`,
+        tip: `${name ? `${name}: ` : ''}SillyTavern ${versionText(d)} on port ${settings.port}`,
+        info: `${name ? `${name} · ` : ''}${versionText(d)} · :${settings.port}`,
     });
 }
 
@@ -514,14 +527,16 @@ async function extraInstance(dir, kind) {
     const port = await instances.freePort(settings.port + 1, [settings.port]);
     const d = instances.describe(dir);
     const second = kind === 'port';
-    const srv = instances.startServer(dir, port, second ? 'second server' : `SillyTavern ${d.version}`);
+    // Another install is named by its profile (if it has one) in the tip and the bar.
+    const name = second ? '' : settings.profiles.find(p => prof.sameDir(p.path, dir))?.name || '';
+    const srv = instances.startServer(dir, port, second ? 'second server' : name || `SillyTavern ${d.version}`);
     const inst = {
         kind, server: srv,
         url: `http://${settings.host}:${port}/`,
         webPreferences: { ...stWebPreferences(), partition: instances.partitionFor(dir) },
         chip: second ? `:${port} · 2nd` : `${d.version} :${port}`,
-        tip: second ? `SillyTavern ${versionText(d)} on port ${port} (second server, same folder)` : `SillyTavern ${versionText(d)} on port ${port} (${dir})`,
-        info: second ? `${versionText(d)} · :${port} · 2nd server` : `${versionText(d)} · :${port} · ${dir}`,
+        tip: second ? `SillyTavern ${versionText(d)} on port ${port} (second server, same folder)` : `${name ? `${name}: ` : ''}SillyTavern ${versionText(d)} on port ${port} (${dir})`,
+        info: second ? `${versionText(d)} · :${port} · 2nd server` : `${name ? `${name} · ` : ''}${versionText(d)} · :${port} · ${dir}`,
         onUnused: () => instances.stopServer(srv),
     };
     // Tabs of a server that stopped (or crashed) would only show an error.
@@ -564,16 +579,39 @@ function refreshInstalls() {
 function newSillyTavernMenu(w) {
     const where = settings.tabs ? 'tab' : 'window';
     refreshInstalls();
+    const others = otherFolders();
     return [
         { label: `Another ${where} of this SillyTavern`, accelerator: settings.tabs ? 'Ctrl+T' : undefined, registerAccelerator: false, click: () => openInstance(mainInstance(), w) },
         { label: 'Read-only copy (browse without saving or sending)', click: () => openInstance(readOnlyInstance(), w) },
         { label: 'This SillyTavern on another port', click: () => openSecondServer(w) },
         { type: 'separator' },
-        ...(otherInstalls.length
-            // "&" marks a keyboard shortcut in Windows menus; "&&" shows one.
-            ? otherInstalls.map(i => ({ label: `SillyTavern ${i.version} — ${i.path}`.replace(/&/g, '&&'), click: () => openExtra(i.path, 'other', w) }))
+        ...(others.length
+            ? others.map(o => ({ label: menuText(o.label), click: () => openExtra(o.path, 'other', w) }))
             : [{ label: 'No other SillyTavern installs found', enabled: false }]),
     ];
+}
+
+// "&" marks a keyboard shortcut in Windows menus; "&&" shows one.
+const menuText = s => s.replace(/&/g, '&&');
+
+// Other SillyTavern folders to open next to this one: profiles first (by
+// name), then installs found on this PC that have no profile.
+function otherFolders() {
+    const named = settings.profiles
+        .filter(p => !prof.sameDir(p.path, stRoot()) && setup.isStRoot(p.path))
+        .map(p => ({ path: p.path, label: `${p.name} — SillyTavern ${instances.describe(p.path).version}` }));
+    const unnamed = otherInstalls
+        .filter(i => !settings.profiles.some(p => prof.sameDir(p.path, i.path)))
+        .map(i => ({ path: i.path, label: `SillyTavern ${i.version} — ${i.path}` }));
+    return [...named, ...unnamed];
+}
+
+// Pick the SillyTavern the app runs: tray menu and the window's menu.
+function profileMenu() {
+    return settings.profiles.map(p => ({
+        label: menuText(p.name), type: 'radio', checked: prof.sameDir(p.path, stRoot()),
+        enabled: !busyTask && setup.isStRoot(p.path), click: () => useProfile(p.id),
+    }));
 }
 
 function openSillyTavernWindow() {
@@ -641,6 +679,7 @@ function stWindowMenu(w) {
         { label: 'Reload', accelerator: 'F5', registerAccelerator: false, click: () => w.reload() },
         { type: 'separator' },
         { label: 'New SillyTavern', submenu: newSillyTavernMenu(w) },
+        ...(settings.profiles.length > 1 ? [{ label: 'Switch profile', submenu: profileMenu() }] : []),
         ...(ext.menuItems().length ? [{ label: 'Extensions', submenu: ext.menuItems() }] : []),
         { label: 'Open new pages as tabs', type: 'checkbox', checked: settings.tabs, click: () => setTabs(!settings.tabs) },
         { type: 'separator' },
@@ -755,7 +794,51 @@ ipcMain.handle('start-classic', async () => {
 });
 ipcMain.handle('st-info', () => mx.getInfo(stRoot()));
 ipcMain.handle('check-updates', () => mx.checkForUpdates(stRoot()));
-ipcMain.handle('update', () => runTask('Updating SillyTavern', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
+
+// ---------- change history ("What's new") ----------
+// Runs a task that changes SillyTavern's files and records what came in.
+async function tracked(kind, fn) {
+    const dir = stRoot();
+    const before = await mx.getInfo(dir);
+    const ok = await fn();
+    const after = await mx.getInfo(dir);
+    if (after.commit && after.commit !== before.commit) {
+        const e = await hist.record(kind, dir, before, after);
+        if (e) logLine(`What's new: ${describeChange(e)}. Home shows the details.`);
+        broadcast('history');
+    }
+    return ok;
+}
+function describeChange(e) {
+    const v = x => x.version + (x.branch ? ` (${x.branch})` : '');
+    const n = e.commitCount ? `${e.commitCount} change${e.commitCount === 1 ? '' : 's'}` : '';
+    if (e.kind === 'download') return `downloaded SillyTavern ${v(e.to)}`;
+    if (v(e.from) !== v(e.to)) return `SillyTavern ${v(e.from)} → ${v(e.to)}${n ? `, ${n}` : ''}`;
+    return `SillyTavern ${v(e.to)}: ${n || 'changed'}`;
+}
+// Updated outside the app (git pull by hand, SillyTavern's own updater)?
+async function checkOutsideChanges(dir = stRoot()) {
+    if (!setup.isStRoot(dir)) return;
+    const e = await hist.checkOutside(dir, await mx.getInfo(dir));
+    if (e) { logLine(`SillyTavern changed since this app last saw it: ${describeChange(e)}.`); broadcast('history'); }
+}
+ipcMain.handle('history', (_e, id) => {
+    const p = id ? settings.profiles.find(x => x.id === id) : prof.active(settings);
+    return p ? { profile: { id: p.id, name: p.name, path: p.path }, entries: hist.forPath(p.path) } : { entries: [] };
+});
+ipcMain.handle('history-unseen', () => (setup.isStRoot(stRoot()) ? hist.unseen(stRoot()) : null));
+ipcMain.handle('history-seen', (_e, id) => { hist.markSeen(String(id)); });
+// Before updating: what an update would bring (after Check for updates).
+ipcMain.handle('st-incoming', async () => {
+    const dir = stRoot();
+    const log = await mx.git(dir, ['log', '--no-merges', '--max-count=300', '--format=%h%x09%cs%x09%s', 'HEAD..@{u}'], { quiet: true });
+    const commits = log.code !== 0 ? [] : hist.parseLog(log.out);
+    let version = '';
+    const pkg = await mx.git(dir, ['show', '@{u}:package.json'], { quiet: true });
+    try { version = JSON.parse(pkg.out).version || ''; } catch { /* no upstream */ }
+    return { from: instances.describe(dir).version, to: version, commits };
+});
+ipcMain.handle('update', () => runTask('Updating SillyTavern', () => tracked('update', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() }))));
 ipcMain.handle('repair', async (_e, kind) => {
     const labels = { deps: 'Installing dependencies', 'clean-deps': 'Reinstalling dependencies', 'reset-lock': 'Resetting package-lock.json' };
     if (!labels[kind]) return false;
@@ -770,7 +853,7 @@ ipcMain.handle('switch-branch', async (_e, branch) => {
         ? 'Your data is backed up before switching.'
         : 'No backup is made first ("Back up before updating" is off in Settings).';
     if (!(await confirm(`Switch SillyTavern to ${branch}?`, `${about} ${backup}`, 'Switch'))) return false;
-    return runTask(`Switching to ${branch}`, () => mx.switchBranch(stRoot(), branch, { backupFirst: settings.backupBeforeUpdate, keep: keep() }));
+    return runTask(`Switching to ${branch}`, () => tracked('branch', () => mx.switchBranch(stRoot(), branch, { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
 });
 ipcMain.handle('backup', () => runTask('Backing up', async () => !!(await mx.createBackup(stRoot(), 'manual', keep())), { needsStopped: false }));
 ipcMain.handle('list-backups', () => mx.listBackups(stRoot()));
@@ -809,6 +892,7 @@ function lanInfo() {
         // Started with different phone settings than the current ones.
         needsRestart: ours && serverState.lanEnv !== JSON.stringify(lan.serverEnv(settings)),
         whitelistTxt: lan.hasWhitelistTxt(stRoot()),
+        older: dl.olderStatus(instances.describe(stRoot()).version),
         addresses: lan.phoneAddresses(settings.port).map(a => ({ ...a, qr: lan.qrSvg(a.url) })),
     };
 }
@@ -879,11 +963,38 @@ ipcMain.handle('save-settings', (_e, s) => {
 });
 
 // ---------- setup, requirements, install location ----------
+// Every folder the app runs gets a profile, so the list stays complete.
 function useInstall(dir) {
     settings.sillytavernPath = dir;
+    const p = prof.ensureFor(settings, dir);
     saveSettings(settings);
-    logLine(`Using SillyTavern at ${dir}.`);
+    logLine(`Using profile "${p.name}": SillyTavern ${instances.describe(dir).version} at ${dir}.`);
+    mainInstance(); // tab tips and the bar's info name the new profile
+    stWins.forEach(w => w.push());
+    refreshInstalls();
     broadcast('refresh');
+}
+
+// The task body of every switch. A server already running from the new
+// folder ("Open next to it") stops: the main server takes over that folder.
+async function switchTo(dir) {
+    await instances.stopAll(dir);
+    useInstall(dir);
+    await checkOutsideChanges(dir);
+    return true;
+}
+
+// Switch to a profile. A running server stops and starts again on the new
+// folder, and open SillyTavern tabs reload.
+async function useProfile(id, { ask = true } = {}) {
+    const p = settings.profiles.find(x => x.id === id);
+    if (!p) return false;
+    if (prof.sameDir(p.path, stRoot())) return true;
+    if (!setup.isStRoot(p.path)) { logLine(`ERROR: the profile "${p.name}" points to ${p.path}, where there is no SillyTavern anymore. Edit the profile.`); return false; }
+    if (busyTask) { logLine(`Busy with "${busyTask}" — switch profiles when it has finished.`); return false; }
+    if (ask && serverState.running && !serverState.attached && stWindowState().open
+        && !(await confirm(`Switch to "${p.name}"?`, `The server restarts with the SillyTavern in ${p.path}, and open SillyTavern tabs reload. Text you haven't sent yet is lost.`, 'Switch'))) return false;
+    return runTask(`Switching to profile "${p.name}"`, () => switchTo(p.path));
 }
 
 async function pickFolder(title, defaultPath) {
@@ -895,12 +1006,13 @@ ipcMain.handle('setup-state', async () => ({
     ready: setup.isStRoot(stRoot()),
     current: stRoot(),
     installs: setup.detectInstalls(exeBases()),
+    profiles: prof.list(settings),
     requirements: await setup.checkRequirements(),
 }));
 // Switching installs restarts the server (if running) on the new one.
 ipcMain.handle('use-install', (_e, dir) => {
     if (!setup.isStRoot(dir)) return false;
-    return runTask('Switching SillyTavern install', async () => { useInstall(dir); return true; });
+    return runTask('Switching SillyTavern install', () => switchTo(dir));
 });
 // Accept the SillyTavern folder itself or a folder that contains it.
 ipcMain.handle('browse-install', async () => {
@@ -908,21 +1020,165 @@ ipcMain.handle('browse-install', async () => {
     if (!dir) return { canceled: true };
     for (const cand of [dir, path.join(dir, 'SillyTavern')]) {
         if (setup.isStRoot(cand)) {
-            await runTask('Switching SillyTavern install', async () => { useInstall(cand); return true; });
+            await runTask('Switching SillyTavern install', () => switchTo(cand));
             return { ok: true, path: cand };
         }
     }
     return { error: `No SillyTavern found in ${dir}. Pick the folder that contains server.js.` };
 });
 ipcMain.handle('install-requirements', () => runTask('Installing Node.js and Git', () => setup.installRequirements(), { needsStopped: false }));
-ipcMain.handle('install-st', async () => {
-    const parent = await pickFolder('Where should SillyTavern be installed? (a "SillyTavern" folder is created inside)', os.homedir());
-    if (!parent) return false;
-    return runTask('Installing SillyTavern', async () => {
-        const dir = await setup.installSillyTavern(parent);
-        if (dir) useInstall(dir);
-        return !!dir;
+// ---------- profiles ----------
+const profilesChanged = () => { saveSettings(settings); broadcast('profiles'); };
+// "older": how far behind the newest release a profile's version is (from the remembered version list).
+ipcMain.handle('profiles', () => prof.list(settings).map(p => ({ ...p, older: p.ok ? dl.olderStatus(p.version) : null })));
+ipcMain.handle('profile-use', (_e, id) => useProfile(id));
+// Add (no id) or edit. Changing the folder of the profile in use switches to it.
+ipcMain.handle('profile-save', async (_e, data) => {
+    const before = settings.profiles.find(p => p.id === data?.id);
+    const oldPath = before?.path;
+    const wasActive = !!before && prof.sameDir(oldPath, stRoot());
+    if (wasActive && busyTask && !prof.sameDir(oldPath, data?.path)) return { error: `Busy with "${busyTask}" — try again when it has finished.` };
+    const r = prof.save(settings, { id: data?.id, name: data?.name, path: String(data?.path || '') });
+    if (r.error) return r;
+    if (wasActive && !prof.sameDir(oldPath, r.profile.path)) {
+        const ok = await runTask(`Switching to profile "${r.profile.name}"`, () => switchTo(r.profile.path));
+        if (!ok) { r.profile.path = oldPath; profilesChanged(); return { error: 'The folder could not be changed now (see the Console).' }; }
+    }
+    profilesChanged();
+    mainInstance();
+    stWins.forEach(w => w.push());
+    logLine(before ? `Saved profile "${r.profile.name}".` : `Added profile "${r.profile.name}" (${r.profile.path}).`);
+    return { ok: true, profile: r.profile };
+});
+ipcMain.handle('profile-delete', async (_e, id) => {
+    const p = settings.profiles.find(x => x.id === id);
+    if (!p) return false;
+    if (prof.sameDir(p.path, stRoot())) return { error: 'This profile is in use. Switch to another profile first.' };
+    if (!(await confirm(`Remove the profile "${p.name}"?`, `Only the profile is removed. The SillyTavern folder stays where it is:\n${p.path}`, 'Remove'))) return false;
+    prof.remove(settings, id);
+    profilesChanged();
+    logLine(`Removed profile "${p.name}" (the folder ${p.path} was not touched).`);
+    return true;
+});
+// A folder for a profile: the SillyTavern folder itself or one that contains it.
+ipcMain.handle('profile-browse', async (_e, from) => {
+    const dir = await pickFolder('Select a SillyTavern folder', from && fs.existsSync(from) ? from : os.homedir());
+    if (!dir) return { canceled: true };
+    const found = [dir, path.join(dir, 'SillyTavern')].find(setup.isStRoot);
+    if (!found) return { error: `No SillyTavern found in ${dir}. Pick the folder that contains server.js.` };
+    return { path: found, name: prof.suggestName(settings, found), version: instances.describe(found).version };
+});
+ipcMain.handle('profiles-add-found', () => {
+    const before = settings.profiles.length;
+    for (const i of setup.detectInstalls(exeBases())) prof.ensureFor(settings, i.path);
+    const added = settings.profiles.length - before;
+    if (added) profilesChanged();
+    logLine(added ? `Added ${added} profile${added === 1 ? '' : 's'} for SillyTavern installs found on this PC.` : 'Every SillyTavern found on this PC already has a profile.');
+    return added;
+});
+ipcMain.handle('profile-open-folder', (_e, id) => {
+    const p = settings.profiles.find(x => x.id === id);
+    if (p && fs.existsSync(p.path)) shell.openPath(p.path);
+});
+// Run another profile next to the one in use, on its own port, as a tab.
+ipcMain.handle('profile-open-alongside', (_e, id) => {
+    const p = settings.profiles.find(x => x.id === id);
+    if (!p || prof.sameDir(p.path, stRoot()) || !setup.isStRoot(p.path)) return false;
+    openExtra(p.path, 'other', null);
+    return true;
+});
+
+// ---------- downloading SillyTavern ----------
+ipcMain.handle('st-versions', (_e, fresh) => dl.listVersions({ fresh: !!fresh }).catch(e => ({ error: e.message })));
+ipcMain.handle('download-target', (_e, parent, folder) => dl.targetInfo(String(parent || ''), String(folder || '')));
+// Where new installs go by default: next to the one in use.
+ipcMain.handle('download-defaults', () => ({ parent: setup.isStRoot(stRoot()) ? path.dirname(stRoot()) : os.homedir() }));
+ipcMain.handle('pick-parent', (_e, from) => pickFolder('Where should the new SillyTavern go? (its folder is created inside)', from && fs.existsSync(from) ? from : os.homedir()));
+ipcMain.handle('st-download', async (_e, o = {}) => {
+    if (busyTask) return { error: `Busy with "${busyTask}" — wait for it to finish.` };
+    const req = await setup.checkRequirements();
+    if (!req.node.ok || !req.git.ok) return { error: 'Node.js and Git are needed first (Maintenance → Back end, or the welcome screen installs them).' };
+    const name = String(o.name || '').trim();
+    if (name && settings.profiles.some(p => p.name.toLowerCase() === name.toLowerCase())) return { error: `There is already a profile called "${name}".` };
+    const target = dl.targetInfo(String(o.parent || ''), String(o.folder || ''));
+    if (!target.ok) return { error: target.problem };
+    const ref = String(o.ref || '');
+    let res = null;
+    const progress = p => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('st-download', p); };
+    await runTask(`Downloading SillyTavern ${ref}`, async () => {
+        res = await dl.download({ ref, parent: o.parent, folder: o.folder }, progress);
+        return !!res.path;
     }, { needsStopped: false });
+    if (!res) return { error: 'The download could not start (see the Console).' };
+    if (!res.path) return res;
+    const dir = res.path;
+    const r = prof.save(settings, { name: name || prof.suggestName(settings, dir), path: dir });
+    const profile = r.profile || prof.ensureFor(settings, dir);
+    profilesChanged();
+    logLine(`Added profile "${profile.name}" for ${dir}.`);
+    await hist.record('download', dir, null, await mx.getInfo(dir));
+    broadcast('history');
+    const used = o.useNow ? !!(await useProfile(profile.id, { ask: false })) : false;
+    return { ok: true, path: dir, profile, used, depsFailed: !!res.depsFailed };
+});
+ipcMain.handle('st-download-cancel', () => dl.cancel());
+// ---------- migrating data between SillyTavern folders ----------
+// Folders the launcher may name: a profile's folder or one picked in a dialog.
+const migFolders = new Set();
+const migOk = dir => typeof dir === 'string' && setup.isStRoot(dir) && (settings.profiles.some(p => prof.sameDir(p.path, dir)) || [...migFolders].some(f => prof.sameDir(f, dir)));
+const migUser = u => (/^[\w.-]{1,64}$/.test(String(u || '')) ? String(u) : 'default-user');
+ipcMain.handle('mig-folders', () => prof.list(settings).filter(p => p.ok).map(p => ({ id: p.id, name: p.name, path: p.path, version: p.version, active: p.active, users: mig.users(p.path) })));
+ipcMain.handle('mig-browse', async () => {
+    const dir = await pickFolder('Select a SillyTavern folder to copy data from', os.homedir());
+    if (!dir) return { canceled: true };
+    const found = [dir, path.join(dir, 'SillyTavern')].find(setup.isStRoot);
+    if (!found) return { error: `No SillyTavern found in ${dir}. Pick the folder that contains server.js.` };
+    migFolders.add(found);
+    return { path: found, name: found, version: instances.describe(found).version, users: mig.users(found) };
+});
+ipcMain.handle('mig-scan', async (_e, o = {}) => {
+    if (!migOk(o.src) || !migOk(o.dst)) return { error: 'Pick two SillyTavern folders.' };
+    const srcUser = migUser(o.srcUser), dstUser = migUser(o.dstUser);
+    if (prof.sameDir(o.src, o.dst) && srcUser === dstUser) return { error: 'The source and the target are the same. Pick another folder or another user.' };
+    if (!fs.existsSync(path.join(o.src, 'data', srcUser))) return { error: `There is no data for the user "${srcUser}" in ${o.src} (it may never have been started).` };
+    try {
+        const r = await mig.scan({ src: o.src, srcUser, dst: o.dst, dstUser });
+        return { ...r, srcVersion: instances.describe(o.src).version, dstVersion: instances.describe(o.dst).version };
+    } catch (e) { return { error: `Could not read the folders: ${e.message}` }; }
+});
+ipcMain.handle('mig-preview', (_e, id, keys, policy) => mig.preview(String(id), Array.isArray(keys) ? keys.map(String) : [], String(policy)));
+ipcMain.handle('mig-run', async (_e, o = {}) => {
+    if (busyTask) return { error: `Busy with "${busyTask}" — wait for it to finish.` };
+    if (!migOk(o.dst)) return { error: 'Pick the target folder again.' };
+    const keys = Array.isArray(o.keys) ? o.keys.map(String) : [];
+    const policy = ['skip', 'newer', 'replace'].includes(o.policy) ? o.policy : 'skip';
+    const toActive = prof.sameDir(o.dst, stRoot());
+    let res = null;
+    const progress = p => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('mig-progress', p); };
+    // The target must not be running: its server would overwrite what's copied.
+    await runTask('Migrating data', async () => {
+        await instances.stopAll(o.dst);
+        if (o.backupFirst) {
+            const b = await mx.createBackup(o.dst, 'auto-before-migration', keep());
+            if (!b) { res = { error: 'The backup failed, so nothing was copied (see the Console).' }; return false; }
+        }
+        res = await mig.run(String(o.id), keys, policy, progress);
+        return !res.error;
+    }, { needsStopped: toActive });
+    return res || { error: 'The migration could not start (see the Console).' };
+});
+ipcMain.handle('mig-cancel', () => mig.cancel());
+ipcMain.handle('mig-journals', (_e, dir) => (migOk(dir) ? mig.journals(dir) : []));
+ipcMain.handle('mig-undo', async (_e, dir, id) => {
+    if (!migOk(dir)) return false;
+    const j = mig.journals(dir).find(x => x.id === id);
+    if (!j) return false;
+    if (!(await confirm('Undo this migration?', `From ${j.from}, ${new Date(j.at).toLocaleString()}.\n\nRemoves the ${j.added} files it added and puts back the ${j.replaced} files it replaced. Changes you made to those files since then are lost.`, 'Undo'))) return false;
+    return runTask('Undoing a migration', async () => { await instances.stopAll(dir); return mig.undo(dir, String(id)); }, { needsStopped: prof.sameDir(dir, stRoot()) });
+});
+
+ipcMain.handle('open-st-release', (_e, v) => {
+    if (/^\d+\.\d+\.\d+$/.test(String(v))) shell.openExternal(`https://github.com/SillyTavern/SillyTavern/releases/tag/${v}`);
 });
 ipcMain.handle('update-backend', async () => {
     if (!(await confirm('Update Node.js and Git?', 'Installs the latest Node.js (LTS) and Git with winget, then reinstalls SillyTavern\'s dependencies to match. Windows may ask for permission. The server restarts afterwards.', 'Update'))) return false;
@@ -936,6 +1192,8 @@ ipcMain.handle('move-st', async () => {
     return runTask('Moving SillyTavern', async () => {
         const r = await setup.moveInstall(from, parent);
         if (!r) return false;
+        prof.moved(settings, from, r.to);
+        hist.moved(from, r.to);
         useInstall(r.to);
         if (r.copied && await confirm('Delete the old copy?', `SillyTavern now runs from:\n${r.to}\n\nThe old copy is still at:\n${from}`, 'Delete old copy')) {
             setup.removeOldInstall(from);
@@ -1027,6 +1285,9 @@ if (gotLock) {
         userscriptsDir = setupUserscripts({ userData: USER_DATA, logLine }).scriptsDir;
         mx.initMaintenance({ logLine });
         setup.initSetup({ logLine });
+        dl.initDownloader({ logLine, userData: USER_DATA });
+        hist.initHistory(USER_DATA);
+        mig.initMigrate({ logLine });
         instances.initInstances({ logLine, host: settings.host });
         ext.initExtensions({
             userData: USER_DATA,
@@ -1048,8 +1309,12 @@ if (gotLock) {
         ext.activateEnabled();
         // A few seconds in, so it doesn't compete with startup.
         if (settings.checkAppUpdates) setTimeout(() => appUpdate.startChecking(), 4000);
+        // SillyTavern's release list (kept an hour): marks profiles that are behind
+        // or miss security fixes, and gives "What's new" its release notes.
+        if (settings.checkUpdatesOnLaunch) setTimeout(() => dl.listVersions().then(() => broadcast('profiles'), () => { /* offline */ }), 6000);
         if (!ensureInstall()) return; // the welcome screen takes it from here
         refreshInstalls();
+        checkOutsideChanges();
         if (settings.updateOnLaunch) {
             // Update first, then start: never under a running server.
             launchUpdate().then(() => { if (settings.autoStart) startAndOpen(); });
@@ -1074,7 +1339,7 @@ if (gotLock) {
             return;
         }
         logLine(`Updating SillyTavern before starting (${info.behind} new commit${info.behind === 1 ? '' : 's'} on ${info.branch}) ...`);
-        await runTask('Updating SillyTavern', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() }));
+        await runTask('Updating SillyTavern', () => tracked('update', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
     }
 
     app.on('window-all-closed', () => {

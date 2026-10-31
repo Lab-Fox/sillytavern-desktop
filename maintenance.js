@@ -41,7 +41,8 @@ export function onLines(stream, fn) {
 }
 
 // Run a command, streaming output to the console unless quiet.
-export function run(cmd, args, cwd, { quiet = false, shell = false } = {}) {
+// onChild gets the process (to stop it), onRaw every chunk of output as it arrives.
+export function run(cmd, args, cwd, { quiet = false, shell = false, onChild, onRaw } = {}) {
     return new Promise(resolve => {
         let out = '';
         let done = false;
@@ -53,12 +54,14 @@ export function run(cmd, args, cwd, { quiet = false, shell = false } = {}) {
             finish({ code: -1, out: e.message });
             return;
         }
+        onChild?.(child);
         const onLine = l => {
             out += `${l}\n`;
             if (!quiet && l.trim()) log(l.trim());
         };
         onLines(child.stdout, onLine);
         onLines(child.stderr, onLine);
+        if (onRaw) { child.stdout.on('data', onRaw); child.stderr.on('data', onRaw); }
         child.on('error', e => finish({ code: -1, out: e.message }));
         child.on('close', code => finish({ code, out }));
     });
@@ -72,18 +75,25 @@ export const npm = (cwd, args, opts) => (IS_WIN
 
 // ---------- version info ----------
 export async function getInfo(stRoot) {
-    const info = { version: '', branch: '', commit: '', commitDate: '', behind: null, dirty: [], isGit: false };
+    const info = { version: '', branch: '', pinned: '', commit: '', commitDate: '', behind: null, dirty: [], isGit: false };
     try { info.version = JSON.parse(fs.readFileSync(path.join(stRoot, 'package.json'), 'utf8')).version; } catch { /* not installed */ }
     const head = await git(stRoot, ['log', '-1', '--format=%h|%cs'], { quiet: true });
     if (head.code !== 0) return info;
     info.isGit = true;
     [info.commit, info.commitDate] = head.out.trim().split('|');
     info.branch = (await git(stRoot, ['branch', '--show-current'], { quiet: true })).out.trim();
+    // A specific version (downloaded or checked out by tag) is on no branch, so there is nothing to pull.
+    if (!info.branch) info.pinned = (await pinnedVersion(stRoot)) || info.version || 'a fixed version';
     const behind = await git(stRoot, ['rev-list', '--count', 'HEAD..@{u}'], { quiet: true });
     if (behind.code === 0) info.behind = parseInt(behind.out.trim(), 10);
     const status = await git(stRoot, ['status', '--porcelain', '--untracked-files=no'], { quiet: true });
     info.dirty = status.out.split(/\r?\n/).filter(Boolean).map(l => l.slice(3));
     return info;
+}
+
+async function pinnedVersion(stRoot) {
+    const r = await git(stRoot, ['describe', '--tags', '--exact-match'], { quiet: true });
+    return r.code === 0 ? r.out.trim() : '';
 }
 
 // `git fetch` so `behind` reflects upstream. Quiet: runs on every launch.
@@ -95,6 +105,11 @@ export async function checkForUpdates(stRoot) {
 
 // ---------- update / repair ----------
 export async function update(stRoot, { backupFirst, keep }) {
+    if (!(await git(stRoot, ['branch', '--show-current'], { quiet: true })).out.trim()) {
+        const v = await pinnedVersion(stRoot);
+        log(`This SillyTavern is kept at ${v ? `version ${v}` : 'a fixed version'}, so there is nothing to update. To get updates, choose release or staging under Maintenance → Release channel.`);
+        return false;
+    }
     // No data folder (never started): nothing to back up, nothing to lose.
     if (backupFirst && fs.existsSync(path.join(stRoot, 'data'))) {
         const b = await createBackup(stRoot, 'auto-before-update', keep);

@@ -1,13 +1,12 @@
 // First-run setup and install management: find SillyTavern wherever it
 // lives, install or update its requirements (Node.js, Git) with winget,
-// clone a fresh SillyTavern, and move an install to another folder.
+// and move an install to another folder. (Downloading one: downloader.js.)
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { run, git, npm, NPM_INSTALL } from './maintenance.js';
+import { run, npm, NPM_INSTALL } from './maintenance.js';
 
 const IS_WIN = process.platform === 'win32';
-const ST_REPO = 'https://github.com/SillyTavern/SillyTavern.git';
 const MIN_NODE = 20;
 
 let log = () => {};
@@ -166,27 +165,6 @@ export async function updateBackend(stRoot) {
     }
     if (ok) log('Back end is up to date.');
     return ok;
-}
-
-// ---------- fresh install ----------
-export async function installSillyTavern(parentDir, branch = 'release') {
-    const target = path.join(parentDir, 'SillyTavern');
-    if (fs.existsSync(target) && fs.readdirSync(target).length) {
-        if (isStRoot(target)) { log(`SillyTavern is already installed at ${target} — using it.`); return target; }
-        log(`ERROR: ${target} already exists and isn't empty. Pick another location.`);
-        return null;
-    }
-    const req = await checkRequirements();
-    if (!req.git.ok || !req.node.ok) { log('ERROR: Node.js and Git are needed first — install them above.'); return null; }
-    fs.mkdirSync(parentDir, { recursive: true });
-    log(`Downloading SillyTavern (${branch}) into ${target} ...`);
-    const clone = await git(parentDir, ['clone', '--branch', branch, ST_REPO, 'SillyTavern'], { quiet: true });
-    if (clone.code !== 0) { log(`ERROR: download failed: ${clone.out.trim().split('\n').pop()}`); return null; }
-    log('Download complete. Installing dependencies (npm install) — this takes a minute or two ...');
-    const inst = await npm(target, NPM_INSTALL);
-    if (inst.code !== 0) { log('ERROR: npm install failed. You can retry from Maintenance → "Install missing dependencies".'); return target; }
-    log(`SillyTavern installed at ${target}.`);
-    return target;
 }
 
 // ---------- moving an install ----------

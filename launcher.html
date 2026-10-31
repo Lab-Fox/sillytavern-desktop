@@ -256,6 +256,68 @@
   .setup .mini-log { max-height: 150px; }
   .path { font-family: var(--mono); font-size: 18px; color: var(--title); background: var(--well); padding: 4px 10px; word-break: break-all; user-select: text; letter-spacing: 0; }
 
+  /* ---------- profiles ---------- */
+  .hdr-profile { display: flex; align-items: center; gap: 6px; margin-left: auto; min-width: 70px; flex: 0 1 220px; }
+  .hdr-profile svg.i { color: var(--muted); width: 16px; height: 16px; }
+  .hdr-profile select { min-width: 0; padding: 3px 8px; font-size: 14px; text-overflow: ellipsis; }
+  header .pill, header .btn { flex-shrink: 0; white-space: nowrap; }
+  .hdr-profile + .pill { margin-left: 0; }
+  .item.current { background: var(--tint); }
+  .item .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+  #profList .item { flex-wrap: wrap; }
+  #profList .item .main { min-width: 300px; }
+  .item .meta.mono { font-size: 16px; word-break: break-all; }
+  .form { margin-top: 14px; padding-top: 14px; border-top: var(--px) dashed var(--border); }
+  .err { color: var(--bad); font-size: 13.5px; }
+
+  /* ---------- download dialog ---------- */
+  .modal { position: fixed; inset: 0; z-index: 60; background: color-mix(in srgb, var(--bg) 70%, transparent); display: none; overflow-y: auto; padding: 30px 20px; }
+  .modal.show { display: block; }
+  .modal .card { max-width: 720px; margin: 0 auto; }
+  .modal .card > h2 { font-size: 15px; color: var(--title); }
+  .progress.wait i { width: 30%; animation: wait 1.4s steps(14) infinite; }
+  @keyframes wait { from { transform: translateX(-100%); } to { transform: translateX(333%); } }
+  .progress { overflow: hidden; }
+  .steps { display: flex; gap: 14px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+  .steps .on { color: var(--accent2); }
+  .steps .done { color: var(--good); }
+  .warnbox { border: var(--px) solid var(--warn); background: color-mix(in srgb, var(--warn) 9%, transparent); padding: 10px 12px; font-size: 14px; }
+  .warnbox b { color: var(--warn); }
+  .warnbox ul { margin: 6px 0 6px 18px; color: var(--text); }
+  .warnbox li { margin: 2px 0; }
+  .warnbox .switch { border: 0; padding: 6px 0 0; }
+  .commits { max-height: 280px; overflow: auto; margin-top: 8px; font-size: 14px; user-select: text; }
+  .commits div { display: flex; gap: 10px; padding: 2px 0; border-top: 1px dashed var(--border); }
+  .commits div:first-child { border-top: 0; }
+  .commits .mono { color: var(--muted); font-size: 15px; flex-shrink: 0; }
+  .notes .tag { margin-left: 6px; }
+  .news { border-color: var(--accent); }
+
+  /* ---------- migrate ---------- */
+  .mig-ends { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: start; }
+  #btnMigSwap { margin-top: 27px; }
+  .mig-ends .field select { margin-bottom: 6px; }
+  .mig-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+  .mig-cat { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: var(--px) solid var(--border); background: var(--panel2); cursor: pointer; }
+  .mig-cat.on { border-color: var(--accent); background: var(--tint); }
+  .mig-cat input, .mig-item input, .mig-group > summary input { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; margin-top: 3px; cursor: pointer; }
+  .mig-cat b { color: var(--title); font-weight: 600; }
+  .mig-cat .meta { font-size: 13px; color: var(--muted); }
+  .mig-cat .warn { font-size: 13px; color: var(--warn); }
+  .mig-group { border-top: var(--px) dashed var(--border); }
+  .mig-group > summary { display: flex; gap: 10px; align-items: center; padding: 8px 2px; cursor: pointer; list-style: none; }
+  .mig-group > summary::before { content: "▸"; color: var(--muted); }
+  .mig-group[open] > summary::before { content: "▾"; }
+  .mig-group > summary b { color: var(--title); font-weight: 600; }
+  .mig-group > summary .muted { font-size: 13.5px; margin-left: auto; text-align: right; }
+  .mig-items { max-height: 340px; overflow: auto; margin: 0 0 10px 26px; }
+  .mig-item { display: flex; gap: 10px; align-items: center; padding: 3px 4px; font-size: 14px; cursor: pointer; }
+  .mig-item:hover { background: var(--panel2); }
+  .mig-item .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .mig-item .lbl i { font-style: normal; color: var(--muted); }
+  .mig-item .sz { color: var(--muted); font-size: 13px; width: 70px; text-align: right; flex-shrink: 0; }
+  .mig-foot { position: sticky; bottom: -30px; z-index: 2; padding: 12px 18px; box-shadow: 0 -6px 14px var(--shadow); border-color: var(--accent); }
+
   ::-webkit-scrollbar { width: 12px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border: 3px solid var(--bg); }
@@ -273,6 +335,8 @@
     </div>
     <nav id="nav">
       <button data-page="home" class="active"><svg class="i"><use href="#i-home"/></svg>Home<span class="badge" id="navUpdate" hidden>1</span></button>
+      <button data-page="profiles"><svg class="i"><use href="#i-layers"/></svg>Profiles</button>
+      <button data-page="migrate"><svg class="i"><use href="#i-swap"/></svg>Migrate data</button>
       <button data-page="backups"><svg class="i"><use href="#i-archive"/></svg>Backups</button>
       <button data-page="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions<span class="badge" id="navExt" hidden></span></button>
       <button data-page="maintenance"><svg class="i"><use href="#i-pulse"/></svg>Maintenance</button>
@@ -291,6 +355,7 @@
   <main>
     <header>
       <h1 id="pageTitle">Home</h1>
+      <label class="hdr-profile" title="Profile: which SillyTavern folder the app runs"><svg class="i"><use href="#i-layers"/></svg><select id="hdrProfile" data-task></select></label>
       <div class="pill"><span class="dot" id="dot"></span><span id="statusText">Server stopped</span></div>
       <button class="btn sm" id="btnPower"><svg class="i"><use href="#i-play"/></svg><span>Start</span></button>
     </header>
@@ -306,6 +371,15 @@
             <div class="progress" id="appUpdBar" hidden><i></i></div>
             <span class="muted small" id="appUpdHint"></span>
             <button class="btn sm primary" id="btnAppUpd" style="margin-left:auto"></button>
+          </div>
+        </div>
+
+        <div class="card news" id="newsCard" hidden>
+          <h2>What's new<button class="link act" id="btnNewsHistory">History</button></h2>
+          <div class="row">
+            <div style="flex:1;min-width:220px"><div style="color:var(--title);font-size:17px" id="newsTitle"></div><div class="muted small" id="newsSub"></div></div>
+            <button class="btn sm primary" id="btnNewsShow"><svg class="i"><use href="#i-book"/></svg>See what changed</button>
+            <button class="btn sm ghost" id="btnNewsHide">Dismiss</button>
           </div>
         </div>
 
@@ -337,7 +411,7 @@
 
         <div class="grid g2">
           <div class="card">
-            <h2>Your SillyTavern<button class="link act" id="btnCheck">Check for updates</button></h2>
+            <h2>Your SillyTavern<span class="act row" style="gap:14px"><button class="link" id="btnHistory">History</button><button class="link" id="btnCheck">Check for updates</button></span></h2>
             <dl class="kv">
               <dt>Version</dt><dd id="infoVersion">—</dd>
               <dt>Branch</dt><dd id="infoBranch">—</dd>
@@ -346,6 +420,7 @@
             <div class="update-box">
               <span id="updateTag" class="tag">Checking…</span>
               <span class="muted small" id="updateHint"></span>
+              <button class="link" id="btnIncoming" hidden>What's in it?</button>
               <button class="btn sm primary" id="btnUpdate" data-task style="margin-left:auto" hidden><svg class="i"><use href="#i-download"/></svg>Update now</button>
             </div>
           </div>
@@ -365,6 +440,105 @@
         <div class="card">
           <h2>Recent activity<button class="link act" data-goto="console">Open console</button></h2>
           <div class="mini-log" id="miniLog"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Profiles ===== -->
+    <section class="page" id="page-profiles">
+      <p class="lead">A profile is a name for a SillyTavern folder. Switch profiles to run another SillyTavern — another version, a test copy, or one with other characters. Each folder keeps its own chats, characters and settings.</p>
+      <div class="stack">
+        <div class="card">
+          <h2>Profiles
+            <span class="act row">
+              <button class="btn sm ghost" id="btnProfFound" title="Add a profile for every SillyTavern found on this PC"><svg class="i"><use href="#i-refresh"/></svg>Find on this PC</button>
+              <button class="btn sm" id="btnProfAdd"><svg class="i"><use href="#i-plus"/></svg>Add profile</button>
+              <button class="btn sm primary" id="btnProfDownload"><svg class="i"><use href="#i-download"/></svg>Download SillyTavern</button>
+            </span>
+          </h2>
+          <div class="list" id="profList"></div>
+          <div class="form" id="profForm" hidden>
+            <div class="row" style="align-items:flex-end">
+              <div class="field" style="flex:1;min-width:200px;max-width:320px"><label>Profile name</label><input type="text" id="profName" maxlength="40" placeholder="My SillyTavern"></div>
+              <button class="btn sm" id="btnProfBrowse"><svg class="i"><use href="#i-folder"/></svg>Choose folder…</button>
+            </div>
+            <div class="field" style="margin-top:10px"><label>SillyTavern folder</label><div class="path" id="profPath">—</div></div>
+            <div class="row" style="margin-top:12px">
+              <button class="btn primary" id="btnProfSave"><svg class="i"><use href="#i-check"/></svg>Save profile</button>
+              <button class="btn ghost" id="btnProfCancel">Cancel</button>
+              <span class="err" id="profError"></span>
+            </div>
+          </div>
+        </div>
+        <p class="muted small">Switching restarts the server on the new folder and reloads open SillyTavern tabs. <b style="color:var(--title)">Open next to it</b> runs another profile at the same time, on its own port, in a new tab. Removing a profile never deletes its folder. You can also switch from the top bar here, the tray icon, or the SillyTavern window's menu.</p>
+      </div>
+    </section>
+
+    <!-- ===== Migrate ===== -->
+    <section class="page" id="page-migrate">
+      <p class="lead">Copy characters, chats, presets, extensions and more from one SillyTavern to another, or between users. The source is never changed, and every migration can be undone.</p>
+      <div class="stack">
+        <div class="card stack">
+          <h2>From and to</h2>
+          <div class="mig-ends">
+            <div class="field"><label>Copy from</label><select id="migSrc"></select><select id="migSrcUser" title="SillyTavern user"></select></div>
+            <button class="btn sm ghost" id="btnMigSwap" title="Swap source and target">⇄</button>
+            <div class="field"><label>Into</label><select id="migDst"></select><select id="migDstUser" title="SillyTavern user"></select></div>
+          </div>
+          <div class="warnbox" id="migVerWarn" hidden></div>
+          <div class="row">
+            <button class="btn primary" id="btnMigScan"><svg class="i"><use href="#i-refresh"/></svg>Look at what's there</button>
+            <span class="muted small" id="migScanInfo"></span>
+          </div>
+        </div>
+
+        <div class="card stack" id="migPick" hidden>
+          <h2>What to copy
+            <span class="act row">
+              <div class="seg" id="migMode"><button data-mode="simple" class="on">Simple</button><button data-mode="advanced">Advanced</button></div>
+            </span>
+          </h2>
+          <div class="row small">
+            <span class="muted">Select:</span>
+            <button class="link" data-migsel="recommended">Recommended</button>
+            <button class="link" data-migsel="all">Everything</button>
+            <button class="link" data-migsel="new">Only what's new</button>
+            <button class="link" data-migsel="none">Nothing</button>
+          </div>
+          <div class="mig-cats" id="migCats"></div>
+          <div id="migAdv" class="stack" hidden style="gap:8px">
+            <div class="row">
+              <input type="search" id="migSearch" placeholder="Find a character, preset, extension…" style="flex:1;min-width:200px">
+              <div class="seg" id="migFilter"><button data-f="all" class="on">All</button><button data-f="new">New</button><button data-f="different">Different</button><button data-f="same">Already there</button></div>
+            </div>
+            <label class="switch" style="border:0;padding:0"><input type="checkbox" id="migLinkChats" checked><div><b>Bring chats along with characters</b><span>Picking a character also picks its chats.</span></div></label>
+            <div id="migGroups"></div>
+          </div>
+          <div class="stack" style="gap:12px;padding-top:12px;border-top:var(--px) dashed var(--border)">
+          <div class="field" id="migPolicyBox">
+            <label>When a file is in both places but different</label>
+            <div class="seg" id="migPolicy" style="width:max-content;max-width:100%;flex-wrap:wrap">
+              <button data-p="newer" class="on">Keep the newer one</button><button data-p="skip">Keep the target's</button><button data-p="replace">Always take the source's</button>
+            </div>
+          </div>
+          <label class="switch" style="border:0;padding:0"><input type="checkbox" id="migBackup"><div><b>Also make a backup zip of the target first</b><span>Slower with a big data folder. Undo works without it: every replaced file is kept.</span></div></label>
+          </div>
+        </div>
+
+        <div class="card stack mig-foot" id="migGo" hidden style="gap:10px">
+          <div id="migSummary" style="color:var(--title)"></div>
+          <div class="row" id="migProgBox" hidden><div class="progress" id="migBar"><i></i></div><span class="muted small" id="migProgText" style="min-width:200px"></span></div>
+          <div class="row">
+            <button class="btn primary" id="btnMigRun"><svg class="i"><use href="#i-swap"/></svg>Copy now</button>
+            <button class="btn danger" id="btnMigCancel" hidden><svg class="i"><use href="#i-x"/></svg>Stop</button>
+            <span class="err" id="migErr"></span>
+          </div>
+          <div id="migDone" hidden class="row"></div>
+        </div>
+
+        <div class="card" id="migPast" hidden>
+          <h2>Earlier migrations into this folder</h2>
+          <div class="list" id="migPastList"></div>
         </div>
       </div>
     </section>
@@ -660,6 +834,60 @@
     </div>
   </div>
 
+  <!-- ===== Download SillyTavern ===== -->
+  <div class="modal" id="dlModal">
+    <div class="card stack">
+      <h2>Download SillyTavern<button class="btn sm ghost act" id="btnDlClose">Close</button></h2>
+      <p class="muted">Gets a SillyTavern of your choice into a new folder and makes a profile for it. Your current SillyTavern is not touched.</p>
+      <div class="field">
+        <label>Version <button class="link" id="btnDlReload" style="margin-left:8px">refresh list</button></label>
+        <select id="dlVersion"></select>
+        <p class="muted small" id="dlVersionHint" style="margin-top:6px"></p>
+        <p class="err" id="dlVersionErr" hidden></p>
+        <div class="warnbox" id="dlOlder" hidden style="margin-top:8px">
+          <div id="dlOlderText"></div>
+          <ul id="dlOlderFixes"></ul>
+          <div class="muted">Use an older version only when you need it (for example, an extension that hasn't caught up yet). Keep phone access off with it, only install extensions you trust, and don't copy data from a newer SillyTavern into it: older versions may not read it correctly.</div>
+          <label class="switch"><input type="checkbox" id="dlRisk"><div><b style="color:var(--title)">I understand — download this older version anyway</b></div></label>
+        </div>
+        <details class="notes" id="dlNotesBox" hidden style="margin-top:6px"><summary id="dlNotesTitle">What's new</summary><div id="dlNotes"></div><button class="link" id="btnDlRelease" style="margin-top:6px">Release page on GitHub</button></details>
+      </div>
+      <div class="field">
+        <label>Put it in</label>
+        <div class="row">
+          <div class="path" id="dlParent" style="flex:1;min-width:200px">—</div>
+          <button class="btn sm" id="btnDlParent"><svg class="i"><use href="#i-folder"/></svg>Choose…</button>
+        </div>
+      </div>
+      <div class="row" style="align-items:flex-start">
+        <div class="field" style="flex:1;min-width:180px"><label>Folder name</label><input type="text" id="dlFolder" maxlength="80"></div>
+        <div class="field" style="flex:1;min-width:180px"><label>Profile name</label><input type="text" id="dlName" maxlength="40"></div>
+      </div>
+      <p class="muted small" id="dlTarget"></p>
+      <label class="switch" style="border-top:0;padding:0"><input type="checkbox" id="dlUse"><div><b>Use it right away</b><span>Switch to the new profile when the download is done. Otherwise switch later from Profiles.</span></div></label>
+      <div class="stack" id="dlProgressBox" hidden style="gap:8px">
+        <div class="steps"><span id="dlStep1">1 · Download</span><span id="dlStep2">2 · Install dependencies</span><span id="dlStep3">3 · Ready</span></div>
+        <div class="row"><div class="progress" id="dlBar"><i></i></div><span class="muted small" id="dlText" style="min-width:150px"></span></div>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="btnDlStart"><svg class="i"><use href="#i-download"/></svg>Download</button>
+        <button class="btn danger" id="btnDlCancel" hidden><svg class="i"><use href="#i-x"/></svg>Cancel download</button>
+        <button class="btn" id="btnDlMigrate" hidden title="Copy characters, chats, presets and more from the SillyTavern you used before"><svg class="i"><use href="#i-swap"/></svg>Copy my data into it…</button>
+        <span class="err" id="dlError"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== What changed / history ===== -->
+  <div class="modal" id="chgModal">
+    <div class="card stack">
+      <h2><span id="chgTitle"></span><span class="act row"><button class="btn sm ghost" id="btnChgBack" hidden>Back</button><button class="btn sm ghost" id="btnChgClose">Close</button></span></h2>
+      <p class="muted" id="chgSub"></p>
+      <div class="stack" id="chgBody" style="gap:10px"></div>
+      <div class="row" id="chgActions"></div>
+    </div>
+  </div>
+
   <!-- ===== icons ===== -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
@@ -694,6 +922,11 @@
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
       <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/></symbol>
       <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 18h14"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5"/></symbol>
+      <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h14l-4-4M20 16H6l4 4"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16zM14 6l4 4"/></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
     </defs>
   </svg>
@@ -706,7 +939,7 @@
   const state = { running: false, startedAt: 0, busy: '', url: '', windows: { open: 0, minimized: false }, page: 'home', logs: [], filter: 'all', search: '', extTab: 'st' };
 
   // ---------- navigation ----------
-  const TITLES = { home: 'Home', backups: 'Backups', extensions: 'Extensions', maintenance: 'Maintenance', console: 'Console', settings: 'Settings' };
+  const TITLES = { home: 'Home', profiles: 'Profiles', migrate: 'Migrate data', backups: 'Backups', extensions: 'Extensions', maintenance: 'Maintenance', console: 'Console', settings: 'Settings' };
   function go(page) {
     state.page = page;
     document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
@@ -724,6 +957,8 @@
 
   function loadPage(page) {
     if (page === 'home') { loadInfo(); loadLan(); }
+    if (page === 'profiles') loadProfiles();
+    if (page === 'migrate') loadMigrate();
     if (page === 'backups') loadBackups();
     if (page === 'extensions') { loadExtensions(false); if (state.extTab === 'desktop') loadDesktopExtensions(); }
     if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); }
@@ -756,6 +991,7 @@
     $('busyText').textContent = label ? `${label}… you can watch progress in the Console.` : '';
     document.querySelectorAll('[data-task]').forEach(b => b.disabled = !!label);
     if (!label && $('setup').classList.contains('show')) loadSetup();
+    if ($('dlModal').classList.contains('show') && !dl.running) checkTarget();
   }
   $('btnPower').onclick = () => state.running ? D.stopServer() : D.startServer();
   $('btnOpen').onclick = () => D.openST();
@@ -766,17 +1002,24 @@
   async function loadInfo(info) {
     info = info || await D.stInfo();
     $('infoVersion').textContent = info.version ? `SillyTavern ${info.version}` : 'Not found';
-    $('infoBranch').innerHTML = info.branch ? `<span class="tag fox">${esc(info.branch)}</span>` : '—';
-    $('branchTag').textContent = info.branch || 'unknown';
+    $('infoBranch').innerHTML = info.branch ? `<span class="tag fox">${esc(info.branch)}</span>` : info.pinned ? `<span class="tag">fixed at ${esc(info.pinned)}</span>` : '—';
+    $('branchTag').textContent = info.branch || (info.pinned ? `version ${info.pinned} (fixed)` : 'unknown');
     $('infoCommit').textContent = info.commit ? `${info.commitDate} · ${info.commit}` : '—';
     const tag = $('updateTag');
     const upd = $('btnUpdate');
+    $('btnIncoming').hidden = true;
     if (!info.isGit) {
       tag.className = 'tag warn'; tag.textContent = 'Not a git install';
       $('updateHint').textContent = 'Updates need a SillyTavern installed with git.';
       upd.hidden = true;
+    } else if (info.pinned) {
+      // Downloaded as a specific version: on no branch, so never "behind".
+      tag.className = 'tag'; tag.textContent = 'Fixed version';
+      $('updateHint').textContent = 'Not updated. For updates, choose release or staging in Maintenance.';
+      upd.hidden = true;
     } else if (info.behind > 0) {
       tag.className = 'tag fox'; tag.textContent = `Update available`;
+      $('btnIncoming').hidden = false;
       $('updateHint').textContent = `${info.behind} new change${info.behind === 1 ? '' : 's'} on ${info.branch}`;
       upd.hidden = false;
     } else if (info.behind === 0) {
@@ -862,6 +1105,7 @@
     else if (info.needsRestart) hint = 'Phone settings changed. Restart the server to apply them.';
     else hint = `Open this on a phone or tablet on the same Wi-Fi, or scan the code. ${info.hasPassword ? `Sign in as "${info.user}" with your password.` : 'No password is set.'} If Windows asks whether Node.js may use the network, choose Allow.`;
     if (info.whitelistTxt) hint += ' Note: SillyTavern\'s whitelist.txt decides who may connect, not this app.';
+    if (info.older) hint += ` ⚠ This SillyTavern is ${info.older.newer} release${info.older.newer === 1 ? '' : 's'} behind (latest ${info.older.latest})${info.older.fixes.length ? ' and misses security fixes' : ''}. Other devices can reach it: update it first.`;
     $('lanHint').textContent = hint;
     $('btnLanRestart').hidden = !info.needsRestart;
   }
@@ -1157,13 +1401,14 @@
       : 'Install them from <button class="link" data-link="node">nodejs.org</button> and <button class="link" data-link="git">git-scm.com</button>, then restart this app.';
     $('reqHint').querySelectorAll('[data-link]').forEach(b => b.onclick = () => D.openLink(b.dataset.link));
 
-    const list = st.installs;
+    const named = st.profiles.filter(p => p.ok).map(p => ({ path: p.path, version: p.version, name: p.name, isGit: true }));
+    const list = [...named, ...st.installs.filter(i => !named.some(n => n.path.toLowerCase() === i.path.toLowerCase()))];
     $('stNum').classList.toggle('done', st.ready);
     $('stNum').innerHTML = st.ready ? icon('check') : '2';
     $('installList').innerHTML = list.length ? list.map(i => {
       const cur = st.ready && i.path.toLowerCase() === st.current.toLowerCase();
       return `<div class="item ${cur ? 'current' : ''}">
-        <div class="main"><div class="title mono">${esc(i.path)}</div><div class="meta">SillyTavern ${esc(i.version)}${i.isGit ? '' : ' · not a git install (updates unavailable)'}</div></div>
+        <div class="main">${i.name ? `<div class="title">${esc(i.name)}</div><div class="meta mono">${esc(i.path)}</div>` : `<div class="title mono">${esc(i.path)}</div>`}<div class="meta">SillyTavern ${esc(i.version)}${i.isGit ? '' : ' · not a git install (updates unavailable)'}</div></div>
         ${cur ? '<span class="tag fox">In use</span>' : `<button class="btn sm" data-task data-use="${esc(i.path)}">Use this</button>`}
       </div>`;
     }).join('') : `<div class="empty">No SillyTavern found on this PC.</div>`;
@@ -1184,7 +1429,7 @@
   $('btnInstallReq').onclick = () => D.installRequirements();
   $('btnInstallST').onclick = async () => {
     const wasReady = (await D.setupState()).ready;
-    finishSetup(await D.installST(), wasReady);
+    openDownload({ onDone: r => { if (r.used) { closeDownload(); finishSetup(true, wasReady); } } });
   };
   $('btnBrowse').onclick = async () => {
     const wasReady = (await D.setupState()).ready;
@@ -1195,6 +1440,682 @@
   $('btnSetupClose').onclick = () => { setupForced = false; loadSetup(); };
   $('btnChangeInstall').onclick = () => { setupForced = true; loadSetup(); };
   $('btnMoveST').onclick = () => D.moveST();
+
+  // ---------- profiles ----------
+  // The header's picker switches; the Profiles page adds, edits and removes.
+  let profiles = [];
+  async function loadProfiles() {
+    profiles = await D.profiles();
+    const act = profiles.find(p => p.active);
+    const sel = $('hdrProfile');
+    sel.innerHTML = (act ? '' : '<option value="" selected>No profile</option>')
+      + profiles.map(p => `<option value="${esc(p.id)}"${p.active ? ' selected' : ''}${p.ok ? '' : ' disabled'}>${esc(p.name)}${p.ok ? '' : ' (folder missing)'}</option>`).join('');
+    sel.parentElement.title = act ? `Profile "${act.name}": ${act.path}` : 'Profile: which SillyTavern folder the app runs';
+    sel.parentElement.hidden = !profiles.length;
+    if (state.page === 'profiles') renderProfiles();
+    if (state.page === 'migrate' && !mg.scan && !mg.running) loadMigrate();
+  }
+  // Back to the profile in use if the switch didn't happen (busy, cancelled).
+  $('hdrProfile').onchange = async () => { await D.profileUse($('hdrProfile').value); loadProfiles(); };
+
+  // Behind the newest release: a warning tag that says what it misses.
+  function older(p) {
+    const o = p.older;
+    if (!o) return '';
+    const tip = `${o.newer} newer release${o.newer === 1 ? '' : 's'} (latest ${o.latest})${o.fixes.length ? ', with security fixes this one doesn\'t have' : ''}. ${p.branch ? `${p.active ? '' : 'Switch to it, then '}update it from Home.` : 'It is a fixed version: switch it to release or staging in Maintenance to get updates.'}`;
+    return `<span class="tag warn" title="${esc(tip)}">${o.fixes.length ? '⚠ missing security fixes' : 'older version'}</span>`;
+  }
+  function renderProfiles() {
+    const el = $('profList');
+    if (!profiles.length) { el.innerHTML = '<div class="empty">No profiles yet. Add the SillyTavern you have, or download one.</div>'; return; }
+    el.innerHTML = profiles.map(p => {
+      const id = esc(p.id);
+      const what = p.ok ? [p.version && `SillyTavern ${p.version}`, p.branch || 'fixed version'].filter(Boolean).map(esc).join(' · ')
+        : '<span style="color:var(--bad)">No SillyTavern in this folder anymore. Edit the profile, or remove it.</span>';
+      const acts = [
+        !p.active && p.ok ? `<button class="btn sm primary" data-task data-puse="${id}">Use</button>` : '',
+        !p.active && p.ok ? `<button class="btn sm ghost" data-palong="${id}" title="Run it at the same time, on its own port, in a new tab">Open next to it</button>` : '',
+        !p.active && p.ok ? `<button class="btn sm ghost" data-pmig="${id}" title="Copy characters, chats, presets… from this SillyTavern into another">${icon('swap')}</button>` : '',
+        p.ok ? `<button class="btn sm ghost" data-phist="${id}" title="History: updates and what changed">${icon('clock')}</button>` : '',
+        p.ok ? `<button class="btn sm ghost" data-pfolder="${id}" title="Open folder">${icon('folder')}</button>` : '',
+        `<button class="btn sm ghost" data-pedit="${id}" title="Edit">${icon('pencil')}</button>`,
+        p.active ? '' : `<button class="btn sm ghost danger" data-pdel="${id}" title="Remove profile (the folder stays)">${icon('trash')}</button>`,
+      ].join('');
+      return `<div class="item ${p.active ? 'current' : ''}">
+        <div class="main"><div class="title">${esc(p.name)} ${p.active ? '<span class="tag fox">In use</span>' : ''} ${older(p)}</div><div class="meta">${what}</div><div class="meta mono">${esc(p.path)}</div></div>
+        <div class="acts">${acts}</div></div>`;
+    }).join('');
+    const on = (attr, fn) => el.querySelectorAll(`[data-${attr}]`).forEach(b => b.onclick = () => fn(b.dataset[attr], b));
+    on('puse', id => D.profileUse(id));
+    on('palong', id => D.profileOpenAlongside(id));
+    on('pfolder', id => D.profileOpenFolder(id));
+    on('phist', id => showHistory(id));
+    on('pmig', id => openMigrate({ src: profiles.find(p => p.id === id).path }));
+    on('pedit', id => openProfForm(profiles.find(p => p.id === id)));
+    on('pdel', async id => { const r = await D.profileDelete(id); if (r?.error) append(`ERROR: ${r.error}`); });
+    el.querySelectorAll('[data-puse]').forEach(b => { b.disabled = !!state.busy; });
+  }
+
+  // ----- add / edit form -----
+  let profEdit = null; // { id (null = new), path }
+  function openProfForm(p) {
+    profEdit = { id: p?.id || null, path: p?.path || '' };
+    $('profForm').hidden = false;
+    $('profName').value = p?.name || '';
+    $('profPath').textContent = profEdit.path || 'Choose the folder that contains SillyTavern (server.js).';
+    $('profError').textContent = '';
+    $('btnProfSave').lastChild.textContent = p ? 'Save profile' : 'Add profile';
+    $('profForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  const closeProfForm = () => { profEdit = null; $('profForm').hidden = true; };
+  async function browseProfile() {
+    const r = await D.profileBrowse(profEdit.path);
+    if (!profEdit || r.canceled) return;
+    if (r.error) { $('profError').textContent = r.error; return; }
+    profEdit.path = r.path;
+    $('profPath').textContent = r.path;
+    if (!$('profName').value.trim()) $('profName').value = r.name;
+    $('profError').textContent = '';
+  }
+  $('btnProfAdd').onclick = () => { openProfForm(null); browseProfile(); };
+  $('btnProfBrowse').onclick = browseProfile;
+  $('btnProfCancel').onclick = closeProfForm;
+  $('profName').onkeydown = e => { if (e.key === 'Enter') $('btnProfSave').click(); };
+  $('btnProfSave').onclick = async () => {
+    if (!profEdit.path) { $('profError').textContent = 'Choose a folder first.'; return; }
+    $('btnProfSave').disabled = true;
+    const r = await D.profileSave({ id: profEdit.id, name: $('profName').value, path: profEdit.path });
+    $('btnProfSave').disabled = false;
+    if (r.error) { $('profError').textContent = r.error; return; }
+    closeProfForm();
+  };
+  $('btnProfFound').onclick = async () => {
+    const b = $('btnProfFound');
+    b.disabled = true;
+    const n = await D.profilesAddFound();
+    b.lastChild.textContent = n ? `Added ${n}` : 'Nothing new';
+    setTimeout(() => { b.lastChild.textContent = 'Find on this PC'; b.disabled = false; }, 1800);
+  };
+  $('btnProfDownload').onclick = () => openDownload();
+
+  // ---------- download SillyTavern ----------
+  const dl = { versions: [], parent: '', base: '', folderEdited: false, nameEdited: false, running: false, onDone: null, notes: '' };
+  async function openDownload({ onDone } = {}) {
+    dl.onDone = onDone || null;
+    $('dlModal').classList.add('show');
+    if (dl.running) return; // back to the download in progress
+    $('dlError').textContent = '';
+    $('btnDlMigrate').hidden = true;
+    $('dlProgressBox').hidden = true;
+    dl.folderEdited = dl.nameEdited = false;
+    const [st, def] = await Promise.all([D.setupState(), D.downloadDefaults()]);
+    const req = st.requirements;
+    dl.reqOk = req.node.ok && req.git.ok;
+    $('dlUse').checked = !st.ready;
+    dl.parent = dl.parent || def.parent;
+    $('dlParent').textContent = dl.parent;
+    if (!dl.reqOk) $('dlError').textContent = 'Node.js and Git are needed first: the welcome screen or Maintenance → Back end installs them.';
+    await loadVersions(false);
+  }
+  const closeDownload = () => $('dlModal').classList.remove('show');
+  $('btnDlClose').onclick = closeDownload;
+  $('btnDlReload').onclick = () => loadVersions(true);
+
+  async function loadVersions(fresh) {
+    const sel = $('dlVersion');
+    sel.innerHTML = '<option>Loading versions…</option>';
+    sel.disabled = true;
+    const r = await D.stVersions(fresh);
+    dl.versions = r.versions || [];
+    $('dlVersionErr').hidden = !r.error;
+    $('dlVersionErr').textContent = r.error ? `Could not load the list of versions (${r.error}). The latest release and staging can still be downloaded.` : '';
+    const latest = dl.versions.find(v => v.recommended);
+    const month = d => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) : '');
+    // Versions with security fixes released after them are marked in the list.
+    const fixedAfter = new Set();
+    let seenFix = false;
+    for (const v of dl.versions) { if (seenFix) fixedAfter.add(v.version); if (v.fixes?.length) seenFix = true; }
+    sel.innerHTML = `<option value="release">${latest ? esc(latest.version) : 'Latest'} — latest release (recommended)</option>`
+      + '<option value="staging">Staging — newest changes, may break</option>'
+      + (dl.versions.length ? `<optgroup label="A specific version (stays at that version)">${dl.versions.map(v =>
+        `<option value="${esc(v.version)}">${esc(v.version)}${v.date ? ` · ${esc(month(v.date))}` : ''}${v.recommended ? ' · latest' : ''}${fixedAfter.has(v.version) ? ' · ⚠ missing security fixes' : ''}${v.limited ? ' · some app features off' : ''}</option>`).join('')}</optgroup>` : '');
+    sel.disabled = dl.running;
+    versionChanged();
+  }
+
+  function versionChanged() {
+    const ref = $('dlVersion').value;
+    const latest = dl.versions.find(v => v.recommended);
+    const v = ref === 'release' ? latest : dl.versions.find(x => x.version === ref);
+    $('dlVersionHint').textContent = ref === 'release' ? 'The stable version most people use. It gets updates (Home → Update now).'
+      : ref === 'staging' ? 'Gets new features first and changes almost daily, but can break. For trying things out.'
+      : `Exactly version ${ref}, kept as it is (no updates). Switch it to release later under Maintenance → Release channel if you want updates.${v?.limited ? ' Versions before 1.13.2 ignore some of this app\'s settings: phone access does not work, and a browser tab may open when the server starts.' : ''}`;
+    // An older version: what it misses, and an "I understand" before downloading.
+    const older = !['release', 'staging'].includes(ref) && latest && vnum(ref) && vcmp(vnum(ref), vnum(latest.version)) < 0;
+    dl.needsRisk = !!older;
+    $('dlOlder').hidden = !older;
+    $('dlRisk').checked = false;
+    if (older) {
+      const newer = dl.versions.filter(x => vcmp(vnum(x.version), vnum(ref)) > 0);
+      const fixes = newer.flatMap(x => (x.fixes || []).map(t => ({ v: x.version, t })));
+      $('dlOlderText').innerHTML = `<b>⚠ This is an older version.</b> ${newer.length} newer release${newer.length === 1 ? ' has' : 's have'} come out since ${esc(ref)} (the latest is ${esc(latest.version)}). It doesn't have the security and bug fixes made since then${fixes.length ? ', including:' : '.'}`;
+      $('dlOlderFixes').innerHTML = fixes.slice(0, 8).map(f => `<li><span class="mono">${esc(f.v)}</span> ${esc(f.t)}</li>`).join('') + (fixes.length > 8 ? `<li class="muted">…and ${fixes.length - 8} more (see the release notes)</li>` : '');
+      $('dlOlderFixes').hidden = !fixes.length;
+    }
+    $('dlNotesBox').hidden = !v?.notes;
+    dl.notes = v?.version || '';
+    if (v?.notes) { $('dlNotesTitle').textContent = `What's new in ${v.version}`; $('dlNotes').textContent = plainNotes(v.notes); }
+    const label = ref === 'release' ? (latest?.version || 'release') : ref;
+    dl.base = `SillyTavern-${label}`;
+    if (!dl.folderEdited) $('dlFolder').value = dl.base;
+    if (!dl.nameEdited) {
+      const base = ref === 'staging' ? 'SillyTavern staging' : `SillyTavern ${label}`;
+      let name = base;
+      for (let i = 2; profiles.some(p => p.name.toLowerCase() === name.toLowerCase()); i++) name = `${base} (${i})`;
+      $('dlName').value = name;
+    }
+    checkTarget();
+  }
+  $('dlVersion').onchange = versionChanged;
+  $('btnDlRelease').onclick = () => D.openStRelease(dl.notes);
+
+  // Shows where it goes; a folder name the app picked moves aside ("-2") from an existing folder.
+  const GB = n => `${(n / 1024 ** 3).toFixed(n < 10 * 1024 ** 3 ? 1 : 0)} GB`;
+  async function checkTarget() {
+    let t = await D.downloadTarget(dl.parent, $('dlFolder').value);
+    for (let i = 2; !dl.folderEdited && !t.ok && t.path && /already|exists/.test(t.problem) && i < 20; i++) {
+      $('dlFolder').value = `${dl.base}-${i}`;
+      t = await D.downloadTarget(dl.parent, $('dlFolder').value);
+    }
+    $('dlTarget').innerHTML = t.ok
+      ? `Goes to <span class="mono" style="color:var(--title)">${esc(t.path)}</span>${t.free != null ? ` · ${GB(t.free)} free there` : ''} · needs about 600 MB`
+      : `<span class="err">${esc(t.problem)}</span>`;
+    $('btnDlStart').disabled = !t.ok || !dl.reqOk || !!state.busy || dl.running || (dl.needsRisk && !$('dlRisk').checked);
+    return t;
+  }
+  $('dlFolder').oninput = () => { dl.folderEdited = true; checkTarget(); };
+  $('dlRisk').onchange = checkTarget;
+  $('dlName').oninput = () => { dl.nameEdited = true; };
+  $('btnDlParent').onclick = async () => {
+    const dir = await D.pickParent(dl.parent);
+    if (!dir) return;
+    dl.parent = dir;
+    $('dlParent').textContent = dir;
+    checkTarget();
+  };
+
+  function setDlStep(n) {
+    ['dlStep1', 'dlStep2', 'dlStep3'].forEach((id, i) => { $(id).className = i + 1 < n ? 'done' : i + 1 === n ? 'on' : ''; });
+  }
+  function setDlBar(percent, text) {
+    $('dlBar').classList.toggle('wait', percent == null);
+    $('dlBar').firstElementChild.style.width = percent == null ? '' : `${percent}%`;
+    $('dlText').textContent = text || '';
+  }
+  function dlRunning(on) {
+    dl.running = on;
+    ['dlVersion', 'dlFolder', 'dlName', 'dlUse', 'dlRisk', 'btnDlParent', 'btnDlReload'].forEach(id => { $(id).disabled = on; });
+    $('btnDlStart').hidden = on;
+    $('btnDlCancel').hidden = !on;
+    $('btnDlCancel').disabled = false;
+  }
+  $('btnDlMigrate').onclick = () => { closeDownload(); openMigrate(dl.lastNew); };
+  $('btnDlCancel').onclick = () => { $('btnDlCancel').disabled = true; D.stDownloadCancel(); };
+  $('btnDlStart').onclick = async () => {
+    if (!(await checkTarget()).ok) return;
+    $('dlError').textContent = '';
+    $('dlProgressBox').hidden = false;
+    setDlStep(1);
+    setDlBar(null, 'Starting…');
+    dl.prevActive = profiles.find(p => p.active && p.ok)?.path || '';
+    $('btnDlMigrate').hidden = true;
+    dlRunning(true);
+    const r = await D.stDownload({ ref: $('dlVersion').value, parent: dl.parent, folder: $('dlFolder').value, name: $('dlName').value, useNow: $('dlUse').checked });
+    dlRunning(false);
+    if (r.error || r.cancelled) {
+      $('dlError').textContent = r.error || '';
+      $('dlProgressBox').hidden = !r.cancelled;
+      if (r.cancelled) { setDlBar(0, 'Cancelled.'); $('dlBar').classList.remove('wait'); }
+    } else {
+      setDlStep(4);
+      setDlBar(100, r.used ? `Done — now using "${r.profile.name}".` : `Done — added the profile "${r.profile.name}".`);
+      dl.lastNew = { src: dl.prevActive, dst: r.path };
+      $('btnDlMigrate').hidden = !dl.prevActive;
+      if (r.depsFailed) $('dlError').textContent = 'Downloaded, but installing its dependencies failed. Switch to it and use Maintenance → "Install missing dependencies".';
+      dl.folderEdited = dl.nameEdited = false;
+      dl.onDone?.(r);
+    }
+    await loadProfiles();
+    versionChanged(); // the folder and name are taken now: suggest the next ones
+  };
+
+  // ---------- what changed: "What's new", history, update preview ----------
+  const vnum = v => (/^\d+\.\d+\.\d+$/.test(v || '') ? v.split('.').map(Number) : null);
+  const vcmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+  // The version list with release notes (the main process keeps it for an hour).
+  let versionList = null;
+  async function versions() {
+    if (!versionList) {
+      const r = await D.stVersions(false);
+      versionList = r.versions || [];
+      setTimeout(() => { versionList = null; }, 10 * 60e3);
+    }
+    return versionList;
+  }
+  // Releases after `from`, up to and including `to`, newest first.
+  async function releasesBetween(from, to) {
+    const a = vnum(from), b = vnum(to);
+    if (!b || (a && vcmp(b, a) <= 0)) return [];
+    return (await versions()).filter(v => { const n = vnum(v.version); return n && vcmp(n, b) <= 0 && (!a || vcmp(n, a) > 0); });
+  }
+  const verText = x => (x ? `${x.version}${x.branch ? ` (${x.branch})` : x.pinned ? ' (fixed version)' : ''}` : '');
+  const KIND = { update: 'Updated', download: 'Downloaded', branch: 'Switched release channel', outside: 'Changed outside this app' };
+  const changeTitle = e => (e.kind === 'download' ? `Downloaded SillyTavern ${verText(e.to)}`
+    : e.from && verText(e.from) !== verText(e.to) ? `SillyTavern ${verText(e.from)} → ${verText(e.to)}${e.from.version === e.to.version && e.commitCount ? ` (${e.commitCount} change${e.commitCount === 1 ? '' : 's'})` : ''}`
+    : `SillyTavern ${verText(e.to)}: ${e.commitCount || 'new'} change${e.commitCount === 1 ? '' : 's'}`);
+
+  // The dialog: release notes per version, then the list of changes (commits).
+  // back: a function that goes back to the list it was opened from.
+  function showChanges({ title, sub, releases = [], commits = [], commitCount = 0, back = 0, note = '', action = null, onBack = null }) {
+    $('chgTitle').textContent = title;
+    $('chgSub').textContent = sub || '';
+    const parts = releases.map((v, i) => `<details class="notes"${i === 0 ? ' open' : ''}><summary>What's new in ${esc(v.version)}${v.date ? ` · ${esc(new Date(v.date).toLocaleDateString())}` : ''}${v.fixes?.length ? '<span class="tag good">security fixes</span>' : ''}</summary>
+      <div>${esc(plainNotes(v.notes) || 'No notes for this release.')}</div><button class="link" data-relpage="${esc(v.version)}" style="margin-top:6px">Release page on GitHub</button></details>`);
+    if (commits.length) {
+      const more = commitCount > commits.length ? `<div class="muted">…and ${commitCount - commits.length} more</div>` : '';
+      parts.push(`<details class="notes"${releases.length ? '' : ' open'}><summary>${commitCount || commits.length} change${(commitCount || commits.length) === 1 ? '' : 's'}, newest first</summary>
+        <div class="commits">${commits.map(c => `<div><span class="mono">${esc(c.d)}</span><span>${esc(c.s)}</span></div>`).join('')}${more}</div></details>`);
+    }
+    if (back) parts.push(`<p class="muted">${back} change${back === 1 ? ' is' : 's are'} no longer included: this went back to an earlier state of SillyTavern.</p>`);
+    if (note) parts.push(`<p class="muted">${esc(note)}</p>`);
+    if (!parts.length) parts.push('<p class="muted">No details about this change.</p>');
+    $('chgBody').innerHTML = parts.join('');
+    $('chgBody').querySelectorAll('[data-relpage]').forEach(b => b.onclick = () => D.openStRelease(b.dataset.relpage));
+    $('chgActions').innerHTML = action ? `<button class="btn primary" id="btnChgAction">${action.label}</button>` : '';
+    if (action) $('btnChgAction').onclick = () => { closeChanges(); action.fn(); };
+    $('btnChgBack').hidden = !onBack;
+    $('btnChgBack').onclick = onBack;
+    $('chgModal').classList.add('show');
+    $('chgModal').scrollTop = 0;
+  }
+  const closeChanges = () => $('chgModal').classList.remove('show');
+  $('btnChgClose').onclick = closeChanges;
+
+  async function showEntry(e, onBack) {
+    const releases = e.kind === 'download' ? (await versions()).filter(v => v.version === e.to.version) : await releasesBetween(e.from?.version, e.to.version);
+    const wentBack = e.from && vnum(e.from.version) && vnum(e.to.version) && vcmp(vnum(e.to.version), vnum(e.from.version)) < 0;
+    showChanges({
+      title: changeTitle(e),
+      sub: `${KIND[e.kind] || 'Changed'} · ${new Date(e.at).toLocaleString()}`,
+      releases, commits: e.commits, commitCount: e.commitCount, back: e.back,
+      note: wentBack ? `This went back to an older version (${e.from.version} → ${e.to.version}).` : e.kind === 'outside' ? 'SillyTavern was changed while this app wasn\'t looking (for example with git pull or SillyTavern\'s own updater).' : '',
+      onBack,
+    });
+    if (!e.seen) { e.seen = true; await D.historySeen(e.id); loadNews(); }
+  }
+
+  // A profile's history: every update, download and channel switch.
+  async function showHistory(profileId) {
+    const r = await D.history(profileId);
+    const list = r.entries || [];
+    $('chgTitle').textContent = r.profile ? `History of "${r.profile.name}"` : 'History';
+    $('chgSub').textContent = list.length ? 'Updates, downloads and channel switches of this SillyTavern folder, newest first.' : '';
+    $('chgBody').innerHTML = list.length ? `<div class="list">${list.map((e, i) => `<div class="item">
+        <div class="main"><div class="title">${esc(changeTitle(e))}</div><div class="meta">${esc(KIND[e.kind] || 'Changed')} · ${esc(new Date(e.at).toLocaleString())}${e.seen ? '' : ' · <span style="color:var(--accent2)">new</span>'}</div></div>
+        <button class="btn sm" data-entry="${i}">Details</button></div>`).join('')}</div>`
+      : '<div class="empty">Nothing recorded yet. Updates, downloads and release/staging switches made from now on show up here, with their release notes and changes.</div>';
+    $('chgBody').querySelectorAll('[data-entry]').forEach(b => b.onclick = () => showEntry(list[Number(b.dataset.entry)], () => showHistory(profileId)));
+    $('chgActions').innerHTML = '';
+    $('btnChgBack').hidden = true;
+    $('chgModal').classList.add('show');
+  }
+  $('btnHistory').onclick = () => showHistory();
+  $('btnNewsHistory').onclick = () => showHistory();
+
+  // Home's card after an update (or a change made outside the app).
+  async function loadNews() {
+    const e = await D.historyUnseen();
+    state.news = e;
+    $('newsCard').hidden = !e;
+    if (!e) return;
+    $('newsTitle').textContent = changeTitle(e);
+    $('newsSub').textContent = `${KIND[e.kind] || 'Changed'} ${new Date(e.at).toLocaleString()}. See the release notes and every change.`;
+  }
+  $('btnNewsShow').onclick = () => state.news && showEntry(state.news);
+  $('btnNewsHide').onclick = async () => { if (state.news) await D.historySeen(state.news.id); loadNews(); };
+
+  // Before updating: what "Update now" would bring.
+  $('btnIncoming').onclick = async () => {
+    const r = await D.stIncoming();
+    showChanges({
+      title: r.to && r.to !== r.from ? `Update: SillyTavern ${r.from} → ${r.to}` : `Update for SillyTavern ${r.from}`,
+      sub: 'Nothing is installed until you click Update now.',
+      releases: await releasesBetween(r.from, r.to),
+      commits: r.commits, commitCount: r.commits.length,
+      action: { label: 'Update now', fn: () => D.update() },
+    });
+  };
+
+  // ---------- migrate data ----------
+  const size = n => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(n < 10 * 1024 ** 2 ? 1 : 0)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+  const num = n => Number(n).toLocaleString();
+  const plural = (n, word) => `${num(n)} ${word}${n === 1 ? '' : 's'}`;
+  // The last categories picked are remembered for next time (this PC only).
+  const migStore = {
+    get(k, d) { try { const v = localStorage.getItem(`mig.${k}`); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(`mig.${k}`, JSON.stringify(v)); } catch { /* private mode */ } },
+  };
+  const mg = { folders: [], extra: [], scan: null, items: new Map(), sel: new Set(), mode: migStore.get('mode', 'simple'), filter: 'all', search: '', policy: migStore.get('policy', 'newer'), open: new Set(), running: false, preset: null };
+
+  // Opens the page with the source and/or target already chosen.
+  function openMigrate(preset) { mg.preset = preset; mg.scan = null; go('migrate'); }
+
+  const migAll = () => [...mg.folders, ...mg.extra];
+  const migFolder = p => migAll().find(f => f.path === p);
+  async function loadMigrate() {
+    if (mg.running) return;
+    mg.folders = await D.migFolders();
+    const all = migAll();
+    const want = mg.preset || { src: $('migSrc').value, dst: $('migDst').value };
+    mg.preset = null;
+    const dst = all.find(f => f.path === want.dst) || all.find(f => f.active) || all[0];
+    const src = all.find(f => f.path === want.src && (f !== dst || f.users.length > 1)) || all.find(f => f !== dst) || dst;
+    const opt = (f, on) => `<option value="${esc(f.path)}"${on ? ' selected' : ''}>${esc(f.name)}${f.version ? ` · ${esc(f.version)}` : ''}${f.active ? ' (in use)' : ''}</option>`;
+    $('migDst').innerHTML = all.map(f => opt(f, f === dst)).join('');
+    $('migSrc').innerHTML = all.map(f => opt(f, f === src)).join('') + '<option value="__browse">Another SillyTavern folder…</option>';
+    fillMigUsers();
+    if (!mg.scan) endsChanged();
+    loadJournals();
+  }
+  function fillMigUsers() {
+    for (const [sel, users] of [['migSrcUser', migFolder($('migSrc').value)?.users], ['migDstUser', migFolder($('migDst').value)?.users]]) {
+      const list = users?.length ? users : ['default-user'];
+      const keep = $(sel).value;
+      $(sel).innerHTML = list.map(u => `<option value="${esc(u)}">${u === 'default-user' ? 'default user' : `user: ${esc(u)}`}</option>`).join('');
+      if (list.includes(keep)) $(sel).value = keep;
+      // Only worth showing when SillyTavern has more than one user.
+      $(sel).hidden = list.length < 2;
+    }
+  }
+  const ends = () => ({ src: $('migSrc').value, srcUser: $('migSrcUser').value || 'default-user', dst: $('migDst').value, dstUser: $('migDstUser').value || 'default-user' });
+
+  // Any change of source or target: the old scan no longer fits.
+  function endsChanged() {
+    mg.scan = null;
+    $('migPick').hidden = $('migGo').hidden = true;
+    $('migDone').hidden = true;
+    const e = ends();
+    const same = e.src === e.dst && e.srcUser === e.dstUser;
+    $('btnMigScan').disabled = same || !e.src || !e.dst || mg.running;
+    $('migScanInfo').textContent = migAll().length < 2 && same ? 'There is only one SillyTavern here. Add another under Profiles (or download one), or pick another folder above.'
+      : same ? 'Pick a different folder (or user) to copy from.' : 'Looks at both folders and shows what can be copied. Nothing is changed yet.';
+    const s = migFolder(e.src)?.version, d = migFolder(e.dst)?.version;
+    const newer = vnum(s) && vnum(d) && vcmp(vnum(s), vnum(d)) > 0;
+    $('migVerWarn').hidden = !newer || same;
+    $('migVerWarn').innerHTML = newer ? `<b>⚠ Copying from a newer SillyTavern (${esc(s)}) into an older one (${esc(d)}).</b> Older versions may not read everything newer ones saved. Update the target first if you can (switch to it and use Update now).` : '';
+    loadJournals();
+  }
+  $('migSrc').onchange = async () => {
+    if ($('migSrc').value === '__browse') {
+      const r = await D.migBrowse();
+      if (r.path) {
+        if (!migFolder(r.path)) mg.extra.push({ ...r, name: r.path, active: false });
+        await loadMigrate();
+        $('migSrc').value = r.path;
+      } else {
+        if (r.error) append(`ERROR: ${r.error}`);
+        $('migSrc').selectedIndex = 0;
+      }
+    }
+    fillMigUsers();
+    endsChanged();
+  };
+  $('migDst').onchange = () => { fillMigUsers(); endsChanged(); };
+  $('migSrcUser').onchange = $('migDstUser').onchange = endsChanged;
+  $('btnMigSwap').onclick = () => {
+    const e = ends();
+    if (!migFolder(e.src)) return;
+    $('migSrc').value = e.dst; $('migDst').value = e.src;
+    fillMigUsers();
+    $('migSrcUser').value = e.dstUser; $('migDstUser').value = e.srcUser;
+    endsChanged();
+  };
+
+  // ----- scanning -----
+  const itemState = i => (i.sameFiles === i.files ? 'same' : i.newFiles === i.files ? 'new' : i.diffFiles ? 'different' : 'partial');
+  async function scanMig({ keepSelection = false } = {}) {
+    $('btnMigScan').disabled = true;
+    $('migScanInfo').textContent = 'Looking at both folders…';
+    const r = await D.migScan(ends());
+    $('btnMigScan').disabled = false;
+    if (r.error) { $('migScanInfo').innerHTML = `<span class="err">${esc(r.error)}</span>`; return; }
+    const before = mg.sel;
+    mg.scan = r;
+    mg.targetChars = new Set(r.targetChars);
+    mg.items = new Map(r.categories.flatMap(c => c.items.map(i => [i.key, { ...i, cat: c.id }])));
+    if (keepSelection) mg.sel = new Set([...before].filter(k => mg.items.has(k)));
+    else selectPreset(migStore.get('cats', null) ? 'remembered' : 'recommended');
+    const all = [...mg.items.values()];
+    $('migScanInfo').textContent = `Found ${plural(all.length, 'thing')} (${size(all.reduce((n, i) => n + i.size, 0))}). ${(n => (n ? `${num(n)} of them ${n === 1 ? 'is' : 'are'} already in the target.` : 'None of them is in the target yet.'))(all.filter(i => itemState(i) === 'same').length)}`;
+    $('migPick').hidden = $('migGo').hidden = false;
+    renderMig();
+  }
+  $('btnMigScan').onclick = () => { $('migDone').hidden = true; scanMig(); };
+
+  function selectPreset(kind) {
+    const cats = mg.scan.categories;
+    const remembered = new Set(migStore.get('cats', []));
+    mg.sel = new Set();
+    for (const c of cats) {
+      const on = kind === 'all' || (kind === 'remembered' ? remembered.has(c.id) : c.on);
+      if (kind === 'none' || !on) continue;
+      for (const i of c.items) if (kind !== 'new' || itemState(i) !== 'same') mg.sel.add(i.key);
+    }
+  }
+  document.querySelectorAll('[data-migsel]').forEach(b => b.onclick = () => { selectPreset(b.dataset.migsel === 'new' ? 'new' : b.dataset.migsel); rememberCats(); renderMig(); });
+  // Remembered: the categories that were (at least partly) picked.
+  const rememberCats = () => migStore.set('cats', mg.scan.categories.filter(c => c.items.some(i => mg.sel.has(i.key))).map(c => c.id));
+
+  // Things that won't work well in the target without something else.
+  const hasChar = file => mg.targetChars.has(file) || mg.sel.has(`u:characters/${file}`);
+  const chatOrphan = i => i.cat === 'chats' && i.character && !hasChar(i.character);
+  const groupMissing = i => (i.cat === 'groups' ? (i.members || []).filter(m => !hasChar(m)) : []);
+  function catWarning(c) {
+    const picked = c.items.filter(i => mg.sel.has(i.key)).map(i => mg.items.get(i.key));
+    if (!picked.length) return '';
+    if (c.warn) return c.warn;
+    const orphans = picked.filter(chatOrphan).length;
+    if (orphans) return `${plural(orphans, 'chat folder')} belong${orphans === 1 ? 's' : ''} to characters that won't be in the target.`;
+    const groups = picked.filter(i => groupMissing(i).length).length;
+    if (groups) return `${plural(groups, 'group')} use${groups === 1 ? 's' : ''} characters that won't be in the target.`;
+    return '';
+  }
+
+  // ----- picking -----
+  function setMode(mode) {
+    mg.mode = mode;
+    migStore.set('mode', mode);
+    document.querySelectorAll('#migMode button').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+    renderMig();
+  }
+  document.querySelectorAll('#migMode button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+  function renderMig() {
+    if (!mg.scan) return;
+    document.querySelectorAll('#migMode button').forEach(b => b.classList.toggle('on', b.dataset.mode === mg.mode));
+    $('migCats').hidden = mg.mode !== 'simple';
+    $('migAdv').hidden = mg.mode !== 'advanced';
+    if (mg.mode === 'simple') renderCats(); else renderAdv();
+    updateMigPreview();
+  }
+  function catCounts(c) {
+    const st = { new: 0, same: 0, different: 0, partial: 0 };
+    for (const i of c.items) st[itemState(i)]++;
+    return { picked: c.items.filter(i => mg.sel.has(i.key)).length, size: c.items.reduce((n, i) => n + i.size, 0), st };
+  }
+  const stateLine = st => [st.new && `${num(st.new)} new`, st.different && `${num(st.different)} different`, st.partial && `${num(st.partial)} partly there`, st.same && `${num(st.same)} already there`].filter(Boolean).join(' · ');
+  function renderCats() {
+    const cats = mg.scan.categories;
+    $('migCats').innerHTML = cats.map(c => {
+      const k = catCounts(c);
+      const warn = catWarning(c);
+      return `<label class="mig-cat ${k.picked ? 'on' : ''}"><input type="checkbox" data-mcat="${c.id}"${k.picked === c.items.length ? ' checked' : ''}>
+        <div><b>${esc(c.label)}</b>${k.picked && k.picked < c.items.length ? ` <span class="tag">${num(k.picked)} of ${num(c.items.length)}</span>` : ''}
+        <div class="meta">${esc(c.desc)}</div>
+        <div class="meta">${plural(c.items.length, 'item')} · ${size(k.size)} — ${stateLine(k.st)}</div>
+        ${warn ? `<div class="warn">⚠ ${esc(warn)}</div>` : ''}</div></label>`;
+    }).join('');
+    $('migCats').querySelectorAll('[data-mcat]').forEach(inp => {
+      const c = cats.find(x => x.id === inp.dataset.mcat);
+      const k = catCounts(c);
+      inp.indeterminate = k.picked > 0 && k.picked < c.items.length;
+      inp.onchange = () => { pickCat(c, inp.checked); rememberCats(); renderMig(); };
+    });
+  }
+  function pickCat(c, on) { for (const i of c.items) on ? mg.sel.add(i.key) : mg.sel.delete(i.key); }
+  function pickItem(key, on) {
+    const i = mg.items.get(key);
+    if (on) {
+      mg.sel.add(key);
+      if (i.cat === 'characters' && $('migLinkChats').checked && mg.items.has(i.chats)) mg.sel.add(i.chats);
+    } else mg.sel.delete(key);
+  }
+
+  // Advanced: every item, grouped by category, searchable and filterable.
+  function itemVisible(i) {
+    if (mg.filter !== 'all' && (mg.filter === 'different' ? !['different', 'partial'].includes(itemState(i)) : itemState(i) !== mg.filter)) return false;
+    return !mg.search || `${i.label} ${i.sub}`.toLowerCase().includes(mg.search);
+  }
+  function itemRow(i) {
+    const st = itemState(i);
+    const tag = { new: '<span class="tag good">new</span>', same: '<span class="tag">already there</span>', partial: '<span class="tag">partly there</span>',
+      different: `<span class="tag warn" title="${num(i.diffFiles)} file${i.diffFiles === 1 ? '' : 's'} differ; ${num(i.newerInSource)} of them newer in the source">different</span>` }[st];
+    const missing = groupMissing(i);
+    const extra = chatOrphan(i) ? '<span class="tag warn" title="Its character is not in the target and not picked">character not copied</span>'
+      : missing.length ? `<span class="tag warn" title="${esc(missing.join(', '))}">needs ${plural(missing.length, 'character')}</span>` : '';
+    return `<label class="mig-item"><input type="checkbox" data-mitem="${esc(i.key)}"${mg.sel.has(i.key) ? ' checked' : ''}><span class="lbl">${esc(i.label)}${i.sub ? ` <i>· ${esc(i.sub)}</i>` : ''}</span>${extra}${tag}<span class="sz">${size(i.size)}</span></label>`;
+  }
+  function renderAdv() {
+    const box = $('migGroups');
+    const scrolls = {};
+    box.querySelectorAll('[data-mgroup]').forEach(d => { scrolls[d.dataset.mgroup] = d.querySelector('.mig-items')?.scrollTop || 0; });
+    box.innerHTML = mg.scan.categories.map(c => {
+      const items = c.items.map(i => mg.items.get(i.key)).filter(itemVisible);
+      if (!items.length && (mg.search || mg.filter !== 'all')) return '';
+      const k = catCounts(c);
+      const open = mg.open.has(c.id) || (mg.search && items.length <= 50);
+      return `<details class="mig-group" data-mgroup="${c.id}"${open ? ' open' : ''}><summary><input type="checkbox" data-mgcat="${c.id}"${k.picked === c.items.length ? ' checked' : ''}><b>${esc(c.label)}</b>
+        <span class="muted">${num(k.picked)} of ${num(c.items.length)} picked · ${size(k.size)}${catWarning(c) ? ' · <span style="color:var(--warn)">⚠</span>' : ''}</span></summary>
+        <div class="mig-items">${open ? items.map(itemRow).join('') : ''}</div></details>`;
+    }).join('') || '<div class="empty">Nothing matches.</div>';
+    box.querySelectorAll('[data-mgroup]').forEach(d => {
+      const list = d.querySelector('.mig-items');
+      if (list) list.scrollTop = scrolls[d.dataset.mgroup] || 0;
+      // Items are only drawn for open categories (some have hundreds).
+      d.ontoggle = () => { d.open ? mg.open.add(d.dataset.mgroup) : mg.open.delete(d.dataset.mgroup); if (d.open && !list.childElementCount) renderAdv(); };
+    });
+    box.querySelectorAll('[data-mgcat]').forEach(inp => {
+      const c = mg.scan.categories.find(x => x.id === inp.dataset.mgcat);
+      const k = catCounts(c);
+      inp.indeterminate = k.picked > 0 && k.picked < c.items.length;
+      inp.onclick = e => e.stopPropagation(); // don't open/close the group
+      inp.onchange = () => {
+        // With a search or filter, only what's shown.
+        const shown = mg.search || mg.filter !== 'all' ? c.items.map(i => mg.items.get(i.key)).filter(itemVisible) : c.items;
+        for (const i of shown) pickItem(i.key, inp.checked);
+        renderMig();
+      };
+    });
+    box.querySelectorAll('[data-mitem]').forEach(inp => inp.onchange = () => { pickItem(inp.dataset.mitem, inp.checked); renderMig(); });
+  }
+  $('migSearch').oninput = () => { mg.search = $('migSearch').value.trim().toLowerCase(); renderAdv(); };
+  document.querySelectorAll('#migFilter button').forEach(b => b.onclick = () => {
+    mg.filter = b.dataset.f;
+    document.querySelectorAll('#migFilter button').forEach(x => x.classList.toggle('on', x === b));
+    renderAdv();
+  });
+
+  // ----- what it will do -----
+  let migPreviewTimer = null;
+  function updateMigPreview() {
+    clearTimeout(migPreviewTimer);
+    migPreviewTimer = setTimeout(async () => {
+      if (!mg.scan) return;
+      const keys = [...mg.sel];
+      const diff = keys.reduce((n, k) => n + (mg.items.get(k)?.diffFiles || 0), 0);
+      $('migPolicyBox').hidden = !diff;
+      const p = await D.migPreview(mg.scan.id, keys, mg.policy);
+      if (!p) return;
+      const enough = p.free == null || p.bytes < p.free - 200 * 1024 ** 2;
+      $('migSummary').innerHTML = !keys.length ? 'Pick what to copy above.'
+        : !p.files ? `Nothing to copy: ${p.skipped ? `the ${plural(p.skipped, 'different file')} stay as they are (see below), everything else` : 'everything you picked'} is already there.`
+        : `Copies <b>${plural(p.files, 'file')}</b> (${size(p.bytes)}) from ${plural(keys.length, 'picked item')}${p.replaces ? `, replacing ${plural(p.replaces, 'file')} in the target (the old ones are kept for Undo)` : ''}.${p.skipped ? ` ${plural(p.skipped, 'different file')} stay${p.skipped === 1 ? 's' : ''} as ${p.skipped === 1 ? 'it is' : 'they are'}.` : ''}`
+          + (enough ? '' : ` <span class="err">Not enough free space on the target's drive (${size(p.free)} free).</span>`);
+      $('btnMigRun').disabled = !p.files || !enough || mg.running || !!state.busy;
+    }, 120);
+  }
+  document.querySelectorAll('#migPolicy button').forEach(b => {
+    b.classList.toggle('on', b.dataset.p === mg.policy);
+    b.onclick = () => {
+      mg.policy = b.dataset.p;
+      migStore.set('policy', mg.policy);
+      document.querySelectorAll('#migPolicy button').forEach(x => x.classList.toggle('on', x === b));
+      updateMigPreview();
+    };
+  });
+
+  // ----- copying -----
+  function migRunning(on) {
+    mg.running = on;
+    $('btnMigRun').hidden = on;
+    $('btnMigCancel').hidden = !on;
+    $('btnMigCancel').disabled = false;
+    $('migProgBox').hidden = !on;
+    ['migSrc', 'migDst', 'migSrcUser', 'migDstUser', 'btnMigScan', 'btnMigSwap', 'migBackup'].forEach(id => { $(id).disabled = on; });
+    $('migPick').style.pointerEvents = on ? 'none' : '';
+    $('migPick').style.opacity = on ? '.6' : '';
+  }
+  D.onMigProgress(p => {
+    $('migBar').firstElementChild.style.width = `${p.totalBytes ? Math.floor((p.bytes * 100) / p.totalBytes) : Math.floor((p.done * 100) / (p.total || 1))}%`;
+    $('migProgText').textContent = `${num(p.done)} of ${plural(p.total, 'file')} · ${size(p.bytes)} of ${size(p.totalBytes)}`;
+  });
+  $('btnMigCancel').onclick = () => { $('btnMigCancel').disabled = true; D.migCancel(); };
+  $('btnMigRun').onclick = async () => {
+    const e = ends();
+    $('migErr').textContent = '';
+    $('migDone').hidden = true;
+    $('migBar').firstElementChild.style.width = '0%';
+    $('migProgText').textContent = $('migBackup').checked ? 'Backing up the target first…' : 'Starting…';
+    migRunning(true);
+    const r = await D.migRun({ id: mg.scan.id, dst: e.dst, keys: [...mg.sel], policy: mg.policy, backupFirst: $('migBackup').checked });
+    migRunning(false);
+    if (!r.id) { $('migErr').textContent = r.error || 'Nothing was copied.'; return; }
+    const target = migFolder(e.dst);
+    $('migDone').hidden = false;
+    $('migDone').innerHTML = `<span class="${r.error ? 'err' : r.cancelled ? 'muted' : ''}" style="flex:1;min-width:240px">${r.error ? 'Stopped by an error' : r.cancelled ? 'Stopped' : '✓ Done'}: ${plural(r.added, 'file')} added, ${num(r.replaced)} replaced${r.skipped ? `, ${num(r.skipped)} kept as ${r.skipped === 1 ? 'it was' : 'they were'}` : ''}.${r.error ? ` (${esc(r.error)})` : ''}</span>
+      <button class="btn sm" id="btnMigUndoNow"><svg class="i"><use href="#i-restore"/></svg>Undo</button>
+      ${target?.active ? '<button class="btn sm primary" id="btnMigOpen"><svg class="i"><use href="#i-play"/></svg>Open SillyTavern</button>' : target ? `<button class="btn sm primary" id="btnMigUse">Switch to "${esc(target.name)}"</button>` : ''}`;
+    $('btnMigUndoNow').onclick = () => undoMig(e.dst, r.id);
+    if ($('btnMigOpen')) $('btnMigOpen').onclick = () => D.openST();
+    if ($('btnMigUse')) $('btnMigUse').onclick = () => D.profileUse(target.id);
+    loadJournals();
+    scanMig({ keepSelection: true }); // shows the new state: what was copied is "already there" now
+  };
+
+  // ----- earlier migrations (undo) -----
+  async function loadJournals() {
+    const dst = $('migDst').value;
+    const list = dst ? await D.migJournals(dst) : [];
+    $('migPast').hidden = !list.length;
+    $('migPastList').innerHTML = list.map(j => `<div class="item"><div class="main">
+        <div class="title">${esc(new Date(j.at).toLocaleString())}${j.cancelled ? ' <span class="tag">stopped early</span>' : ''}</div>
+        <div class="meta">From ${esc(j.from)}${j.fromUser !== 'default-user' ? ` (user ${esc(j.fromUser)})` : ''}${j.toUser !== 'default-user' ? ` into user ${esc(j.toUser)}` : ''} · ${plural(j.added, 'file')} added, ${num(j.replaced)} replaced</div></div>
+        <button class="btn sm" data-task data-migundo="${esc(j.id)}"><svg class="i"><use href="#i-restore"/></svg>Undo</button></div>`).join('');
+    $('migPastList').querySelectorAll('[data-migundo]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => undoMig(dst, b.dataset.migundo); });
+  }
+  async function undoMig(dst, id) {
+    const ok = await D.migUndo(dst, id);
+    if (ok) { $('migDone').hidden = true; loadJournals(); if (mg.scan) scanMig({ keepSelection: true }); }
+  }
 
   // ---------- back end ----------
   async function loadBackend() {
@@ -1207,6 +2128,8 @@
 
   function refreshAll() {
     stLogoSrc = null;
+    loadProfiles();
+    loadNews();
     loadThemes();
     D.getState().then(s => { current = s.settings; if (state.page === 'settings') loadSettingsForm(); });
     // loadPage below already covers the info/extensions of the open page.
@@ -1380,6 +2303,9 @@
   D.onSettings(s => { current = s; if (state.page === 'settings') loadSettingsForm(); });
   D.onWindows(w => { state.windows = w; renderStatus(); });
   D.onAppUpdate(renderAppUpdate);
+  D.onProfiles(loadProfiles);
+  D.onHistory(loadNews);
+  D.onStDownload(p => { setDlStep(p.step === 'deps' ? 2 : 1); setDlBar(p.percent, p.text); });
 
   (async () => {
     await loadThemes();
@@ -1393,8 +2319,9 @@
     renderStatus();
     renderMiniLog();
     setBusy(s.busy);
+    loadProfiles();
     const st = await loadSetup();
-    if (st.ready) { loadInfo(); loadExtensions(false); loadLan(); }
+    if (st.ready) { loadInfo(); loadExtensions(false); loadLan(); loadNews(); }
   })();
 </script>
 </body>
