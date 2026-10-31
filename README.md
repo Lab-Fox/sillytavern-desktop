@@ -51,6 +51,7 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 **A better SillyTavern window**
 - Tabs for pages that SillyTavern or its extensions open, plus full screen (**F11**), **always on top**, or **stay in background**.
 - Several SillyTavern at once, including a **read-only copy** to browse chats and presets without changing anything, and other installs on your PC side by side.
+- **SillyTavern on another computer** (another PC, a home server, a VPS) as a tab, with its login saved encrypted and a warning for unencrypted addresses.
 
 **Keeps your SillyTavern healthy**
 - Safe one-click updates for SillyTavern and all its extensions, and switching between the **release** and **staging** versions.
@@ -62,7 +63,7 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 - Use SillyTavern from your **phone or tablet** on the same Wi-Fi: scan a QR code, with an optional password.
 - Keeps running in the tray if you want, and can update SillyTavern by itself when it starts.
 - Updates itself when a new version is out, always after you click.
-- Themes for the launcher (make and share your own), and your own font for the console.
+- Themes for the launcher (make and share your own), a clear pixel font (**Departure Mono**) or any font you like for the app, a size from 80 to 150 %, and your own font for the console.
 - Built-in userscripts, and extensions for the app itself.
 
 ## Get started
@@ -125,6 +126,7 @@ A profile is a name for a SillyTavern folder ("Main", "Testing staging", "SillyT
 - **Switching** while the server runs stops it, starts it on the new folder and reloads open SillyTavern tabs (the app asks first when a SillyTavern window is open).
 - **Add profile** picks a folder (the SillyTavern folder or one that contains it). **Find on this PC** adds a profile for every SillyTavern the app finds. Editing a profile changes its name or folder.
 - **Open next to it** runs another profile at the same time on its own port, as a tab.
+- **SillyTavern on another computer** (card below the profiles): **Add** a name and its address (like `http://192.168.1.25:8000`), and its user name and password if it asks for one (SillyTavern's basic auth). **Test** says whether it answers, is SillyTavern, or wants a login. **Open** shows it as a tab in the SillyTavern window (also in the window's **▾** menu and the tray menu). Each one has its own browser session, so a login on SillyTavern's own login page stays too. The password is saved encrypted with Windows' own protection. A plain `http://` address outside your home network (not a home, `.local` or Tailscale address) is marked **not encrypted**, and the app warns before opening it. These aren't folders, so the SillyTavern on this PC keeps running as it is; updates, backups and migrating happen on that computer.
 - **Removing** a profile never deletes its folder. The profile in use can't be removed.
 - Your existing setup becomes your first profile automatically, and every folder the app uses gets one.
 
@@ -236,7 +238,7 @@ Want to make a desktop extension? See **[EXTENSIONS.md](EXTENSIONS.md)** and the
 
 ### Themes
 
-The launcher has a soft retro pixel look. Pick **SillyTavern** (default) or **Fox** in **Settings → Appearance**, or click **New theme**: choose seven colors and a logo, and every logo turns into pixel art. **Export** and **Import theme…** share themes as small `.json` files. Themes are only colors and an image, never code.
+The launcher has a soft retro pixel look in **Departure Mono**, a pixel font where B and 8, I, l and 1, and O and 0 are easy to tell apart. **Settings → Appearance → App font** switches to DotGothic16, Pixelify Sans (the font before 1.6), VT323, Segoe UI or any font on your PC, and **Size** makes the launcher 80 to 150 % as large. The font also applies to the SillyTavern window's top bar; SillyTavern's own pages keep the font chosen in SillyTavern. Pick a theme, **SillyTavern** (default) or **Fox**, in **Settings → Appearance**, or click **New theme**: choose seven colors and a logo, and every logo turns into pixel art. **Export** and **Import theme…** share themes as small `.json` files. Themes are only colors and an image, never code.
 
 <details>
 <summary>Theme file format</summary>
@@ -266,6 +268,7 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | Check for updates on launch | On | Shows on Home when SillyTavern has an update |
 | Update SillyTavern on launch | Off | When an update is out, installs it before the server starts |
 | Check for app updates on launch | On | Shows on Home when this app has a new version. **Download update**, then **Restart and update** |
+| Get preview versions of this app | Off | Also offers test versions (pre-releases, marked **preview**) before they become a regular release. Off again: you get the next regular release |
 | Back up before updating | On | Back up your data before every update or channel switch |
 | Scheduled backups | Off | On the **Backups** page: when, which profiles, where to, how many to keep |
 | Use this app's own Node.js and Git | Off | Under **Maintenance → Back end** |
@@ -275,6 +278,7 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | Port | `8000` | The port SillyTavern runs on |
 | Phone & tablet | Off | Let devices on your Wi-Fi open SillyTavern, with an optional password ([how](#on-your-phone-or-tablet)) |
 | Window layer, tabs | Normal, on | The SillyTavern window's defaults (also in its right-click menu) |
+| App font, Size | Departure Mono, 100 % | The font of the launcher and the SillyTavern window's top bar, and the launcher's size |
 | Console font | Pixel | Any font on your PC, and its size |
 
 **Closing:** closing every window stops the server and quits (unless the tray is on). If SillyTavern is already running elsewhere on the same port, the app uses that server instead of starting another.
@@ -388,6 +392,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `setup.js` | Finding SillyTavern, installing Node.js and Git, moving an install |
 | `runtime.js` | The app's own Node.js and Git: download from nodejs.org / Git for Windows, SHA256 check, unpack, put in front of `PATH` |
 | `importer.js` | Import: telling cards, lorebooks and presets apart, and sending them to SillyTavern's own import endpoints |
+| `remote.js` | SillyTavern on other computers: the list, address checks, encrypted logins, the Test probe |
 | `backupsched.js` | Scheduled backups: when they are due, "did anything change", where they go, failures |
 | `profiles.js` | Profiles: named SillyTavern folders (`settings.profiles`) |
 | `stextensions.js` | SillyTavern extensions: the Tavernary catalog and ratings, update snapshots and undo, installing, Kits |
@@ -412,7 +417,8 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - **Portable exes unpack to a temp folder before running**, so `process.execPath` points to the wrong place. Use `PORTABLE_EXECUTABLE_DIR` (see `exeBases()` in `main.js`).
 - **Packaged apps run from a read-only archive (asar).** Never write next to `__dirname`; use `app.getPath('userData')`.
 - **Single-instance lock:** all startup wiring stays inside `if (gotLock)`. `--quit` (sent by the installer) closes a running copy and never starts one.
-- **Self-update depends on release file names:** the installed app downloads `SillyTavern-Desktop-Setup.exe`, the portable one `SillyTavern-Desktop.exe`, from the latest release with a `vX.Y.Z` tag. Keep those names. `ST_DESKTOP_UPDATE_URL` points the check at a local copy of the releases API for testing.
+- **Self-update depends on release file names:** the installed app downloads `SillyTavern-Desktop-Setup.exe`, the portable one `SillyTavern-Desktop.exe`, from the latest release with a `vX.Y.Z` tag. Keep those names. `ST_DESKTOP_UPDATE_URL` points the check at a local copy of the releases API for testing, `ST_DESKTOP_RELEASES_URL` the preview check (which reads the release list, because GitHub's "latest" is never a pre-release). Preview versions are `X.Y.Z-preview.N` tags published with `--prerelease`; a regular `X.Y.Z` counts as newer than its previews.
+- **Remote SillyTavern** (`remote.js`, `settings.remotes`) are not profiles: they never become `sillytavernPath`, they open as tabs with `persist:remote-<id>` sessions, and `lockToServer` keeps those tabs on their own origin. Basic-auth logins come from `app.on('login')` (two tries per 10 s); changing a login clears that session's auth cache. Passwords are stored with `safeStorage` (DPAPI), and `publicSettings()` leaves `remotes` out entirely.
 - **GitHub allows 60 unauthenticated API requests per hour per connection.** The check's answer is kept for 6 hours in `app-update-check.json` (app data folder) and reused on launch; the app re-checks every 6 hours while open; a refused check (403/429 with the rate-limit headers) falls back to the remembered answer and is retried after GitHub's reset time. **Check for app updates** always asks GitHub.
 - **The portable swap uses a batch file run by `cmd`:** a detached PowerShell (no console) exits without running anything.
 - **The installer would otherwise kill the app** (electron-builder's default), and the server would never be stopped properly. `installer.nsh` overrides `customCheckAppRunning` and must include `getProcessInfo.nsh` and `Var pid` itself.
@@ -434,6 +440,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - **The app's own Node.js and Git** live in `runtime\node` and `runtime\git` in the app data folder. `runtime.apply()` puts `runtime\node` and `runtime\git\cmd` in front of `process.env.Path`; every child process inherits it, so nothing else needs to know. `setup.refreshPath()` (after winget) replaces `Path`, so it calls `runtime.reapply()`. Replacing or removing a copy that a server runs on needs the servers stopped (`runTask` with `needsStopped`), so updating looks first and only stops them when something is newer.
 - **Import goes through SillyTavern's endpoints** (`/api/characters/import`, `/api/worldinfo/import`, `/api/presets/save`) with a session of its own: `GET /csrf-token` gives the token and cookie. Multipart uploads use the field name `avatar` (SillyTavern's multer setup). Lorebook and preset imports overwrite a file of the same name, so `importer.js` picks a free name first (for the default user). With SillyTavern's user accounts on, these requests need a login, and the app says to import from SillyTavern itself.
 - **Scheduled backups** compare a fingerprint of `data` (file count, total size, newest change; stats only) with the last one, kept in `backup-schedule.json` (app data folder). Their zips end in `-auto-scheduled.zip` and are pruned separately from the ones before updates.
+- **Git calls run side by side where they can:** extension status runs 8 extensions at a time (6 while fetching), SillyTavern's version info asks its git questions at once, and the launcher only runs the full setup check (drive scan, node/git/winget) while the welcome screen is open (`setup-ready` is the cheap one). Keep new per-extension work inside `eachLimited` in `listExtensions`.
 - **SillyTavern opens a browser tab on start** when `browserLaunch.enabled` is on (the default in a fresh `config.yaml`). `instances.serverEnv()` turns that off for every server the app starts (`SILLYTAVERN_BROWSERLAUNCH_ENABLED`, and `SILLYTAVERN_AUTORUN` for older versions).
 
 </details>
@@ -447,6 +454,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] Extension safety ratings, update review and undo, Kits, finding extensions
 - [x] What's new: release notes and changes before and after updates, history per install
 - [x] Scheduled backups, import by drag & drop / Open with, the app's own Node.js and Git
+- [x] Preview versions of the app, SillyTavern on another computer, a clearer pixel font and font/size settings
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)
 
@@ -459,7 +467,7 @@ Pull requests are welcome. One rule: **wrap, never fork.** No SillyTavern files 
 - [SillyTavern](https://github.com/SillyTavern/SillyTavern), the software this app runs. Go give it a star.
 - SillyTavern's own `src/electron` launcher showed that this approach works.
 - [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT) draws the phone QR code.
-- Fonts: [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) and [VT323](https://fonts.google.com/specimen/VT323) (SIL Open Font License).
+- Fonts: [Departure Mono](https://departuremono.com/) by Helena Zhang, [DotGothic16](https://fonts.google.com/specimen/DotGothic16), [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) and [VT323](https://fonts.google.com/specimen/VT323) (all SIL Open Font License; the licences are in `fonts/`).
 
 ## License
 

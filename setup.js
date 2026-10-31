@@ -70,11 +70,14 @@ export function detectInstalls(extraBases = []) {
 
 // ---------- requirements ----------
 export async function checkRequirements() {
-    const node = await run('node', ['-v'], os.homedir(), { quiet: true });
+    const [node, gitR, wg] = await Promise.all([
+        run('node', ['-v'], os.homedir(), { quiet: true }),
+        run('git', ['--version'], os.homedir(), { quiet: true }),
+        IS_WIN ? run('winget', ['--version'], os.homedir(), { quiet: true }) : { code: 1 },
+    ]);
     const nodeVer = node.code === 0 ? node.out.trim().replace(/^v/, '') : '';
-    const gitR = await run('git', ['--version'], os.homedir(), { quiet: true });
     const gitVer = gitR.code === 0 ? (gitR.out.match(/\d+\.\d+\.\d+/) || [''])[0] : '';
-    const winget = IS_WIN ? (await run('winget', ['--version'], os.homedir(), { quiet: true })).code === 0 : false;
+    const winget = wg.code === 0;
     return {
         node: { installed: !!nodeVer, version: nodeVer, ok: parseInt(nodeVer, 10) >= MIN_NODE },
         git: { installed: !!gitVer, version: gitVer, ok: !!gitVer },

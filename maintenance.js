@@ -77,16 +77,20 @@ export const npm = (cwd, args, opts) => (IS_WIN
 export async function getInfo(stRoot) {
     const info = { version: '', branch: '', pinned: '', commit: '', commitDate: '', behind: null, dirty: [], isGit: false };
     try { info.version = JSON.parse(fs.readFileSync(path.join(stRoot, 'package.json'), 'utf8')).version; } catch { /* not installed */ }
-    const head = await git(stRoot, ['log', '-1', '--format=%h|%cs'], { quiet: true });
+    // Independent questions, asked at the same time.
+    const [head, branch, behind, status] = await Promise.all([
+        git(stRoot, ['log', '-1', '--format=%h|%cs'], { quiet: true }),
+        git(stRoot, ['branch', '--show-current'], { quiet: true }),
+        git(stRoot, ['rev-list', '--count', 'HEAD..@{u}'], { quiet: true }),
+        git(stRoot, ['status', '--porcelain', '--untracked-files=no'], { quiet: true }),
+    ]);
     if (head.code !== 0) return info;
     info.isGit = true;
     [info.commit, info.commitDate] = head.out.trim().split('|');
-    info.branch = (await git(stRoot, ['branch', '--show-current'], { quiet: true })).out.trim();
+    info.branch = branch.out.trim();
     // A specific version (downloaded or checked out by tag) is on no branch, so there is nothing to pull.
     if (!info.branch) info.pinned = (await pinnedVersion(stRoot)) || info.version || 'a fixed version';
-    const behind = await git(stRoot, ['rev-list', '--count', 'HEAD..@{u}'], { quiet: true });
     if (behind.code === 0) info.behind = parseInt(behind.out.trim(), 10);
-    const status = await git(stRoot, ['status', '--porcelain', '--untracked-files=no'], { quiet: true });
     info.dirty = status.out.split(/\r?\n/).filter(Boolean).map(l => l.slice(3));
     return info;
 }
@@ -350,6 +354,13 @@ export function installedRemotes(stRoot) {
     return out;
 }
 
+// Runs fn over items, `limit` at a time (git processes are cheap to run side by side).
+async function eachLimited(items, limit, fn) {
+    let next = 0;
+    const worker = async () => { while (next < items.length) await fn(items[next++]); };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
 export async function listExtensions(stRoot, { fetch = false } = {}) {
     const out = [];
     for (const { dir, scope } of extensionRoots(stRoot)) {
@@ -364,19 +375,25 @@ export async function listExtensions(stRoot, { fetch = false } = {}) {
                 ext.version = m.version || '';
                 ext.author = m.author || '';
             } catch { /* no manifest */ }
-            if (fs.existsSync(path.join(extDir, '.git'))) {
-                ext.isGit = true;
-                if (fetch) await git(extDir, ['fetch', '--quiet'], { quiet: true });
-                const b = await git(extDir, ['rev-list', '--count', 'HEAD..@{u}'], { quiet: true });
-                if (b.code === 0) ext.behind = parseInt(b.out.trim(), 10);
-                // The exact commits, for safety ratings and undoing updates.
-                const h = await git(extDir, ['log', '-1', '--format=%H%x09%cI'], { quiet: true });
-                if (h.code === 0) [ext.head, ext.headDate] = h.out.trim().split('\t');
-                if (ext.behind > 0) ext.incoming = (await git(extDir, ['rev-parse', '@{u}'], { quiet: true })).out.trim();
-            }
+            ext.isGit = fs.existsSync(path.join(extDir, '.git'));
             out.push(ext);
         }
     }
+    // Several extensions at once: one by one, 16 extensions took 1.5 s.
+    await eachLimited(out.filter(e => e.isGit), fetch ? 6 : 8, async ext => {
+        if (fetch) await git(ext.path, ['fetch', '--quiet'], { quiet: true });
+        // The exact commit (for safety ratings and undoing updates) and the waiting ones, newest first.
+        const [h, incoming] = await Promise.all([
+            git(ext.path, ['log', '-1', '--format=%H%x09%cI'], { quiet: true }),
+            git(ext.path, ['rev-list', 'HEAD..@{u}'], { quiet: true }),
+        ]);
+        if (h.code === 0) [ext.head, ext.headDate] = h.out.trim().split('\t');
+        if (incoming.code === 0) {
+            const shas = incoming.out.split(/\r?\n/).filter(Boolean);
+            ext.behind = shas.length;
+            ext.incoming = shas[0] || '';
+        }
+    });
     return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 

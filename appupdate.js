@@ -10,9 +10,14 @@ import fs from 'fs';
 import path from 'path';
 
 const REPO = 'Lab-Fox/sillytavern-desktop';
-// For testing only: point the check at a local copy of the releases API.
+// For testing only: point the checks at a local copy of the releases API.
 const LATEST_URL = process.env.ST_DESKTOP_UPDATE_URL || `https://api.github.com/repos/${REPO}/releases/latest`;
+// Preview channel: GitHub's "latest" is never a pre-release, so read the list.
+const LIST_URL = process.env.ST_DESKTOP_RELEASES_URL || `https://api.github.com/repos/${REPO}/releases?per_page=15`;
+const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
 export const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
+export const releasePage = () => (state.version && ['available', 'downloading', 'ready'].includes(state.status)
+    ? `https://github.com/${REPO}/releases/tag/v${encodeURIComponent(state.version)}` : RELEASES_PAGE);
 const ASSET = { installed: 'SillyTavern-Desktop-Setup.exe', portable: 'SillyTavern-Desktop.exe' };
 
 let logLine = () => {};
@@ -23,6 +28,8 @@ let release = null; // { version, asset } of the update on offer
 let file = null;    // the downloaded update
 let cacheFile = null;
 let retryTimer = null;
+let wantsPreview = () => false;
+const sourceUrl = () => (wantsPreview() ? LIST_URL : LATEST_URL);
 
 // GitHub answers 60 unauthenticated API requests per hour per internet
 // connection (shared by everyone behind a VPN). So the answer is kept for a
@@ -32,6 +39,7 @@ const CACHE_HOURS = 6;
 
 export function initAppUpdate(opts) {
     ({ logLine, send } = opts);
+    if (opts.preview) wantsPreview = opts.preview;
     cacheFile = path.join(opts.userData, 'app-update-check.json');
 }
 
@@ -48,11 +56,24 @@ function kind() {
     return process.env.PORTABLE_EXECUTABLE_FILE ? 'portable' : 'installed';
 }
 
-// "1.10.0" is newer than "1.9.2".
-function isNewer(a, b) {
-    const pa = a.split('.').map(Number);
-    const pb = b.split('.').map(Number);
-    for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] > pb[i];
+// "1.10.0" is newer than "1.9.2", and "1.6.0" than its preview "1.6.0-preview.2"
+// (semver: a pre-release comes before its release; numeric parts compare as numbers).
+export function isNewer(a, b) {
+    const [ca, pa = ''] = a.split(/-(.*)/s);
+    const [cb, pb = ''] = b.split(/-(.*)/s);
+    const na = ca.split('.').map(Number), nb = cb.split('.').map(Number);
+    for (let i = 0; i < 3; i++) if (na[i] !== nb[i]) return na[i] > nb[i];
+    if (pa === pb) return false;
+    if (!pa || !pb) return !pa;
+    const xa = pa.split('.'), xb = pb.split('.');
+    for (let i = 0; i < Math.max(xa.length, xb.length); i++) {
+        if (xa[i] === undefined || xb[i] === undefined) return xb[i] === undefined;
+        if (xa[i] === xb[i]) continue;
+        const da = /^\d+$/.test(xa[i]), db = /^\d+$/.test(xb[i]);
+        if (da && db) return Number(xa[i]) > Number(xb[i]);
+        if (da !== db) return db; // words sort after numbers
+        return xa[i] > xb[i];
+    }
     return false;
 }
 
@@ -65,13 +86,13 @@ function removeDownloads() {
 function readCache() {
     try {
         const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-        return c.url === LATEST_URL ? c : null;
+        return c.url === sourceUrl() ? c : null;
     } catch { return null; }
 }
 
 function writeCache(r) {
-    const keep = { tag_name: r.tag_name, body: r.body, assets: (r.assets || []).map(a => ({ name: a.name, size: a.size, digest: a.digest, browser_download_url: a.browser_download_url })) };
-    try { fs.writeFileSync(cacheFile, JSON.stringify({ url: LATEST_URL, checkedAt: Date.now(), release: keep })); } catch { /* next time */ }
+    const keep = { tag_name: r.tag_name, body: r.body, prerelease: !!r.prerelease, assets: (r.assets || []).map(a => ({ name: a.name, size: a.size, digest: a.digest, browser_download_url: a.browser_download_url })) };
+    try { fs.writeFileSync(cacheFile, JSON.stringify({ url: sourceUrl(), checkedAt: Date.now(), release: keep })); } catch { /* next time */ }
 }
 
 function retryAt(time) {
@@ -84,9 +105,15 @@ function retryAt(time) {
 async function latestRelease(fresh) {
     const cached = readCache();
     if (!fresh && cached && Date.now() - cached.checkedAt < CACHE_HOURS * 3600e3) return cached.release;
-    const res = await net.fetch(LATEST_URL, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+    const res = await net.fetch(sourceUrl(), { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
     if (res.ok) {
-        const r = await res.json();
+        let r = await res.json();
+        // The list (preview channel): the newest published release, pre-releases included.
+        if (Array.isArray(r)) {
+            const tag = x => String(x.tag_name || '').replace(/^v/, '');
+            r = r.filter(x => !x.draft && VERSION.test(tag(x))).reduce((best, x) => (!best || isNewer(tag(x), tag(best)) ? x : best), null);
+            if (!r) throw new Error('GitHub lists no releases');
+        }
         writeCache(r);
         return r;
     }
@@ -114,7 +141,7 @@ export async function check({ quiet = false, fresh = false } = {}) {
     try {
         const r = await latestRelease(fresh);
         const version = String(r.tag_name || '').replace(/^v/, '');
-        if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`unexpected release tag "${r.tag_name}"`);
+        if (!VERSION.test(version)) throw new Error(`unexpected release tag "${r.tag_name}"`);
         if (!isNewer(version, app.getVersion())) {
             release = null;
             removeDownloads();
@@ -122,10 +149,10 @@ export async function check({ quiet = false, fresh = false } = {}) {
         }
         const asset = (r.assets || []).find(a => a.name === ASSET[kind()]);
         release = { version, asset };
-        logLine(`SillyTavern Desktop ${version} is available (this is ${app.getVersion()}).`);
+        logLine(`SillyTavern Desktop ${version}${r.prerelease ? ' (preview)' : ''} is available (this is ${app.getVersion()}).`);
         // Without a matching download (running from source, or an older
         // release without an installer) the launcher links to the release page.
-        return set({ status: 'available', version, notes: String(r.body || '').slice(0, 6000), canInstall: !!asset, kind: kind() });
+        return set({ status: 'available', version, preview: !!r.prerelease, notes: String(r.body || '').slice(0, 6000), canInstall: !!asset, kind: kind() });
     } catch (e) {
         if (!quiet) logLine(`Could not check for app updates: ${e.message}`);
         return set({ status: 'error', error: e.message });

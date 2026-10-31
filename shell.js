@@ -86,7 +86,8 @@ export class StWindow {
     }
     reload() { if (this.active) reloadTab(this.active); }
     // After a server restart every SillyTavern tab is a dead page.
-    reloadAll() { this.tabs.forEach(reloadTab); }
+    // which(instance): the tabs to reload (default all).
+    reloadAll(which = () => true) { this.tabs.filter(t => which(t.instance)).forEach(reloadTab); }
     toggleFullScreen() { this.win.setFullScreen(!this.fullScreen); }
     setLayer(mode) {
         this.layer = mode;
@@ -249,6 +250,7 @@ export class StWindow {
             fullScreen: this.fullScreen,
             layer: this.layer,
             colors: this.opts.colors,
+            font: this.opts.font?.(),
             controlsWidth: this.fullScreen ? 0 : CONTROLS_W,
         });
     }

@@ -1,5 +1,5 @@
 // preload.js — safe IPC bridge for the launcher UI
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 const on = channel => cb => ipcRenderer.on(channel, (_e, ...args) => cb(...args));
@@ -56,7 +56,18 @@ contextBridge.exposeInMainWorld('desktop', {
     setupState: () => invoke('setup-state'),
     useInstall: dir => invoke('use-install', dir),
     browseInstall: () => invoke('browse-install'),
+    setupReady: () => invoke('setup-ready'),
     installRequirements: () => invoke('install-requirements'),
+    setAppPreview: on => invoke('set-app-preview', on),
+    remotes: () => invoke('remotes'),
+    remoteSave: o => invoke('remote-save', o),
+    remoteDelete: id => invoke('remote-delete', id),
+    remoteProbe: url => invoke('remote-probe', url),
+    remoteCheckUrl: url => invoke('remote-check-url', url),
+    remoteOpen: id => invoke('remote-open', id),
+    uiFonts: () => invoke('ui-fonts'),
+    setUiFont: o => invoke('set-ui-font', o),
+    setZoom: pct => webFrame.setZoomFactor(Math.min(1.5, Math.max(0.8, pct / 100))),
     runtimeLatest: () => invoke('runtime-latest'),
     runtimeInstall: () => invoke('runtime-install'),
     runtimeUse: on => invoke('runtime-use', on),

@@ -10,6 +10,8 @@
   @font-face { font-family: "Pixelify Sans"; src: url("fonts/pixelify-sans-latin-600-normal.woff2") format("woff2"); font-weight: 600; }
   @font-face { font-family: "Pixelify Sans"; src: url("fonts/pixelify-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; }
   @font-face { font-family: "VT323"; src: url("fonts/vt323-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Departure Mono"; src: url("fonts/departure-mono-400.woff2") format("woff2"); }
+  @font-face { font-family: "DotGothic16"; src: url("fonts/dotgothic16-latin-400-normal.woff2") format("woff2"); }
 
   /* ---------- theme ----------
      A theme sets only the base colors (applyTheme() in the script);
@@ -27,9 +29,10 @@
     --tint: color-mix(in srgb, var(--accent) 14%, transparent);
     --well: color-mix(in srgb, var(--bg) 80%, #000);
     --px: 2px;            /* pixel unit: borders, shadows, offsets */
-    --pixel-font: "Pixelify Sans", "Segoe UI", system-ui, sans-serif;
-    --mono: "VT323", "Cascadia Code", Consolas, monospace;
-    --log-font: var(--mono);   /* Settings → Console font */
+    --pixel-font: "Departure Mono", "Segoe UI", system-ui, sans-serif;   /* Settings → App font */
+    --mono: "Departure Mono", "Cascadia Code", Consolas, monospace;   /* paths, file names */
+    --console-pixel: "VT323", "Cascadia Code", Consolas, monospace;   /* the console's "Pixel (default)" */
+    --log-font: var(--console-pixel);   /* Settings → Console font */
     --log-size: 18px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
@@ -114,7 +117,7 @@
   .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .muted { color: var(--muted); }
   .small { font-size: 13.5px; }
-  .mono { font-family: var(--mono); font-size: 17px; letter-spacing: 0; }
+  .mono { font-family: var(--mono); font-size: .93em; letter-spacing: 0; }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -175,6 +178,8 @@
   .item .main { flex: 1; min-width: 0; }
   .item .title { color: var(--title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .item .meta { color: var(--muted); font-size: 13.5px; }
+  #extList .item .title, #xList .item .title { white-space: normal; overflow-wrap: anywhere; }
+  .item .meta.tagline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 2px 0; }
   .empty { color: var(--muted); text-align: center; padding: 28px 10px; }
   .check-ico { width: 22px; height: 22px; display: grid; place-items: center; flex-shrink: 0; border: var(--px) solid currentColor; }
   .check-ico svg.i { width: 13px; height: 13px; stroke-width: 3; }
@@ -222,7 +227,10 @@
   .switch span { font-size: 13.5px; color: var(--muted); }
 
   /* ---------- themes ---------- */
-  .themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+  .themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  /* As tall as the font box next to it, so the two labels line up. */
+  #setZoom { height: 37px; }
+  #setZoom button { height: 100%; }
   .theme-card { background: var(--panel2); padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--px) var(--px) 0 var(--shadow); }
   .theme-card:hover { border-color: var(--accent2); }
   .theme-card.on { border-color: var(--accent); box-shadow: 0 0 0 var(--px) var(--accent), calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
@@ -254,7 +262,7 @@
   .step-num svg.i { width: 13px; height: 13px; stroke-width: 3; }
   .item.current .title { color: var(--accent2); }
   .setup .mini-log { max-height: 150px; }
-  .path { font-family: var(--mono); font-size: 18px; color: var(--title); background: var(--well); padding: 4px 10px; word-break: break-all; user-select: text; letter-spacing: 0; }
+  .path { font-family: var(--mono); font-size: 14px; color: var(--title); background: var(--well); padding: 4px 10px; word-break: break-all; user-select: text; letter-spacing: 0; }
 
   /* ---------- profiles ---------- */
   .hdr-profile { display: flex; align-items: center; gap: 6px; margin-left: auto; min-width: 70px; flex: 0 1 220px; }
@@ -266,7 +274,7 @@
   .item .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
   #profList .item { flex-wrap: wrap; }
   #profList .item .main { min-width: 300px; }
-  .item .meta.mono { font-size: 16px; word-break: break-all; }
+  .item .meta.mono { font-size: 12.5px; word-break: break-all; }
   .form { margin-top: 14px; padding-top: 14px; border-top: var(--px) dashed var(--border); }
   .err { color: var(--bad); font-size: 13.5px; }
 
@@ -293,7 +301,7 @@
   .commits { max-height: 280px; overflow: auto; margin-top: 8px; font-size: 14px; user-select: text; }
   .commits div { display: flex; gap: 10px; padding: 2px 0; border-top: 1px dashed var(--border); }
   .commits div:first-child { border-top: 0; }
-  .commits .mono { color: var(--muted); font-size: 15px; flex-shrink: 0; }
+  .commits .mono { color: var(--muted); font-size: 12.5px; flex-shrink: 0; }
   .notes .tag { margin-left: 6px; }
   .news { border-color: var(--accent); }
   #xfList, #xList { max-height: 58vh; overflow: auto; }
@@ -478,6 +486,33 @@
               <button class="btn primary" id="btnProfSave"><svg class="i"><use href="#i-check"/></svg>Save profile</button>
               <button class="btn ghost" id="btnProfCancel">Cancel</button>
               <span class="err" id="profError"></span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>SillyTavern on another computer
+            <span class="act row"><button class="btn sm" id="btnRemAdd"><svg class="i"><use href="#i-plus"/></svg>Add</button></span>
+          </h2>
+          <p class="muted small" style="margin-bottom:8px">A SillyTavern running on another PC, a home server or a VPS. It opens as a tab in the SillyTavern window with its own login; this PC's SillyTavern keeps running as it is. Updates, backups and migrating happen on that computer.</p>
+          <div class="list" id="remList"></div>
+          <div class="form" id="remForm" hidden>
+            <div class="row" style="align-items:flex-end">
+              <div class="field" style="flex:1;min-width:180px;max-width:260px"><label>Name</label><input type="text" id="remName" maxlength="40" placeholder="Living room PC"></div>
+              <div class="field" style="flex:2;min-width:240px"><label>Address</label><input type="text" id="remUrl" maxlength="300" placeholder="http://192.168.1.25:8000" spellcheck="false"></div>
+              <button class="btn sm" id="btnRemTest"><svg class="i"><use href="#i-pulse"/></svg>Test</button>
+            </div>
+            <div class="warnbox" id="remWarn" hidden style="margin-top:10px"><b>Not encrypted:</b> this is a plain <span class="mono">http://</span> address outside your home network, so your password and chats would travel readable. Use <span class="mono">https://</span> or a private network such as Tailscale if you can.</div>
+            <div class="row" style="align-items:flex-end;margin-top:10px">
+              <div class="field"><label>User name (if it asks for one)</label><input type="text" id="remUser" maxlength="64" autocomplete="off" style="width:180px"></div>
+              <div class="field"><label>Password</label><input type="password" id="remPass" maxlength="128" autocomplete="new-password" style="width:200px"></div>
+              <button class="btn sm ghost" id="btnRemClearPass" hidden>Remove password</button>
+            </div>
+            <p class="muted small" id="remTestOut" style="margin-top:8px"></p>
+            <p class="muted small">The login is for SillyTavern's basic auth (its "listen" mode with a password); it's saved encrypted with Windows' own protection. If SillyTavern shows its own login page instead, sign in there once — the tab remembers it.</p>
+            <div class="row" style="margin-top:10px">
+              <button class="btn primary" id="btnRemSave"><svg class="i"><use href="#i-check"/></svg>Save</button>
+              <button class="btn ghost" id="btnRemCancel">Cancel</button>
+              <span class="err" id="remError"></span>
             </div>
           </div>
         </div>
@@ -756,6 +791,11 @@
           </span>
         </h2>
         <div class="themes" id="themeList"></div>
+        <div class="row" style="align-items:flex-end;margin-top:14px;padding-top:14px;border-top:var(--px) dashed var(--border)">
+          <div class="field" style="flex:1;min-width:300px;max-width:420px"><label>App font</label><select id="setUiFont"></select></div>
+          <div class="field"><label>Size</label><div style="display:flex;gap:10px;align-items:center"><div class="seg" id="setZoom"></div><button class="btn sm ghost" id="btnUiFontReset">Reset</button></div></div>
+        </div>
+        <p class="muted small" style="margin-top:6px">For this app's windows and the SillyTavern window's top bar. SillyTavern's own pages keep their font (change it in SillyTavern's User Settings).</p>
         <div id="themeEditor" hidden style="margin-top:18px;padding-top:16px;border-top:var(--px) dashed var(--border)">
           <div class="row" style="margin-bottom:14px">
             <div class="field" style="flex:1;max-width:320px"><label>Theme name</label><input type="text" id="themeName" maxlength="40" placeholder="My theme"></div>
@@ -808,6 +848,7 @@
           <label class="switch"><input type="checkbox" id="setCheck"><div><b>Check for updates on launch</b><span>Shows "update available" on Home. Never updates by itself.</span></div></label>
           <label class="switch"><input type="checkbox" id="setUpdLaunch"><div><b>Update SillyTavern on launch</b><span>When an update is out, install it before the server starts. Uses "Back up before updating".</span></div></label>
           <label class="switch"><input type="checkbox" id="setAppUpd"><div><b>Check for app updates on launch</b><span>Looks for a new version of this app on GitHub and shows it on Home. Installs only when you click.</span></div></label>
+          <label class="switch"><input type="checkbox" id="setAppPreview"><div><b>Get preview versions of this app</b><span>Also offers test versions (pre-releases) before they become a regular release. New things sooner, but tested less. Turn it off to wait for the next regular release. Applies right away.</span></div></label>
           <label class="switch"><input type="checkbox" id="setBackup"><div><b>Back up before updating</b><span>Zip your data before every update or channel switch.</span></div></label>
           <label class="switch"><input type="checkbox" id="setConfirm"><div><b>Confirm before quitting</b><span>Ask before quitting while the server runs.</span></div></label>
           <label class="switch"><input type="checkbox" id="setTray"><div><b>Keep running in the tray</b><span>Closing this window hides it to the tray (by the clock) and the server keeps running. Quit from the tray icon's menu.</span></div></label>
@@ -1068,7 +1109,7 @@
     if (page === 'extensions') { loadExtensions(false); loadKits(); if (state.extTab === 'desktop') loadDesktopExtensions(); }
     if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); }
     if (page === 'console') renderConsole();
-    if (page === 'settings') loadSettingsForm();
+    if (page === 'settings') loadSettingsForm({ fresh: true });
   }
 
   // ---------- server status ----------
@@ -1165,7 +1206,7 @@
     const show = ['available', 'downloading', 'ready'].includes(u.status);
     $('appUpdCard').hidden = !show;
     if (!show) return;
-    $('appUpdVer').textContent = u.version;
+    $('appUpdVer').innerHTML = `${esc(u.version)}${u.preview ? ' <span class="tag warn" title="A test version (pre-release). You get these because Settings → Get preview versions is on.">preview</span>' : ''}`;
     $('appUpdNotes').textContent = plainNotes(u.notes) || 'No notes for this release.';
     $('appUpdBar').hidden = u.status !== 'downloading';
     $('appUpdBar').firstElementChild.style.width = `${pct}%`;
@@ -1189,6 +1230,7 @@
     else if (u.status === 'available') D.appUpdateDownload();
   };
   $('btnAppCheck').onclick = () => D.appUpdateCheck();
+  $('setAppPreview').onchange = () => { current = { ...current, appPreview: $('setAppPreview').checked }; D.setAppPreview($('setAppPreview').checked); };
 
   // ---------- phone & tablet ----------
   // Home's card: the address to open on the phone, a QR code, and what to do next.
@@ -1227,6 +1269,7 @@
     $('btnLanSave').disabled = true;
     $('lanStatus').textContent = state.running ? 'Saving… the server restarts if needed.' : 'Saving…';
     const info = await D.lanSave({ on: $('setLan').checked, user: $('setLanUser').value, password });
+    unsaved.lan = false;
     $('btnLanSave').disabled = false;
     $('lanStatus').textContent = 'Saved.';
     setTimeout(() => { $('lanStatus').textContent = ''; }, 2500);
@@ -1336,7 +1379,10 @@
     if (fetch) el.innerHTML = '<div class="empty">Checking each extension for updates…</div>';
     // The ratings: loaded once a day (in the background the first time).
     if (!xs.catalogTried) { xs.catalogTried = true; D.extCatalog(false).then(r => { xs.catalogErr = r.ok ? r.stale : r.error; if (r.ok) loadExtensions(false); else renderCredit(); }); }
+    // A refresh can overlap "Check for updates": only the newest answer counts.
+    const seq = xs.seq = (xs.seq || 0) + 1;
     const r = await D.listExtensions(fetch);
+    if (seq !== xs.seq) return;
     Object.assign(xs, { list: r.exts, undo: r.undo, catalog: r.catalog });
     const behind = r.exts.filter(e => e.behind > 0).length;
     $('navExt').hidden = !behind;
@@ -1356,7 +1402,7 @@
         e.behind > 0 ? `<button class="btn sm" data-task data-xupd="${esc(e.path)}">Update</button>` : '',
         back ? `<button class="btn sm ghost" data-task data-xback="${esc(e.path)}" title="Back to the version from before the update of ${esc(new Date(back.at).toLocaleString())}">${icon('restore')}Roll back</button>` : '',
       ].join('');
-      return `<div class="item"><div class="main"><div class="title">${esc(e.name)} ${e.isGit ? ratingTag(e.rating, { remote: !!e.remote }) : ''} ${reportLink(e.rating)}</div><div class="meta">${meta}</div></div>${status}<div class="acts">${acts}</div></div>`;
+      return `<div class="item"><div class="main"><div class="title">${esc(e.name)}</div>${e.isGit ? `<div class="meta tagline">${ratingTag(e.rating, { remote: !!e.remote })} ${reportLink(e.rating)}</div>` : ''}<div class="meta">${meta}</div></div>${status}<div class="acts">${acts}</div></div>`;
     }).join('');
     el.querySelectorAll('[data-xupd]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => reviewUpdates([b.dataset.xupd]); });
     el.querySelectorAll('[data-xback]').forEach(b => { b.disabled = !!state.busy; b.onclick = async () => { await D.extUndo(b.dataset.xback); afterExtChange(); }; });
@@ -1398,7 +1444,7 @@
         : '<span class="tag warn" title="The version this update brings has not been scanned yet. Most updates are fine; read the changes if you are unsure.">update not scanned yet</span>';
       const bad = riskBad(r?.latestRisk) || riskBad(r?.incomingRisk);
       return `<label class="item" style="cursor:pointer"><input type="checkbox" data-xpick="${esc(e.path)}"${bad ? '' : ' checked'} style="width:16px;height:16px;accent-color:var(--accent)">
-        <div class="main"><div class="title">${esc(e.name)} ${ratingTag(r, { remote: !!e.remote })} ${reportLink(r)}</div><div class="meta">${e.behind} new change${e.behind === 1 ? '' : 's'}${bad ? ' · <span style="color:var(--bad)">rated high concern: read the report before updating</span>' : ''}</div></div>${incoming}</label>`;
+        <div class="main"><div class="title">${esc(e.name)}</div><div class="meta tagline">${ratingTag(r, { remote: !!e.remote })} ${reportLink(r)}</div><div class="meta">${e.behind} new change${e.behind === 1 ? '' : 's'}${bad ? ' · <span style="color:var(--bad)">rated high concern: read the report before updating</span>' : ''}</div></div>${incoming}</label>`;
     }).join('');
     const count = () => $('xList').querySelectorAll('[data-xpick]:checked').length;
     const sync = () => { const n = count(); $('btnXGo').innerHTML = `${icon('download')}Update ${n || ''} extension${n === 1 ? '' : 's'}`; $('btnXGo').disabled = !n || !!state.busy; };
@@ -1493,7 +1539,7 @@
     $('xExactBox').hidden = !missing.some(x => x.commit);
     $('xExact').checked = false;
     $('xList').innerHTML = missing.map(x => `<label class="item" style="cursor:pointer"><input type="checkbox" data-xpick="${esc(x.url)}"${riskBad(x.rating?.latestRisk) ? '' : ' checked'} style="width:16px;height:16px;accent-color:var(--accent)">
-        <div class="main"><div class="title">${esc(x.name || x.url)} ${ratingTag(x.rating ? { ...x.rating, version: '' } : null)} ${reportLink(x.rating)}</div><div class="meta"><button class="link" data-xurl="${esc(x.url)}">${esc(x.url)}</button>${x.scope === 'all users' ? ' · for all users' : ''}</div></div></label>`).join('');
+        <div class="main"><div class="title">${esc(x.name || x.url)}</div><div class="meta tagline">${ratingTag(x.rating ? { ...x.rating, version: '' } : null)} ${reportLink(x.rating)}</div><div class="meta"><button class="link" data-xurl="${esc(x.url)}">${esc(x.url)}</button>${x.scope === 'all users' ? ' · for all users' : ''}</div></div></label>`).join('');
     const sync = () => { const n = $('xList').querySelectorAll('[data-xpick]:checked').length; $('btnXGo').innerHTML = `${icon('download')}Install ${n || ''} extension${n === 1 ? '' : 's'}`; $('btnXGo').disabled = !n || !!state.busy; };
     $('xList').querySelectorAll('[data-xpick]').forEach(c => c.onchange = sync);
     sync();
@@ -1629,29 +1675,42 @@
 
   // ---------- settings ----------
   let current = {};
-  function loadSettingsForm() {
+  // Fields that wait for "Save settings" / "Save phone settings". Settings
+  // updates from elsewhere (font, schedule, the SillyTavern window) refill the
+  // form; fields changed but not saved yet keep what was typed.
+  const SAVE_FIELDS = ['setPort', 'setAuto', 'setCheck', 'setUpdLaunch', 'setAppUpd', 'setBackup', 'setConfirm', 'setTray', 'setKeep'];
+  const LAN_FIELDS = ['setLan', 'setLanUser', 'setLanPass'];
+  const unsaved = { form: false, lan: false };
+  SAVE_FIELDS.forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, () => { unsaved.form = true; })));
+  LAN_FIELDS.forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, () => { unsaved.lan = true; })));
+  function loadSettingsForm({ fresh = false } = {}) {
+    if (fresh) unsaved.form = unsaved.lan = false;
     $('curPath').textContent = current.sillytavernPath || 'Not set';
-    $('setPort').value = current.port;
-    $('setAuto').checked = current.autoStart;
-    $('setCheck').checked = current.checkUpdatesOnLaunch;
-    $('setUpdLaunch').checked = !!current.updateOnLaunch;
-    $('setAppUpd').checked = current.checkAppUpdates !== false;
-    $('setBackup').checked = current.backupBeforeUpdate;
-    $('setConfirm').checked = current.confirmBeforeQuit;
-    $('setTray').checked = !!current.closeToTray;
-    $('setKeep').value = current.backupKeep;
+    $('setAppPreview').checked = !!current.appPreview;
+    if (!unsaved.form) {
+      $('setPort').value = current.port;
+      $('setAuto').checked = current.autoStart;
+      $('setCheck').checked = current.checkUpdatesOnLaunch;
+      $('setUpdLaunch').checked = !!current.updateOnLaunch;
+      $('setAppUpd').checked = current.checkAppUpdates !== false;
+      $('setBackup').checked = current.backupBeforeUpdate;
+      $('setConfirm').checked = current.confirmBeforeQuit;
+      $('setTray').checked = !!current.closeToTray;
+      $('setKeep').value = current.backupKeep;
+    }
     document.querySelectorAll('#setLayer button').forEach(b => b.classList.toggle('on', b.dataset.layer === (current.windowLayer || 'normal')));
     $('setTabs').checked = current.tabs !== false;
     renderLogFontForm();
-    fillLanForm();
+    renderUiFontForm();
+    if (!unsaved.lan) fillLanForm();
   }
   document.querySelectorAll('#setLayer button').forEach(b => b.onclick = () => D.setLayer(b.dataset.layer));
   $('setTabs').onchange = () => D.setTabs($('setTabs').checked);
 
   // ----- console font: presets first, then every installed font -----
-  const LOG_FONTS = [['', 'Pixel (default)', 18], ['Cascadia Mono', 'Cascadia Mono', 14], ['Consolas', 'Consolas', 14], ['Courier New', 'Courier New', 14], ['Segoe UI', 'Segoe UI', 14]];
+  const LOG_FONTS = [['', 'Pixel (default)', 18], ['Departure Mono', 'Departure Mono (pixel)', 14], ['Cascadia Mono', 'Cascadia Mono', 14], ['Consolas', 'Consolas', 14], ['Courier New', 'Courier New', 14], ['Segoe UI', 'Segoe UI', 14]];
   let installedFonts = null;
-  const cssFont = name => name ? `"${name.replace(/["\\]/g, '')}", var(--mono)` : 'var(--mono)';
+  const cssFont = name => name ? `"${name.replace(/["\\]/g, '')}", var(--mono)` : 'var(--console-pixel)';
   function applyLogFont(font, size) {
     document.documentElement.style.setProperty('--log-font', cssFont(font));
     document.documentElement.style.setProperty('--log-size', `${size}px`);
@@ -1662,7 +1721,6 @@
     // Settings counts); otherwise show the suggestions and retry next time.
     try {
       const names = new Set((await window.queryLocalFonts()).map(f => f.family));
-      for (const [f] of LOG_FONTS) names.delete(f);
       installedFonts = [...names].sort((a, b) => a.localeCompare(b));
     } catch { /* not allowed right now */ }
   }
@@ -1670,7 +1728,7 @@
     await loadInstalledFonts();
     const font = current.consoleFont || '';
     const opt = (v, label) => `<option value="${esc(v)}"${v === font ? ' selected' : ''}>${esc(label)}</option>`;
-    const installed = installedFonts || [];
+    const installed = (installedFonts || []).filter(f => !LOG_FONTS.some(([n]) => n === f));
     const extra = font && !LOG_FONTS.some(([f]) => f === font) && !installed.includes(font) ? [font] : [];
     $('setLogFont').innerHTML = `<optgroup label="Suggested">${LOG_FONTS.map(([v, l]) => opt(v, l)).join('')}</optgroup>`
       + (installed.length || extra.length ? `<optgroup label="Installed fonts">${[...extra, ...installed].map(f => opt(f, f)).join('')}</optgroup>` : '');
@@ -1690,6 +1748,35 @@
   };
   $('setLogSize').onchange = () => saveLogFont($('setLogFont').value, $('setLogSize').value);
   $('btnLogFontReset').onclick = async () => { await saveLogFont('', 18); renderLogFontForm(); };
+
+  // ----- the app's font and size -----
+  let uiFonts = null;
+  const UI_FONT_CSS = { '': '"Departure Mono"', dotgothic: '"DotGothic16"', pixelify: '"Pixelify Sans"', vt323: '"VT323"', system: '"Segoe UI"' };
+  function applyUiFont(font, zoom) {
+    const name = font in UI_FONT_CSS ? UI_FONT_CSS[font] : `"${String(font).replace(/["\\;{}<>]/g, '')}"`;
+    document.documentElement.style.setProperty('--pixel-font', `${name}, "Segoe UI", system-ui, sans-serif`);
+    D.setZoom(zoom || 100);
+  }
+  async function renderUiFontForm() {
+    uiFonts = uiFonts || await D.uiFonts();
+    await loadInstalledFonts();
+    const font = current.uiFont || '';
+    const opt = (v, label) => `<option value="${esc(v)}"${v === font ? ' selected' : ''}>${esc(label)}</option>`;
+    const builtIn = Object.values(UI_FONT_CSS).map(n => n.replace(/"/g, ''));
+    const installed = (installedFonts || []).filter(f => !builtIn.includes(f));
+    const extra = font && !(font in UI_FONT_CSS) && !installed.includes(font) ? [font] : [];
+    $('setUiFont').innerHTML = `<optgroup label="Built in">${uiFonts.fonts.map(f => opt(f.id, f.label)).join('')}</optgroup>`
+      + (installed.length || extra.length ? `<optgroup label="Installed fonts">${[...extra, ...installed].map(f => opt(f, f)).join('')}</optgroup>` : '');
+    $('setZoom').innerHTML = uiFonts.zooms.map(z => `<button data-zoom="${z}" class="${z === (current.uiZoom || 100) ? 'on' : ''}">${z}%</button>`).join('');
+    $('setZoom').querySelectorAll('button').forEach(b => b.onclick = () => saveUiFont({ zoom: Number(b.dataset.zoom) }));
+  }
+  async function saveUiFont(change) {
+    current = await D.setUiFont(change);
+    applyUiFont(current.uiFont, current.uiZoom);
+    renderUiFontForm();
+  }
+  $('setUiFont').onchange = () => saveUiFont({ font: $('setUiFont').value });
+  $('btnUiFontReset').onclick = () => saveUiFont({ font: '', zoom: 100 });
   $('btnSave').onclick = async () => {
     const s = {
       port: Math.min(65535, Math.max(1, parseInt($('setPort').value, 10) || 8000)),
@@ -1703,6 +1790,7 @@
       backupKeep: Math.min(100, Math.max(1, parseInt($('setKeep').value, 10) || 10)),
     };
     await D.saveSettings(s);
+    unsaved.form = false;
     current = { ...current, ...s };
     $('btnSave').innerHTML = `${icon('check')}Saved`;
     setTimeout(() => $('btnSave').innerHTML = `${icon('check')}Save settings`, 1500);
@@ -1717,10 +1805,12 @@
     return `<div class="item"><span class="check-ico ${status}">${icon(r.ok ? 'check' : 'x')}</span><div class="main"><div class="title">${name}</div><div class="meta">${esc(detail)}</div></div></div>`;
   };
   async function loadSetup() {
-    const st = await D.setupState();
-    const show = !st.ready || setupForced;
+    // The full state scans the drives and starts node/git/winget: only when the screen shows.
+    const quick = await D.setupReady();
+    const show = !quick.ready || setupForced;
     $('setup').classList.toggle('show', show);
-    if (!show) return st;
+    if (!show) return quick;
+    const st = await D.setupState();
     $('btnSetupClose').hidden = !st.ready;
     $('setupTitle').textContent = st.ready ? 'Choose your SillyTavern' : 'Welcome to SillyTavern Desktop';
     $('setupLead').textContent = st.ready
@@ -1769,11 +1859,11 @@
   $('btnInstallReq').onclick = () => D.installRequirements();
   $('btnSetupRt').onclick = () => D.runtimeInstall();
   $('btnInstallST').onclick = async () => {
-    const wasReady = (await D.setupState()).ready;
+    const wasReady = (await D.setupReady()).ready;
     openDownload({ onDone: r => { if (r.used) { closeDownload(); finishSetup(true, wasReady); } } });
   };
   $('btnBrowse').onclick = async () => {
-    const wasReady = (await D.setupState()).ready;
+    const wasReady = (await D.setupReady()).ready;
     const r = await D.browseInstall();
     if (r.error) append(`ERROR: ${r.error}`);
     finishSetup(r.ok, wasReady);
@@ -1793,9 +1883,71 @@
       + profiles.map(p => `<option value="${esc(p.id)}"${p.active ? ' selected' : ''}${p.ok ? '' : ' disabled'}>${esc(p.name)}${p.ok ? '' : ' (folder missing)'}</option>`).join('');
     sel.parentElement.title = act ? `Profile "${act.name}": ${act.path}` : 'Profile: which SillyTavern folder the app runs';
     sel.parentElement.hidden = !profiles.length;
-    if (state.page === 'profiles') renderProfiles();
+    if (state.page === 'profiles') { renderProfiles(); loadRemotes(); }
     if (state.page === 'migrate' && !mg.scan && !mg.running) loadMigrate();
   }
+
+  // ----- SillyTavern on another computer -----
+  let remotes = [];
+  let remEdit = null; // { id (null = new), hasPassword }
+  async function loadRemotes() {
+    remotes = await D.remotes();
+    const el = $('remList');
+    el.innerHTML = remotes.length ? remotes.map(r => `<div class="item">
+        <div class="main"><div class="title">${esc(r.name)} ${r.insecure ? '<span class="tag warn" title="Plain http outside your home network: not encrypted">not encrypted</span>' : ''}</div>
+          <div class="meta mono">${esc(r.url)}</div>${r.user ? `<div class="meta">Signs in as ${esc(r.user)}${r.hasPassword ? '' : ' (no password saved)'}</div>` : ''}</div>
+        <div class="acts"><button class="btn sm primary" data-ropen="${esc(r.id)}">${icon('play')}Open</button>
+          <button class="btn sm ghost" data-redit="${esc(r.id)}" title="Edit">${icon('pencil')}</button>
+          <button class="btn sm ghost danger" data-rdel="${esc(r.id)}" title="Remove">${icon('trash')}</button></div></div>`).join('')
+      : '<div class="empty">None yet. <b>Add</b> one with its address, like http://192.168.1.25:8000.</div>';
+    el.querySelectorAll('[data-ropen]').forEach(b => b.onclick = () => D.remoteOpen(b.dataset.ropen));
+    el.querySelectorAll('[data-redit]').forEach(b => b.onclick = () => openRemForm(remotes.find(r => r.id === b.dataset.redit)));
+    el.querySelectorAll('[data-rdel]').forEach(b => b.onclick = async () => { if (await D.remoteDelete(b.dataset.rdel)) { closeRemForm(); loadRemotes(); } });
+  }
+  function openRemForm(r) {
+    remEdit = { id: r?.id || null, hasPassword: !!r?.hasPassword, clearPass: false };
+    $('remForm').hidden = false;
+    $('remName').value = r?.name || '';
+    $('remUrl').value = r?.url || '';
+    $('remUser').value = r?.user || '';
+    $('remPass').value = '';
+    $('remPass').placeholder = r?.hasPassword ? 'Saved' : 'None';
+    $('btnRemClearPass').hidden = !r?.hasPassword;
+    $('remError').textContent = '';
+    $('remTestOut').textContent = '';
+    $('btnRemSave').lastChild.textContent = r ? 'Save' : 'Add';
+    checkRemUrl();
+    $('remForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    $('remName').focus();
+  }
+  const closeRemForm = () => { remEdit = null; $('remForm').hidden = true; };
+  async function checkRemUrl() {
+    const v = $('remUrl').value.trim();
+    const r = v ? await D.remoteCheckUrl(v) : {};
+    $('remWarn').hidden = !r.insecure;
+    return r;
+  }
+  $('remUrl').oninput = checkRemUrl;
+  $('btnRemAdd').onclick = () => openRemForm(null);
+  $('btnRemCancel').onclick = closeRemForm;
+  $('btnRemClearPass').onclick = () => { remEdit.clearPass = true; $('remPass').placeholder = 'Removed when you save'; $('btnRemClearPass').hidden = true; };
+  $('btnRemTest').onclick = async () => {
+    $('remTestOut').style.color = '';
+    $('remTestOut').textContent = 'Testing…';
+    const r = await D.remoteProbe($('remUrl').value);
+    $('remTestOut').textContent = r.error || r.text;
+    $('remTestOut').style.color = r.error || !r.ok ? 'var(--bad)' : 'var(--good)';
+  };
+  $('btnRemSave').onclick = async () => {
+    const typed = $('remPass').value;
+    const r = await D.remoteSave({
+      id: remEdit.id, name: $('remName').value, url: $('remUrl').value, user: $('remUser').value,
+      password: typed ? typed : remEdit.clearPass ? null : undefined,
+    });
+    if (r.error) { $('remError').textContent = r.error; return; }
+    closeRemForm();
+    loadRemotes();
+  };
   // Back to the profile in use if the switch didn't happen (busy, cancelled).
   $('hdrProfile').onchange = async () => { await D.profileUse($('hdrProfile').value); loadProfiles(); };
 
@@ -2729,7 +2881,7 @@
   D.onBusy(setBusy);
   D.onRefresh(refreshAll);
   D.onTheme(loadThemes);
-  D.onSettings(s => { current = s; if (state.page === 'settings') loadSettingsForm(); });
+  D.onSettings(s => { current = s; applyUiFont(s.uiFont || '', s.uiZoom); if (state.page === 'settings') loadSettingsForm(); });
   D.onWindows(w => { state.windows = w; renderStatus(); });
   D.onAppUpdate(renderAppUpdate);
   D.onProfiles(loadProfiles);
@@ -2741,6 +2893,7 @@
     const s = await D.getState();
     current = s.settings;
     applyLogFont(current.consoleFont, current.consoleFontSize);
+    applyUiFont(current.uiFont || '', current.uiZoom);
     Object.assign(state, { running: s.running, startedAt: s.startedAt, url: s.url, windows: s.windows, logs: [...s.logs] });
     $('appVer').textContent = `v${s.appVersion}`;
     state.appVersion = s.appVersion;
@@ -2750,7 +2903,8 @@
     setBusy(s.busy);
     loadProfiles();
     const st = await loadSetup();
-    if (st.ready) { loadInfo(); loadExtensions(false); loadLan(); loadNews(); }
+    // The version first: the extension list starts many git processes that would hold it up.
+    if (st.ready) { loadLan(); loadNews(); loadInfo().finally(() => loadExtensions(false)); }
     loadSchedule();
     openImport(await D.importPending());
   })();

@@ -1,7 +1,7 @@
 // SillyTavern Desktop — main process
 // Wraps the SillyTavern server as a hidden child process and
 // renders it in a dedicated Chromium window. No cmd, ever.
-import { app, BrowserWindow, Menu, Tray, ipcMain, shell, dialog, clipboard } from 'electron';
+import { app, BrowserWindow, Menu, Tray, ipcMain, shell, dialog, clipboard, session, screen } from 'electron';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -26,6 +26,7 @@ import * as sx from './stextensions.js';
 import * as rt from './runtime.js';
 import * as imp from './importer.js';
 import * as bs from './backupsched.js';
+import * as remote from './remote.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -54,6 +55,7 @@ function exeBases() {
 const DEFAULT_SETTINGS = {
     sillytavernPath: '',
     profiles: [],               // [{ id, name, path }] — SillyTavern folders to switch between (profiles.js)
+    remotes: [],                // [{ id, name, url, user, password: { enc } }] — SillyTavern on other computers (remote.js)
     port: 8000,
     host: '127.0.0.1',
     windowWidth: 1280,
@@ -65,6 +67,8 @@ const DEFAULT_SETTINGS = {
     desktopExtensions: {},      // id → true for desktop extensions the user turned on
     consoleFont: '',            // console/log font; '' = the built-in pixel font
     consoleFontSize: 18,
+    uiFont: '',                 // the app's font: '' = Departure Mono, a built-in id (themes.UI_FONTS) or an installed font
+    uiZoom: 100,                // launcher size in percent (themes.ZOOMS)
     autoStart: true,      // start server + open ST window immediately on app launch
     confirmBeforeQuit: true,
     closeToTray: false,         // closing the launcher hides it to the tray; the server keeps running
@@ -72,6 +76,7 @@ const DEFAULT_SETTINGS = {
     checkUpdatesOnLaunch: true, // git fetch on startup so the dashboard can say "update available"
     updateOnLaunch: false,      // update SillyTavern on startup, before the server starts
     checkAppUpdates: true,      // look for a new release of this app on startup (never installs by itself)
+    appPreview: false,          // also offer pre-releases of this app (preview channel, appupdate.js)
     lanAccess: false,           // phones/tablets on the same network may open SillyTavern (see lan.js)
     lanUser: 'user',            // with lanPassword: SillyTavern's login for other devices
     lanPassword: '',
@@ -99,8 +104,9 @@ function saveSettings(s) {
 let settings = loadSettings();
 // Settings from before profiles: the folder in use becomes the first profile.
 if (prof.normalize(settings)) saveSettings(settings);
-// What the launcher gets: everything but the phone-access password.
-const publicSettings = () => ({ ...settings, lanPassword: settings.lanPassword ? '********' : '' });
+// What the launcher gets: everything but the phone-access password and the
+// remote logins (the launcher asks for remote.list() instead).
+const publicSettings = () => ({ ...settings, remotes: undefined, lanPassword: settings.lanPassword ? '********' : '' });
 let userscriptsDir = path.join(USER_DATA, 'userscripts');
 
 // Chromium's native occlusion stays on: together with backgroundThrottling
@@ -282,6 +288,9 @@ async function startAndOpen() {
     if (serverState.running) waitForServerThenOpen();
 }
 
+// Tabs of a SillyTavern on another computer have nothing to do with this PC's server or extensions.
+const onThisPc = inst => inst?.kind !== 'remote';
+
 // Poll the server until it answers, then open the ST window.
 let waitingForServer = false;
 function waitForServerThenOpen({ reload = false } = {}) {
@@ -295,7 +304,7 @@ function waitForServerThenOpen({ reload = false } = {}) {
             res.resume();
             if (res.statusCode && res.statusCode < 500) {
                 waitingForServer = false;
-                if (reload) stWins.forEach(w => w.reloadAll());
+                if (reload) stWins.forEach(w => w.reloadAll(onThisPc));
                 openSillyTavernWindow();
             }
             else retry();
@@ -374,6 +383,21 @@ let launcherWin = null;
 const stWins = new Set(); // SillyTavern windows (several when tabs are off)
 let isQuitting = false;   // set once quitting is decided; closing the launcher then really closes it
 
+// A larger launcher (Settings → Size) needs a larger window, or the pages get
+// squeezed below the width they're laid out for (at 150 % the smallest
+// window was only 536 px wide inside). As large as the screen allows.
+const LAUNCHER_MIN = [820, 560];
+function fitLauncherToZoom() {
+    if (!launcherWin || launcherWin.isDestroyed()) return;
+    const z = (settings.uiZoom || 100) / 100;
+    const area = screen.getDisplayMatching(launcherWin.getBounds()).workAreaSize;
+    const minW = Math.min(Math.round(LAUNCHER_MIN[0] * z), area.width);
+    const minH = Math.min(Math.round(LAUNCHER_MIN[1] * z), area.height);
+    launcherWin.setMinimumSize(minW, minH);
+    const [w, h] = launcherWin.getSize();
+    if (!launcherWin.isMaximized() && (w < minW || h < minH)) launcherWin.setSize(Math.max(w, minW), Math.max(h, minH));
+}
+
 function createLauncherWindow() {
     launcherWin = new BrowserWindow({
         width: 1040,
@@ -392,6 +416,7 @@ function createLauncherWindow() {
     });
     Menu.setApplicationMenu(null);
     launcherWin.loadFile('launcher.html');
+    fitLauncherToZoom();
     // With the tray on, closing only hides the launcher.
     launcherWin.on('close', e => {
         if (!tray || isQuitting) return;
@@ -420,6 +445,7 @@ function trayMenu() {
         ...(w.open && !w.minimized ? [{ label: 'Minimize SillyTavern', click: minimizeStWindows }] : []),
         { label: 'Show launcher', click: showLauncher },
         ...(settings.profiles.length > 1 ? [{ label: 'Profile', submenu: profileMenu() }] : []),
+        ...(settings.remotes.length ? [{ label: 'Open on another computer', submenu: remoteMenuItems(null) }] : []),
         { type: 'separator' },
         serverState.running
             ? { label: 'Stop server', enabled: !busyTask, click: stopServer }
@@ -484,10 +510,15 @@ function isLocal(url) {
 // instance: the SillyTavern the page belongs to; pages it opens stay in it.
 function lockToServer(wc, host, instance) {
     ext.attachPage(wc);
-    wc.on('will-navigate', (e, url) => { if (!isLocal(url)) { e.preventDefault(); openExternalSafe(url); } });
+    // A remote SillyTavern's pages stay on its own address; local ones on this PC.
+    const inside = url => {
+        if (!instance?.origin) return isLocal(url);
+        try { return new URL(url).origin === instance.origin; } catch { return false; }
+    };
+    wc.on('will-navigate', (e, url) => { if (!inside(url)) { e.preventDefault(); openExternalSafe(url); } });
     wc.setWindowOpenHandler(({ url, disposition }) => {
         // about:blank is how extensions open a tab and fill it in afterwards.
-        if (!isLocal(url) && url !== 'about:blank') {
+        if (!inside(url) && url !== 'about:blank') {
             openExternalSafe(url);
             return { action: 'deny' };
         }
@@ -560,6 +591,40 @@ async function extraInstance(dir, kind) {
     return inst;
 }
 
+// SillyTavern on another computer. Its own lasting browser session per
+// entry: a login there stays, and nothing mixes with this PC's SillyTavern.
+const remoteInsts = new Map();
+function remoteInstance(r) {
+    const u = new URL(r.url);
+    const inst = remoteInsts.get(r.id) || { kind: 'remote', remoteId: r.id, webPreferences: { ...stWebPreferences(), partition: `persist:remote-${r.id}` } };
+    remoteInsts.set(r.id, inst);
+    return Object.assign(inst, {
+        url: r.url, origin: u.origin,
+        // The chip stays short (tab titles need the room); the bar's info has the address.
+        chip: r.name.length > 14 ? `${r.name.slice(0, 13)}…` : r.name,
+        tip: `${r.name}: SillyTavern at ${u.host}`, info: `${r.name} · ${u.host}`,
+    });
+}
+
+async function openRemote(id, from) {
+    const r = remote.get(settings, id);
+    if (!r) return false;
+    if (remote.insecure(r.url) && !r.httpOk) {
+        const { response, checkboxChecked } = await dialog.showMessageBox({
+            type: 'warning', buttons: ['Open anyway', 'Cancel'], defaultId: 1, cancelId: 1,
+            message: `"${r.name}" uses plain http outside your home network.`,
+            detail: `${r.url}\n\nYour password and everything you write travel unencrypted, so others on the way could read them. Use an https address, or a private network such as Tailscale, if you can.`,
+            checkboxLabel: 'Don\'t warn again for this one',
+        });
+        if (response !== 0) return false;
+        if (checkboxChecked) { r.httpOk = true; saveSettings(settings); }
+    }
+    logLine(`Opening "${r.name}" (${new URL(r.url).host}).`);
+    openInstance(remoteInstance(r), from);
+    return true;
+}
+const remoteMenuItems = from => remote.list(settings).map(r => ({ label: menuText(`${r.name} — ${new URL(r.url).host}`), click: () => openRemote(r.id, from) }));
+
 // In the window it was asked from as a tab, or in a window of its own.
 function openInstance(inst, from) {
     const w = from && !from.isDestroyed() ? from : [...stWins][0];
@@ -604,6 +669,7 @@ function newSillyTavernMenu(w) {
         ...(others.length
             ? others.map(o => ({ label: menuText(o.label), click: () => openExtra(o.path, 'other', w) }))
             : [{ label: 'No other SillyTavern installs found', enabled: false }]),
+        ...(settings.remotes.length ? [{ type: 'separator' }, { label: 'On other computers', enabled: false }, ...remoteMenuItems(w)] : []),
     ];
 }
 
@@ -632,7 +698,9 @@ function profileMenu() {
 
 function openSillyTavernWindow() {
     const wins = [...stWins];
-    const w = wins.find(x => x.tabs.some(t => t.instance.kind === 'main')) || wins[0];
+    const w = wins.find(x => x.tabs.some(t => t.instance.kind === 'main'));
+    // Only other SillyTavern open (a remote one, a read-only copy): add this PC's as a tab.
+    if (!w && wins.length) { openInstance(mainInstance(), wins[0]); return; }
     if (w) {
         // Minimized together from the launcher, so restored together too.
         wins.forEach(x => { if (x !== w && x.win.isMinimized()) x.win.restore(); });
@@ -650,6 +718,7 @@ function createStWindow(instance) {
         fullScreen: settings.windowFullScreen,
         layer: settings.windowLayer,
         colors: themes.get(settings.theme).colors,
+        font: () => themes.uiFontCss(settings.uiFont),
         icon: path.join(__dirname, 'icon.ico'),
         setupPage: lockToServer,
         tabsEnabled: () => settings.tabs,
@@ -748,7 +817,8 @@ const LINKS = {
     node: 'https://nodejs.org/en/download',
     git: 'https://git-scm.com/downloads',
     desktop: 'https://github.com/Lab-Fox/sillytavern-desktop',
-    desktopReleases: appUpdate.RELEASES_PAGE,
+    // The release on offer (a preview isn't on GitHub's "latest" page), else the latest.
+    desktopReleases: () => appUpdate.releasePage(),
     extensionDocs: 'https://github.com/Lab-Fox/sillytavern-desktop/blob/main/EXTENSIONS.md',
 };
 
@@ -953,7 +1023,7 @@ ipcMain.handle('update-extensions', (_e, paths) => runTask('Updating extensions'
 }, { needsStopped: false }));
 ipcMain.handle('ext-undo', (_e, onlyPath) => runTask('Undoing extension updates', () => sx.undo(stRoot(), onlyPath ? String(onlyPath) : null), { needsStopped: false }));
 // After installing, updating or going back: open SillyTavern pages load the new code.
-ipcMain.handle('reload-st', () => { stWins.forEach(w => w.reloadAll()); return stWins.size; });
+ipcMain.handle('reload-st', () => { stWins.forEach(w => w.reloadAll(onThisPc)); return stWins.size; });
 // Project pages and scan reports from the catalog: web links only.
 ipcMain.handle('open-url', (_e, url) => { if (/^https:\/\//i.test(String(url))) openExternalSafe(String(url)); });
 
@@ -1056,7 +1126,10 @@ ipcMain.handle('open-place', (_e, key) => {
     if (key !== 'config') fs.mkdirSync(p, { recursive: true });
     return shell.openPath(p);
 });
-ipcMain.handle('open-link', (_e, key) => { if (LINKS[key]) shell.openExternal(LINKS[key]); });
+ipcMain.handle('open-link', (_e, key) => {
+    const link = Object.hasOwn(LINKS, key) ? LINKS[key] : null;
+    if (link) shell.openExternal(typeof link === 'function' ? link() : link);
+});
 ipcMain.handle('copy-logs', () => { clipboard.writeText(serverState.logs.join('\n')); });
 ipcMain.handle('set-layer', (_e, mode) => setLayer(mode));
 
@@ -1096,6 +1169,22 @@ ipcMain.handle('lan-save', async (_e, { on, user, password }) => {
 // (e.g. the server still runs with the old password until it restarts).
 const loginTries = new Map();
 app.on('login', (e, _wc, details, authInfo, callback) => {
+    if (authInfo.isProxy) return;
+    // A remote SillyTavern with basic auth: its saved login, at most twice in 10 s
+    // (a wrong password would otherwise loop). Without one, SillyTavern's
+    // "unauthorized" page shows, and the entry needs its login filled in.
+    // (Any address but this app's own main server, whose login is the phone-access one.)
+    const mainServer = isLocal(details.url) && Number(authInfo.port) === settings.port;
+    const r = !mainServer && remote.loginFor(settings, details.url);
+    if (r) {
+        const key = `remote-${r.id}`;
+        const recent = (loginTries.get(key) || []).filter(t => Date.now() - t < 10000);
+        if (recent.length >= 2) return;
+        loginTries.set(key, [...recent, Date.now()]);
+        e.preventDefault();
+        callback(r.user, r.password);
+        return;
+    }
     if (authInfo.isProxy || !settings.lanAccess || !settings.lanPassword || !isLocal(details.url) || Number(authInfo.port) !== settings.port) return;
     const now = Date.now();
     const recent = (loginTries.get(authInfo.port) || []).filter(t => now - t < 10000);
@@ -1108,6 +1197,13 @@ app.on('login', (e, _wc, details, authInfo, callback) => {
 // ---------- app updates ----------
 ipcMain.handle('app-update-state', () => appUpdate.getState());
 ipcMain.handle('app-update-check', () => appUpdate.check({ fresh: true }));
+// Switching the channel asks GitHub again right away.
+ipcMain.handle('set-app-preview', (_e, on) => {
+    settings.appPreview = !!on;
+    saveSettings(settings);
+    logLine(on ? 'This app now also gets preview versions (pre-releases). They are tested less.' : 'This app now only gets regular releases.');
+    return appUpdate.check({ fresh: true });
+});
 ipcMain.handle('app-update-download', () => appUpdate.download());
 ipcMain.handle('app-update-install', () => {
     // A restore or SillyTavern update must not be cut off halfway.
@@ -1182,6 +1278,9 @@ async function pickFolder(title, defaultPath) {
     return r.canceled ? null : r.filePaths[0];
 }
 
+// The cheap part: is there a SillyTavern to run? (asked on every refresh)
+ipcMain.handle('setup-ready', () => ({ ready: setup.isStRoot(stRoot()), current: stRoot() }));
+// Everything the welcome screen shows (scans the drives, starts node/git/winget).
 ipcMain.handle('setup-state', async () => ({
     ready: setup.isStRoot(stRoot()),
     current: stRoot(),
@@ -1232,12 +1331,15 @@ ipcMain.handle('runtime-install', async () => {
         broadcast('refresh');
         return true;
     }
+    const replacing = have.active && which.some(w => have[w]);
     return runTask('Getting Node.js and Git', async () => {
+        // Servers of other profiles ("Open next to it") run on the same node.exe.
+        if (replacing) await instances.stopAll();
         const ok = await rt.install(which, text => broadcast('runtime-progress', text));
         broadcast('runtime-progress', '');
         turnOn();
         return ok;
-    }, { needsStopped: have.active && which.some(w => have[w]) });
+    }, { needsStopped: replacing });
 });
 ipcMain.handle('runtime-use', (_e, on) => {
     settings.ownRuntime = !!on;
@@ -1251,6 +1353,7 @@ ipcMain.handle('runtime-use', (_e, on) => {
 ipcMain.handle('runtime-remove', async () => {
     if (!(await confirm('Remove this app\'s own Node.js and Git?', 'The app goes back to the Node.js and Git installed on this PC. If they aren\'t installed, SillyTavern can\'t start until you install them or download the app\'s own copy again.', 'Remove'))) return false;
     return runTask('Removing Node.js and Git', async () => {
+        if (rt.info().active) await instances.stopAll(); // other profiles' servers use it too
         rt.apply(false);
         settings.ownRuntime = false;
         saveSettings(settings);
@@ -1380,6 +1483,44 @@ ipcMain.handle('profile-open-alongside', (_e, id) => {
     return true;
 });
 
+// ---------- SillyTavern on other computers ----------
+const remotesChanged = () => { saveSettings(settings); broadcast('profiles'); syncTray(); };
+ipcMain.handle('remotes', () => remote.list(settings));
+ipcMain.handle('remote-save', (_e, data = {}) => {
+    const before = remote.get(settings, data.id);
+    const loginBefore = before && JSON.stringify([before.url, before.user, before.password]);
+    const r = remote.save(settings, { id: data.id, name: data.name, url: data.url, user: data.user, password: data.password });
+    if (r.error) return r;
+    remotesChanged();
+    // Chromium remembers a login per address: a changed one must be asked for again.
+    if (before && loginBefore !== JSON.stringify([r.remote.url, r.remote.user, r.remote.password])) {
+        session.fromPartition(`persist:remote-${r.remote.id}`).clearAuthCache().catch(() => { /* nothing cached */ });
+        loginTries.delete(`remote-${r.remote.id}`);
+    }
+    // Tabs already open keep their page; the next one uses the new address.
+    if (remoteInsts.has(r.remote.id)) remoteInstance(r.remote);
+    logLine(before ? `Saved "${r.remote.name}".` : `Added "${r.remote.name}" (${new URL(r.remote.url).host}).`);
+    return { ok: true, id: r.remote.id, insecure: remote.insecure(r.remote.url) };
+});
+ipcMain.handle('remote-delete', async (_e, id) => {
+    const r = remote.get(settings, id);
+    if (!r) return false;
+    if (!(await confirm(`Remove "${r.name}"?`, `Only this entry and its saved login are removed. Nothing changes on the other computer.\n${r.url}`, 'Remove'))) return false;
+    remote.remove(settings, id);
+    remoteInsts.delete(id);
+    remotesChanged();
+    // Its own browser session (cookies, stored logins) goes too.
+    session.fromPartition(`persist:remote-${id}`).clearStorageData().catch(() => { /* gone already */ });
+    logLine(`Removed "${r.name}".`);
+    return true;
+});
+ipcMain.handle('remote-probe', (_e, url) => remote.probe(url));
+ipcMain.handle('remote-check-url', (_e, url) => {
+    const u = remote.normalizeUrl(url);
+    return u.error ? u : { url: u.url, insecure: remote.insecure(u.url) };
+});
+ipcMain.handle('remote-open', (_e, id) => openRemote(id, null));
+
 // ---------- downloading SillyTavern ----------
 ipcMain.handle('st-versions', (_e, fresh) => dl.listVersions({ fresh: !!fresh }).catch(e => ({ error: e.message })));
 ipcMain.handle('download-target', (_e, parent, folder) => dl.targetInfo(String(parent || ''), String(folder || '')));
@@ -1501,7 +1642,18 @@ function setTheme(id) {
     broadcast('theme');
     stWins.forEach(w => w.setColors(themes.get(settings.theme).colors));
 }
-ipcMain.handle('list-themes', () => ({ active: themes.get(settings.theme).id, themes: themes.list() }));
+// The app's font and size: the launcher applies them itself, the top bars get the font.
+ipcMain.handle('ui-fonts', () => ({ fonts: themes.UI_FONTS.map(([id, label]) => ({ id, label })), zooms: themes.ZOOMS }));
+ipcMain.handle('set-ui-font', (_e, { font, zoom } = {}) => {
+    if (typeof font === 'string' && font.length <= 80) settings.uiFont = font;
+    if (themes.ZOOMS.includes(zoom)) settings.uiZoom = zoom;
+    saveSettings(settings);
+    fitLauncherToZoom();
+    stWins.forEach(w => w.push());
+    broadcast('settings', publicSettings());
+    return publicSettings();
+});
+ipcMain.handle('list-themes',() => ({ active: themes.get(settings.theme).id, themes: themes.list() }));
 ipcMain.handle('set-theme', (_e, id) => setTheme(id));
 ipcMain.handle('save-theme', (_e, raw, id) => {
     try {
@@ -1599,7 +1751,7 @@ if (gotLock) {
             },
         });
         themes.initThemes(USER_DATA);
-        appUpdate.initAppUpdate({ userData: USER_DATA, logLine, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
+        appUpdate.initAppUpdate({ userData: USER_DATA, logLine, preview: () => settings.appPreview, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
         bs.initBackupSchedule({
             logLine, userData: USER_DATA, getSettings: () => settings, targets: scheduleTargets,
             runTask: (label, fn) => runTask(label, fn, { needsStopped: false }),

@@ -44,6 +44,7 @@
       "runtime.js",
       "importer.js",
       "backupsched.js",
+      "remote.js",
       "bar-preload.js",
       "examples/**",
       "fonts/**",

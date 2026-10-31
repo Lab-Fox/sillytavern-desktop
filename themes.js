@@ -4,6 +4,23 @@
 import path from 'path';
 import fs from 'fs';
 
+// The app's font (launcher and the SillyTavern window's top bar; not
+// SillyTavern's own pages). '' is the default. Any other value is the name
+// of a font installed on the PC.
+export const UI_FONTS = [
+    ['', 'Departure Mono (pixel, clearest)', '"Departure Mono"'],
+    ['dotgothic', 'DotGothic16 (pixel, rounder)', '"DotGothic16"'],
+    ['pixelify', 'Pixelify Sans (pixel, until 1.5)', '"Pixelify Sans"'],
+    ['vt323', 'VT323 (pixel, narrow)', '"VT323"'],
+    ['system', 'Segoe UI (Windows)', '"Segoe UI"'],
+];
+export const ZOOMS = [80, 90, 100, 110, 125, 150];
+export function uiFontCss(font) {
+    const builtin = UI_FONTS.find(f => f[0] === font);
+    const name = builtin ? builtin[2] : `"${String(font || '').replace(/["\\;{}<>]/g, '')}"`;
+    return `${name}, "Segoe UI", system-ui, sans-serif`;
+}
+
 // Required keys; the launcher derives the in-between shades from these.
 export const COLOR_KEYS = ['bg', 'panel', 'border', 'accent', 'text', 'title', 'muted'];
 const OPTIONAL_KEYS = ['onAccent', 'good', 'warn', 'bad'];
