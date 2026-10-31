@@ -32,6 +32,7 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 | **Extensions** | Check each one for updates yourself | See which ones have updates and update them all at once |
 | **Problems** | Scroll through a terminal | A searchable console, a health check, one-click repair tools |
 | **Userscripts** | Need a browser add-on like Tampermonkey | Built in |
+| **On your phone** | Edit `config.yaml` (listen, whitelist) and find your PC's address | One switch, then scan a QR code |
 
 ## Features
 
@@ -49,7 +50,8 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 - A health check and repair tools for the most common problems.
 
 **Comfort**
-- Keeps running in the tray if you want.
+- Use SillyTavern from your **phone or tablet** on the same Wi-Fi: scan a QR code, with an optional password.
+- Keeps running in the tray if you want, and can update SillyTavern by itself when it starts.
 - Updates itself when a new version is out, always after you click.
 - Themes for the launcher (make and share your own), and your own font for the console.
 - Built-in userscripts, and extensions for the app itself.
@@ -90,7 +92,7 @@ Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 o
 | **Home** | Open, show or minimize SillyTavern. See your version and **Update now** when there's an update. Quick links to your characters, chats and data. |
 | **Backups** | Back up your data; restore or delete a backup. |
 | **Extensions** | SillyTavern's extensions with their versions; **Update all**. Also extensions for this app (**Desktop app**). |
-| **Maintenance** | Update Node.js and Git, the health check, repair tools, and the release/staging switch. |
+| **Maintenance** | Update Node.js and Git, the health check, repair tools, ways to run SillyTavern without the app, and the release/staging switch. |
 | **Console** | Everything the server prints. Filter to problems, search, or copy it for a bug report. |
 | **Settings** | Themes, which SillyTavern to use, the port, the SillyTavern window, the console font, and how the app behaves. |
 
@@ -123,6 +125,14 @@ Click **▾** next to **+**:
 | **Other installs** | Any other SillyTavern found on your PC, each with its own data |
 
 Each tab shows which one it is (`:8000`, `read-only :8000`, `1.13.2 :8002`…). Extra servers stop when their last tab closes.
+
+### On your phone or tablet
+
+1. Turn on **Settings → Phone & tablet → Use SillyTavern from your phone**. Setting a password is optional but recommended; this app signs in by itself.
+2. **Home** shows the address (like `http://192.168.1.25:8000/`) and a QR code. Scan it, or type the address, on a phone or tablet on the same Wi-Fi.
+3. The first time, Windows may ask whether Node.js may use the network. Choose **Allow**.
+
+Only devices on your own home network can connect. Your `config.yaml` is never changed: the app passes these settings to SillyTavern only while the switch is on, and turning it off closes the door again.
 
 ### Add-ons
 
@@ -173,13 +183,15 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | Setting | Default | What it does |
 |---|---|---|
 | Start automatically | On | Start the server and open SillyTavern when the app opens |
-| Check for updates on launch | On | Shows on Home when SillyTavern has an update. Never updates by itself |
+| Check for updates on launch | On | Shows on Home when SillyTavern has an update |
+| Update SillyTavern on launch | Off | When an update is out, installs it before the server starts |
 | Check for app updates on launch | On | Shows on Home when this app has a new version. **Download update**, then **Restart and update** |
 | Back up before updating | On | Back up your data before every update or channel switch |
 | Confirm before quitting | On | Ask before quitting while the server runs |
 | Keep running in the tray | Off | Closing the launcher hides it to the tray and the server keeps running. Right-click the tray icon for more, including **Quit** |
 | Automatic backups to keep | 10 | Older automatic backups are removed; manual ones never are |
 | Port | `8000` | The port SillyTavern runs on |
+| Phone & tablet | Off | Let devices on your Wi-Fi open SillyTavern, with an optional password ([how](#on-your-phone-or-tablet)) |
 | Window layer, tabs | Normal, on | The SillyTavern window's defaults (also in its right-click menu) |
 | Console font | Pixel | Any font on your PC, and its size |
 
@@ -198,6 +210,13 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | The window never opens and another program uses the port | Change the **Port** in Settings |
 
 Still stuck? Copy the console (**Copy** on the Console page) into a new [issue](../../issues).
+
+### If the app stops working
+
+A new SillyTavern version might not work inside the app right away. You can always use SillyTavern the usual way:
+
+- **Open in browser** (on Home, or **Maintenance → If this app stops working**) starts the server if needed and opens SillyTavern in your normal web browser.
+- **Start with Start.bat** (Maintenance) runs SillyTavern's own `Start.bat` in a command window, without the app at all. Close that window to stop it.
 
 <details>
 <summary>Where things are stored</summary>
@@ -254,6 +273,8 @@ Everything else is plain Electron and Node.js. If you can build and test on Linu
 
 SillyTavern runs as a hidden child process on `127.0.0.1`, and the app talks to it only over HTTP, so SillyTavern can change internally without breaking the app. Changes to SillyTavern's pages (userscripts, desktop extensions) happen at runtime; its files are never edited. The app reports a plain Chrome user agent, so Cloudflare-protected sites used by extensions treat it like a normal browser.
 
+**Phone access** sets SillyTavern's `listen`, `whitelistMode`, `whitelist` (this PC plus its own private networks, e.g. `192.168.1.0/24`) and, with a password, `basicAuthMode` through `SILLYTAVERN_*` environment variables on the main server only. SillyTavern reads those before `config.yaml`, so the file is never edited. The app answers the login for its own windows (`app.on('login')`). An old `whitelist.txt` overrides the whitelist, so the app warns about it.
+
 **Read-only copies** block every request that would change something (saves, deletes, uploads, generating, server plugins) before it leaves the app. Only the requests SillyTavern uses for reading are allowed (an allow-list, so routes SillyTavern adds later are blocked too). Each extra SillyTavern gets its own browser session, because SillyTavern's session cookie ignores the port.
 
 ### Build from source
@@ -289,6 +310,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `userscripts.js`, `st-preload.js` | Built-in userscript manager and the `GM_*` APIs in SillyTavern pages |
 | `extensions.js` | Desktop extensions: loading, the `api` object, menu items, panels |
 | `appupdate.js` | Self-update from GitHub releases (SHA256-checked) |
+| `lan.js` | Phone access: local networks, the server's environment variables, QR codes (`qrcode-generator`) |
 | `themes.js` | Built-in and custom themes, import/export |
 | `installer.nsh` | Installer step that asks a running app to close itself (`--quit`) first |
 | `examples/`, `EXTENSIONS.md` | Example desktop extension and the extension guide |
@@ -310,14 +332,15 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - **Server output is split into lines with `onLines`** (`maintenance.js`): chunks can end mid-line or mid-emoji.
 - **Read-only is an allow-list** (`READ_POSTS` in `instances.js`). If a read breaks in read-only tabs after a SillyTavern update, add its route there.
 - **Full screen:** `isFullScreen()` lags behind the `enter-full-screen` event, and Electron ignores `setAlwaysOnTop` in full screen, so `shell.js` tracks the events and `winlayer.js` also calls `SetWindowPos`.
-- **Chromium stops drawing windows it thinks are covered.** "Stay in background" covers the window on purpose, so `main.js` turns native occlusion off.
+- **A SillyTavern window that isn't seen must not draw.** SillyTavern pages use `backgroundThrottling: true` and Chromium's native occlusion stays on, so a minimized, covered or inactive tab stops rendering (an animated background behind other windows used to keep the GPU busy). Only the `GM_openInTab` helper windows keep `backgroundThrottling: false`.
+- **SillyTavern opens a browser tab on start** when `browserLaunch.enabled` is on (the default in a fresh `config.yaml`). `instances.serverEnv()` turns that off for every server the app starts (`SILLYTAVERN_BROWSERLAUNCH_ENABLED`, and `SILLYTAVERN_AUTORUN` for older versions).
 
 </details>
 
 ### Roadmap
 
-- [ ] Use SillyTavern from your phone on the same Wi-Fi (asks before changing `config.yaml`, with a backup)
-- [ ] "Update on launch" option
+- [x] Use SillyTavern from your phone on the same Wi-Fi
+- [x] "Update on launch" option
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)
 
@@ -329,6 +352,7 @@ Pull requests are welcome. One rule: **wrap, never fork.** No SillyTavern files 
 
 - [SillyTavern](https://github.com/SillyTavern/SillyTavern), the software this app runs. Go give it a star.
 - SillyTavern's own `src/electron` launcher showed that this approach works.
+- [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT) draws the phone QR code.
 - Fonts: [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) and [VT323](https://fonts.google.com/specimen/VT323) (SIL Open Font License).
 
 ## License

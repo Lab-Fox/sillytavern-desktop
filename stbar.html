@@ -26,9 +26,11 @@
     -webkit-app-region: drag;
   }
   /* Tab strip; the empty space around the tabs drags the window. */
-  .tabs { flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; gap: 2px; }
+  /* Clips its own overflow: with many tabs in a narrow window they never
+     draw over the buttons beside them. */
+  .tabs { flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; gap: 2px; overflow: hidden; scroll-padding-inline-end: 64px; }
   .tab {
-    -webkit-app-region: no-drag; flex: 0 1 210px; min-width: 52px; height: 28px; margin-bottom: calc(var(--px) * -1);
+    -webkit-app-region: no-drag; flex: 0 1 210px; min-width: 58px; height: 28px; margin-bottom: calc(var(--px) * -1); overflow: hidden;
     display: flex; align-items: center; gap: 7px; padding: 0 4px 0 9px;
     border: var(--px) solid transparent; border-bottom: 0; color: var(--muted); cursor: default; position: relative;
   }
@@ -43,13 +45,23 @@
   .tab span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Which SillyTavern a tab shows: port, version, read-only. */
   .chip { flex-shrink: 0; font-size: 12px; line-height: 1; padding: 2px 5px; color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+  /* Narrow tabs keep what tells them apart: the chip. Click, middle-click
+     and Ctrl+W still close them. */
+  .tab { container-type: inline-size; }
+  @container (max-width: 120px) { .tab > span { display: none; } }
+  @container (max-width: 84px) { .tab > img, .tab > button { display: none; } }
   .tab.ro .chip { color: var(--warn); border-color: var(--warn); }
   .tab.ro.on::before { background: var(--warn); }
   .info { flex-shrink: 1; min-width: 0; max-width: 360px; padding: 0 6px; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .info.ro { color: var(--warn); font-weight: 600; }
   .tab button { height: 20px; min-width: 20px; padding: 0; }
   .tab button svg { width: 12px; height: 12px; }
-  #btnNewTab, #btnNewMenu { margin: 0 0 3px 2px; flex-shrink: 0; }
+  /* Pinned to the right end of the strip, so they stay reachable with many tabs. */
+  #btnNewTab, #btnNewMenu { margin: 0 0 3px 2px; flex-shrink: 0; position: sticky; background: var(--panel); }
+  #btnNewTab { right: 24px; }
+  #btnNewMenu { right: 0; }
+  /* Narrow window: the active tab's details make room for the tabs (each tab's chip still shows the port). */
+  @media (max-width: 860px) { .info { display: none; } }
   #btnNewMenu { min-width: 22px; padding: 0 3px; margin-left: 0; }
   @keyframes blink { 50% { opacity: 0; } }
   button {
@@ -128,7 +140,10 @@
     }
     box.classList.toggle('solo', s.tabs.length < 2 && !s.tabsEnabled);
     $('btnNewTab').hidden = !s.tabsEnabled;
+    // More tabs than fit: keep the active one in view.
+    tabEls.get(s.active)?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }
+  addEventListener('resize', () => document.querySelector('.tab.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' }));
 
   bar.onState(s => {
     for (const [k, v] of Object.entries(VARS)) if (s.colors[k]) document.documentElement.style.setProperty(v, s.colors[k]);

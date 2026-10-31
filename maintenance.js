@@ -14,8 +14,10 @@ import yazl from 'yazl';
 import yauzl from 'yauzl';
 
 const IS_WIN = process.platform === 'win32';
-// Same flags SillyTavern's own Start.bat uses.
-export const NPM_INSTALL = ['install', '--no-audit', '--no-fund', '--loglevel=error', '--no-progress', '--omit=dev'];
+// Like SillyTavern's own Start.bat. --no-save keeps package-lock.json as
+// shipped: a rewritten one blocks the next `git pull`. (Start.bat also uses
+// --ignore-scripts; older SillyTavern versions still need their scripts.)
+export const NPM_INSTALL = ['install', '--no-save', '--no-audit', '--no-fund', '--loglevel=error', '--no-progress', '--omit=dev'];
 // Regenerable caches — no point zipping them into every backup.
 const BACKUP_EXCLUDES = new Set(['data/_cache', 'data/_webpack', 'data/_uploads']);
 // Already-compressed formats are stored as-is: deflating them wastes time.
@@ -93,7 +95,8 @@ export async function checkForUpdates(stRoot) {
 
 // ---------- update / repair ----------
 export async function update(stRoot, { backupFirst, keep }) {
-    if (backupFirst) {
+    // No data folder (never started): nothing to back up, nothing to lose.
+    if (backupFirst && fs.existsSync(path.join(stRoot, 'data'))) {
         const b = await createBackup(stRoot, 'auto-before-update', keep);
         if (!b) { log('Update cancelled: the backup failed.'); return false; }
     }
@@ -144,15 +147,24 @@ export async function repair(stRoot, kind) {
     return false;
 }
 
-export async function switchBranch(stRoot, branch, { keep }) {
+export async function switchBranch(stRoot, branch, { backupFirst, keep }) {
     if (!['release', 'staging'].includes(branch)) return false;
-    const b = await createBackup(stRoot, `auto-before-${branch}`, keep);
-    if (!b) { log('Switch cancelled: the backup failed.'); return false; }
+    if (backupFirst && fs.existsSync(path.join(stRoot, 'data'))) {
+        const b = await createBackup(stRoot, `auto-before-${branch}`, keep);
+        if (!b) { log('Switch cancelled: the backup failed.'); return false; }
+    }
     log(`Switching SillyTavern to the ${branch} branch ...`);
-    await git(stRoot, ['fetch', 'origin', branch]);
+    const fetched = await git(stRoot, ['fetch', 'origin', branch]);
+    if (fetched.code !== 0) { log('ERROR: could not download the branch (see above). Check your internet connection.'); return false; }
     const co = await git(stRoot, ['checkout', branch]);
-    if (co.code !== 0) { log('ERROR: could not switch branch (see above).'); return false; }
-    await git(stRoot, ['pull', '--ff-only']);
+    if (co.code !== 0) {
+        log(/package-lock\.json/.test(co.out)
+            ? 'ERROR: Switch blocked by a changed package-lock.json. Use Maintenance → "Reset package-lock.json", then switch again.'
+            : 'ERROR: could not switch branch (see above).');
+        return false;
+    }
+    const pull = await git(stRoot, ['pull', '--ff-only']);
+    if (pull.code !== 0) log(`WARNING: now on ${branch}, but getting its latest changes failed (see above). Try "Update now".`);
     const inst = await npm(stRoot, NPM_INSTALL);
     log(inst.code === 0 ? `Now on ${branch}.` : 'Switched, but npm install failed. Try Maintenance → "Reinstall dependencies".');
     return inst.code === 0;

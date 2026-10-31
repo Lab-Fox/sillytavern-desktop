@@ -17,6 +17,7 @@ import { MODES as LAYERS } from './winlayer.js';
 import * as instances from './instances.js';
 import * as ext from './extensions.js';
 import * as appUpdate from './appupdate.js';
+import * as lan from './lan.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -60,7 +61,11 @@ const DEFAULT_SETTINGS = {
     closeToTray: false,         // closing the launcher hides it to the tray; the server keeps running
     backupBeforeUpdate: true,   // zip data/ before every update or branch switch
     checkUpdatesOnLaunch: true, // git fetch on startup so the dashboard can say "update available"
+    updateOnLaunch: false,      // update SillyTavern on startup, before the server starts
     checkAppUpdates: true,      // look for a new release of this app on startup (never installs by itself)
+    lanAccess: false,           // phones/tablets on the same network may open SillyTavern (see lan.js)
+    lanUser: 'user',            // with lanPassword: SillyTavern's login for other devices
+    lanPassword: '',
     backupKeep: 10,             // automatic backups kept; manual ones are never pruned
     theme: 'sillytavern',       // launcher theme id (see themes.js)
 };
@@ -77,12 +82,14 @@ function saveSettings(s) {
     fs.renameSync(`${SETTINGS_FILE}.tmp`, SETTINGS_FILE);
 }
 let settings = loadSettings();
+// What the launcher gets: everything but the phone-access password.
+const publicSettings = () => ({ ...settings, lanPassword: settings.lanPassword ? '********' : '' });
 let userscriptsDir = path.join(USER_DATA, 'userscripts');
 
-// Chromium stops drawing windows it thinks are fully covered. "Stay in
-// background" keeps the SillyTavern window covered on purpose, and coming
-// back from that left the top bar blank.
-app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+// Chromium's native occlusion stays on: together with backgroundThrottling
+// (see stWebPreferences) a SillyTavern window hidden behind other windows
+// stops drawing. (It used to be turned off because the top bar came back
+// blank after "Stay in background"; that no longer happens, checked 2026-10-31.)
 
 // ---------- single instance lock ----------
 // `--quit` comes from the installer before it replaces the app: it closes a
@@ -176,14 +183,21 @@ async function startServer() {
     }
     warnMisplacedUserscripts(stRoot);
     logLine(`Starting SillyTavern server from ${stRoot} ...`);
+    const lanEnv = lan.serverEnv(settings);
+    if (settings.lanAccess) {
+        const where = lan.phoneAddresses(settings.port).map(a => a.url).join(' or ');
+        logLine(where ? `Phone access is on: open ${where} on a device on the same network.` : 'Phone access is on, but this PC is not on a home network right now.');
+        if (lan.hasWhitelistTxt(stRoot)) logLine('WARNING: SillyTavern\'s whitelist.txt decides who may connect, not this app. Add your network there, or remove the file.');
+    }
     // Pass the port explicitly so the Settings value is what the server binds to.
     const child = spawn('node', ['server.js', '--port', String(settings.port)], {
         cwd: stRoot,
         windowsHide: true,
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '' },
+        env: instances.serverEnv(lanEnv),
         shell: false,
     });
     serverState.child = child;
+    serverState.lanEnv = JSON.stringify(lanEnv); // to tell when a settings change needs a restart
     serverState.running = true;
     serverState.startedAt = Date.now();
     broadcast('server-started');
@@ -413,7 +427,10 @@ function stWebPreferences() {
         nodeIntegrationInSubFrames: true,
         contextIsolation: true,
         nodeIntegration: false,
-        backgroundThrottling: false,
+        // Like a browser tab: a minimized, covered or inactive tab stops
+        // drawing. Off, an animated background kept the GPU busy behind
+        // other windows. (GM_openInTab helper windows set their own.)
+        backgroundThrottling: true,
     };
 }
 
@@ -635,7 +652,7 @@ function setTabs(on) {
     settings.tabs = !!on;
     saveSettings(settings);
     stWins.forEach(w => w.push());
-    broadcast('settings', settings);
+    broadcast('settings', publicSettings());
 }
 
 function setLayer(mode) {
@@ -643,7 +660,7 @@ function setLayer(mode) {
     settings.windowLayer = mode;
     saveSettings(settings);
     stWins.forEach(w => w.setLayer(mode));
-    broadcast('settings', settings);
+    broadcast('settings', publicSettings());
 }
 
 function showLauncher() {
@@ -686,7 +703,7 @@ ipcMain.handle('get-state', () => ({
     startedAt: serverState.startedAt,
     busy: busyTask,
     url: `http://${settings.host}:${settings.port}/`,
-    settings,
+    settings: publicSettings(),
     logs: serverState.logs,
     appVersion: app.getVersion(),
     windows: stWindowState(),
@@ -698,6 +715,44 @@ ipcMain.handle('open-st', () => {
     return startAndOpen();
 });
 ipcMain.handle('minimize-st', () => minimizeStWindows());
+
+// ---------- fallbacks: SillyTavern without this app's window ----------
+// For when a new SillyTavern version doesn't work inside the app yet.
+ipcMain.handle('open-in-browser', async () => {
+    if (!serverState.running) await startServer();
+    for (let i = 0; i < 120 && serverState.running; i++) {
+        if (await checkPortOpen()) {
+            logLine(`Opening ${mainInstance().url} in your browser.`);
+            openExternalSafe(mainInstance().url);
+            return true;
+        }
+        await new Promise(r => setTimeout(r, 1000));
+    }
+    return false;
+});
+
+// SillyTavern's own Start.bat in a console window of its own, with nothing
+// of this app in between. This app's servers on that folder stop first:
+// they hold the port and the files.
+ipcMain.handle('start-classic', async () => {
+    const root = stRoot();
+    if (!setup.isStRoot(root)) return false;
+    if (busyTask) { logLine(`Busy with "${busyTask}" — wait for it to finish.`); return false; }
+    const bat = fs.existsSync(path.join(root, 'Start.bat'));
+    if (!(await confirm('Start SillyTavern the classic way?',
+        `${bat ? 'SillyTavern\'s own Start.bat' : 'node server.js'} runs in a command window of its own, without this app.${serverState.running ? ' This app\'s server stops first.' : ''}\n\nOpen SillyTavern in your browser once it says it is listening (or use "Open in browser" here). Close the command window to stop it.`,
+        'Start'))) return false;
+    await instances.stopAll(root);
+    if (serverState.running && !(await stopServerAndWait())) return false;
+    const env = { ...process.env };
+    for (const k of Object.keys(env)) if (/^(ELECTRON_|PORTABLE_EXECUTABLE)/.test(k)) delete env[k];
+    const run = bat ? '"Start.bat"' : 'cmd /k node server.js';
+    const child = spawn('cmd.exe', ['/d', '/s', '/c', `"start "SillyTavern" /D "${root}" ${run}"`], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true, env });
+    child.on('error', e => logLine(`ERROR: could not start SillyTavern: ${e.message}`));
+    child.unref();
+    logLine(`Started SillyTavern the classic way (${bat ? 'Start.bat' : 'node server.js'}) in its own window. Close that window to stop it.`);
+    return true;
+});
 ipcMain.handle('st-info', () => mx.getInfo(stRoot()));
 ipcMain.handle('check-updates', () => mx.checkForUpdates(stRoot()));
 ipcMain.handle('update', () => runTask('Updating SillyTavern', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
@@ -708,11 +763,14 @@ ipcMain.handle('repair', async (_e, kind) => {
     return runTask(labels[kind], () => mx.repair(stRoot(), kind));
 });
 ipcMain.handle('switch-branch', async (_e, branch) => {
-    const detail = branch === 'staging'
-        ? 'Staging gets new features first but can be unstable. Your data is backed up before switching.'
-        : 'Release is the stable version most people use. Your data is backed up before switching.';
-    if (!(await confirm(`Switch SillyTavern to ${branch}?`, detail, 'Switch'))) return false;
-    return runTask(`Switching to ${branch}`, () => mx.switchBranch(stRoot(), branch, { keep: keep() }));
+    const about = branch === 'staging'
+        ? 'Staging gets new features first but can be unstable.'
+        : 'Release is the stable version most people use.';
+    const backup = settings.backupBeforeUpdate
+        ? 'Your data is backed up before switching.'
+        : 'No backup is made first ("Back up before updating" is off in Settings).';
+    if (!(await confirm(`Switch SillyTavern to ${branch}?`, `${about} ${backup}`, 'Switch'))) return false;
+    return runTask(`Switching to ${branch}`, () => mx.switchBranch(stRoot(), branch, { backupFirst: settings.backupBeforeUpdate, keep: keep() }));
 });
 ipcMain.handle('backup', () => runTask('Backing up', async () => !!(await mx.createBackup(stRoot(), 'manual', keep())), { needsStopped: false }));
 ipcMain.handle('list-backups', () => mx.listBackups(stRoot()));
@@ -738,6 +796,50 @@ ipcMain.handle('open-place', (_e, key) => {
 ipcMain.handle('open-link', (_e, key) => { if (LINKS[key]) shell.openExternal(LINKS[key]); });
 ipcMain.handle('copy-logs', () => { clipboard.writeText(serverState.logs.join('\n')); });
 ipcMain.handle('set-layer', (_e, mode) => setLayer(mode));
+
+// ---------- phone & tablet access ----------
+function lanInfo() {
+    const ours = serverState.running && !serverState.attached;
+    return {
+        on: settings.lanAccess,
+        user: settings.lanUser,
+        hasPassword: !!settings.lanPassword,
+        running: serverState.running,
+        attached: serverState.attached,
+        // Started with different phone settings than the current ones.
+        needsRestart: ours && serverState.lanEnv !== JSON.stringify(lan.serverEnv(settings)),
+        whitelistTxt: lan.hasWhitelistTxt(stRoot()),
+        addresses: lan.phoneAddresses(settings.port).map(a => ({ ...a, qr: lan.qrSvg(a.url) })),
+    };
+}
+ipcMain.handle('lan-info', () => lanInfo());
+ipcMain.handle('lan-save', async (_e, { on, user, password }) => {
+    settings.lanAccess = !!on;
+    settings.lanUser = String(user || 'user').trim().slice(0, 64) || 'user';
+    // Empty field = keep the saved password; `null` clears it.
+    if (password === null) settings.lanPassword = '';
+    else if (password) settings.lanPassword = String(password).slice(0, 128);
+    saveSettings(settings);
+    broadcast('settings', publicSettings());
+    const info = lanInfo();
+    // Restarting closes extra servers on this folder and reloads the tabs.
+    if (info.needsRestart) await runTask('Restarting the server for phone access', async () => true);
+    return lanInfo();
+});
+
+// SillyTavern's login (phone access with a password) shouldn't ask in the app's own window.
+// A wrong answer makes Chromium ask again, so two tries per 10 s, then it's left to fail
+// (e.g. the server still runs with the old password until it restarts).
+const loginTries = new Map();
+app.on('login', (e, _wc, details, authInfo, callback) => {
+    if (authInfo.isProxy || !settings.lanAccess || !settings.lanPassword || !isLocal(details.url) || Number(authInfo.port) !== settings.port) return;
+    const now = Date.now();
+    const recent = (loginTries.get(authInfo.port) || []).filter(t => now - t < 10000);
+    if (recent.length >= 2) return;
+    loginTries.set(authInfo.port, [...recent, now]);
+    e.preventDefault();
+    callback(settings.lanUser || 'user', settings.lanPassword);
+});
 
 // ---------- app updates ----------
 ipcMain.handle('app-update-state', () => appUpdate.getState());
@@ -948,6 +1050,11 @@ if (gotLock) {
         if (settings.checkAppUpdates) setTimeout(() => appUpdate.check({ quiet: true }), 4000);
         if (!ensureInstall()) return; // the welcome screen takes it from here
         refreshInstalls();
+        if (settings.updateOnLaunch) {
+            // Update first, then start: never under a running server.
+            launchUpdate().then(() => { if (settings.autoStart) startAndOpen(); });
+            return;
+        }
         if (settings.checkUpdatesOnLaunch) {
             mx.checkForUpdates(stRoot()).then(info => {
                 if (info.behind > 0) logLine(`A SillyTavern update is available (${info.behind} new commit${info.behind === 1 ? '' : 's'} on ${info.branch}).`);
@@ -956,6 +1063,19 @@ if (gotLock) {
         }
         if (settings.autoStart) startAndOpen();
     });
+
+    // "Update on launch". A failed update leaves the old version, which still starts.
+    async function launchUpdate() {
+        const info = await mx.checkForUpdates(stRoot());
+        broadcast('refresh');
+        if (!info.isGit || !(info.behind > 0)) return;
+        if (await checkPortOpen()) {
+            logLine('A SillyTavern update is available, but a server is already running on this port, so it was not updated now.');
+            return;
+        }
+        logLine(`Updating SillyTavern before starting (${info.behind} new commit${info.behind === 1 ? '' : 's'} on ${info.branch}) ...`);
+        await runTask('Updating SillyTavern', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() }));
+    }
 
     app.on('window-all-closed', () => {
         // User already closed every window — treat that as intent to quit;

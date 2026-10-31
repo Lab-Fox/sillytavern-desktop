@@ -147,13 +147,20 @@ function answers(port) {
     });
 }
 
+// Environment for every SillyTavern the app starts. SillyTavern opens a
+// browser tab on start (browserLaunch, on in a fresh config.yaml; `autorun`
+// in older versions), which would show up next to the app's own window.
+export function serverEnv(extra = {}) {
+    return { ...process.env, ELECTRON_RUN_AS_NODE: '', SILLYTAVERN_BROWSERLAUNCH_ENABLED: 'false', SILLYTAVERN_AUTORUN: 'false', ...extra };
+}
+
 // Starts `node server.js --port <port>` in stRoot. `ready` resolves to true
 // once the server answers, or false if it exits or takes over two minutes.
 export function startServer(stRoot, port, label) {
     const tag = `[${label} :${port}]`;
     log(`${tag} Starting SillyTavern from ${stRoot} ...`);
     const child = spawn('node', ['server.js', '--port', String(port)], {
-        cwd: stRoot, windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: '' }, shell: false,
+        cwd: stRoot, windowsHide: true, env: serverEnv(), shell: false,
     });
     const srv = { child, port, stRoot, label, exited: false };
     servers.add(srv);

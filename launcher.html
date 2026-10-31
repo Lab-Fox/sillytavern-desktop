@@ -46,7 +46,7 @@
   img.logo { image-rendering: pixelated; flex-shrink: 0; display: block; }
 
   /* ---------- pixel primitives ---------- */
-  .card, .btn, input[type=text], input[type=number], input[type=search], .pill, .seg, #console, .path, .tag, .theme-card {
+  .card, .btn, input[type=text], input[type=password], input[type=number], input[type=search], .pill, .seg, #console, .path, .tag, .theme-card {
     border: var(--px) solid var(--border);
   }
   .card { box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
@@ -105,13 +105,13 @@
 
   /* ---------- building blocks ---------- */
   .card { background: var(--panel); padding: 18px; }
-  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; white-space: nowrap; color: var(--muted); font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; white-space: nowrap; color: var(--muted); font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
   .card h2 .act { margin-left: auto; text-transform: none; letter-spacing: .2px; }
   .grid { display: grid; gap: 16px; }
   .g2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .g3 { grid-template-columns: repeat(3, 1fr); }
   .stack { display: flex; flex-direction: column; gap: 16px; }
-  .row { display: flex; align-items: center; gap: 10px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .muted { color: var(--muted); }
   .small { font-size: 13.5px; }
   .mono { font-family: var(--mono); font-size: 17px; letter-spacing: 0; }
@@ -158,6 +158,10 @@
   .notes div { white-space: pre-wrap; max-height: 220px; overflow: auto; margin-top: 8px; font-size: 14px; }
   .progress { flex: 1; height: 12px; border: var(--px) solid var(--border); background: var(--bg); }
   .progress i { display: block; height: 100%; width: 0; background: var(--accent); }
+  /* QR codes need dark-on-light whatever the theme, and a quiet border. */
+  .qr { flex: none; width: 148px; background: #fff; border: var(--px) solid var(--border); line-height: 0; }
+  .qr svg { width: 100%; height: auto; display: block; image-rendering: pixelated; }
+  .lan-url { color: var(--title); font-size: 18px; user-select: text; }
   .quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
   .quick .btn { justify-content: flex-start; padding: 8px 10px; }
   .quick .btn svg { color: var(--accent); }
@@ -200,7 +204,7 @@
 
   /* ---------- forms ---------- */
   .field label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
-  input[type=text], input[type=number], input[type=search], select {
+  input[type=text], input[type=password], input[type=number], input[type=search], select {
     width: 100%; background: var(--well); color: var(--title);
     padding: 6px 10px; font: inherit; outline: none; user-select: text;
   }
@@ -257,6 +261,8 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border: 3px solid var(--bg); }
   ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
   @media (max-width: 960px) { .g3 { grid-template-columns: 1fr 1fr; } }
+  /* Narrow window: one card per row, so buttons have room. */
+  @media (max-width: 900px) { .g2 { grid-template-columns: minmax(0, 1fr); } }
 </style>
 </head>
 <body>
@@ -311,7 +317,20 @@
             <div class="row">
               <button class="btn primary" id="btnOpen"><svg class="i"><use href="#i-play"/></svg><span>Open SillyTavern</span></button>
               <button class="btn" id="btnMinST" hidden><svg class="i"><use href="#i-minus"/></svg>Minimize</button>
+              <button class="btn ghost" id="btnHomeBrowser" title="Open SillyTavern in your normal web browser"><svg class="i"><use href="#i-external"/></svg>Open in browser</button>
               <span class="muted small mono" id="heroUrl"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="lanCard" hidden>
+          <h2>On your phone<button class="link act" data-goto="settings">Phone settings</button></h2>
+          <div class="row" style="align-items:flex-start;gap:18px">
+            <div class="qr" id="lanQr"></div>
+            <div class="stack" style="flex:1;gap:8px">
+              <div class="lan-urls mono" id="lanUrls"></div>
+              <p class="muted small" id="lanHint"></p>
+              <div><button class="btn sm primary" id="btnLanRestart" hidden><svg class="i"><use href="#i-refresh"/></svg>Restart server to apply</button></div>
             </div>
           </div>
         </div>
@@ -441,6 +460,22 @@
           </div>
         </div>
         <div class="card">
+          <h2>If this app stops working</h2>
+          <p class="muted" style="margin-bottom:12px">A new SillyTavern version might not work with this app right away. You can always use SillyTavern the usual way:</p>
+          <div class="grid g2">
+            <div class="tool">
+              <b>Open in my browser</b>
+              <p>Starts the server if needed and opens SillyTavern in your normal web browser instead of this app's window.</p>
+              <button class="btn sm" id="btnBrowser"><svg class="i"><use href="#i-external"/></svg>Open in browser</button>
+            </div>
+            <div class="tool">
+              <b>Start the classic way</b>
+              <p>Runs SillyTavern's own <span class="mono">Start.bat</span> in a command window, without this app. Close that window to stop it.</p>
+              <button class="btn sm" data-task id="btnClassic"><svg class="i"><use href="#i-terminal"/></svg>Start with Start.bat</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
           <h2>Release channel</h2>
           <div class="row">
             <p class="muted" style="flex:1"><b style="color:var(--title)">Release</b> is the stable version most people use. <b style="color:var(--title)">Staging</b> gets new features first and is updated daily, but can break. You're on <span class="tag fox" id="branchTag">—</span></p>
@@ -526,6 +561,7 @@
           <h2>Behavior</h2>
           <label class="switch"><input type="checkbox" id="setAuto"><div><b>Start automatically</b><span>Start the server and open SillyTavern when the app launches.</span></div></label>
           <label class="switch"><input type="checkbox" id="setCheck"><div><b>Check for updates on launch</b><span>Shows "update available" on Home. Never updates by itself.</span></div></label>
+          <label class="switch"><input type="checkbox" id="setUpdLaunch"><div><b>Update SillyTavern on launch</b><span>When an update is out, install it before the server starts. Uses "Back up before updating".</span></div></label>
           <label class="switch"><input type="checkbox" id="setAppUpd"><div><b>Check for app updates on launch</b><span>Looks for a new version of this app on GitHub and shows it on Home. Installs only when you click.</span></div></label>
           <label class="switch"><input type="checkbox" id="setBackup"><div><b>Back up before updating</b><span>Zip your data before every update or channel switch.</span></div></label>
           <label class="switch"><input type="checkbox" id="setConfirm"><div><b>Confirm before quitting</b><span>Ask before quitting while the server runs.</span></div></label>
@@ -566,6 +602,20 @@
 <span class="l-warn">[12:00:02] WARNING: an extension is out of date</span>
 [12:00:03] 0123456789 — The quick brown fox jumps over the lazy dog</div>
           <p class="muted small">Used by the Console page and the activity logs. Applies right away.</p>
+        </div>
+      </div>
+      <div class="card stack" style="margin-top:16px">
+        <h2>Phone & tablet</h2>
+        <label class="switch" style="border-top:0;padding-top:0"><input type="checkbox" id="setLan"><div><b>Use SillyTavern from your phone</b><span>Phones, tablets and other PCs on the same Wi-Fi can open your SillyTavern. Only devices on your own home network can connect. Home shows the address and a QR code.</span></div></label>
+        <div class="row" style="align-items:flex-end">
+          <div class="field"><label>User name</label><input type="text" id="setLanUser" maxlength="64" autocomplete="off" style="width:160px"></div>
+          <div class="field"><label>Password (optional, recommended)</label><input type="password" id="setLanPass" maxlength="128" autocomplete="new-password" style="width:220px"></div>
+          <button class="btn sm ghost" id="btnLanClear" hidden>Remove password</button>
+        </div>
+        <p class="muted small">With a password, other devices must sign in; this app signs in by itself. Anyone on your Wi-Fi could open SillyTavern without one, so set one unless you trust everyone on it. SillyTavern's own config.yaml is never changed.</p>
+        <div class="row">
+          <button class="btn sm primary" id="btnLanSave"><svg class="i"><use href="#i-check"/></svg>Save phone settings</button>
+          <span class="muted small" id="lanStatus"></span>
         </div>
       </div>
       <div style="margin-top:16px"><button class="btn primary" id="btnSave"><svg class="i"><use href="#i-check"/></svg>Save settings</button></div>
@@ -673,7 +723,7 @@
   });
 
   function loadPage(page) {
-    if (page === 'home') loadInfo();
+    if (page === 'home') { loadInfo(); loadLan(); }
     if (page === 'backups') loadBackups();
     if (page === 'extensions') { loadExtensions(false); if (state.extTab === 'desktop') loadDesktopExtensions(); }
     if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); }
@@ -792,6 +842,52 @@
   };
   $('btnAppCheck').onclick = () => D.appUpdateCheck();
 
+  // ---------- phone & tablet ----------
+  // Home's card: the address to open on the phone, a QR code, and what to do next.
+  async function loadLan(info) {
+    info = info || await D.lanInfo();
+    state.lan = info;
+    $('lanCard').hidden = !info.on;
+    if (!info.on) return;
+    const first = info.addresses[0];
+    $('lanUrls').innerHTML = info.addresses.length
+      ? info.addresses.map(a => `<div><span class="lan-url">${esc(a.url)}</span>${info.addresses.length > 1 ? ` <span class="muted small">${esc(a.name)}</span>` : ''}</div>`).join('')
+      : '<span class="muted">No home network found</span>';
+    $('lanQr').innerHTML = first ? first.qr : '';
+    $('lanQr').hidden = !first;
+    let hint;
+    if (!first) hint = 'This PC is not on a home network right now. Connect it to your Wi-Fi or router.';
+    else if (info.attached) hint = 'SillyTavern was started outside this app, so phone access isn\'t applied to it. Stop it there and start it from here.';
+    else if (!info.running) hint = 'Start the server, then open this address on a phone or tablet on the same Wi-Fi, or scan the code.';
+    else if (info.needsRestart) hint = 'Phone settings changed. Restart the server to apply them.';
+    else hint = `Open this on a phone or tablet on the same Wi-Fi, or scan the code. ${info.hasPassword ? `Sign in as "${info.user}" with your password.` : 'No password is set.'} If Windows asks whether Node.js may use the network, choose Allow.`;
+    if (info.whitelistTxt) hint += ' Note: SillyTavern\'s whitelist.txt decides who may connect, not this app.';
+    $('lanHint').textContent = hint;
+    $('btnLanRestart').hidden = !info.needsRestart;
+  }
+  // The form is filled when Settings opens, so server events don't wipe what's being typed.
+  async function fillLanForm() {
+    const info = await D.lanInfo();
+    $('setLan').checked = info.on;
+    $('setLanUser').value = info.user || 'user';
+    $('setLanPass').value = '';
+    $('setLanPass').placeholder = info.hasPassword ? 'Saved (type to change)' : 'None';
+    $('btnLanClear').hidden = !info.hasPassword;
+  }
+  async function saveLan(password) {
+    $('btnLanSave').disabled = true;
+    $('lanStatus').textContent = state.running ? 'Saving… the server restarts if needed.' : 'Saving…';
+    const info = await D.lanSave({ on: $('setLan').checked, user: $('setLanUser').value, password });
+    $('btnLanSave').disabled = false;
+    $('lanStatus').textContent = 'Saved.';
+    setTimeout(() => { $('lanStatus').textContent = ''; }, 2500);
+    loadLan(info);
+    fillLanForm();
+  }
+  $('btnLanSave').onclick = () => saveLan($('setLanPass').value || undefined);
+  $('btnLanClear').onclick = () => saveLan(null);
+  $('btnLanRestart').onclick = async () => loadLan(await D.lanSave({ on: state.lan.on, user: state.lan.user }));
+
   // ---------- backups ----------
   async function loadBackups() {
     const list = await D.listBackups();
@@ -900,6 +996,8 @@
   }
   $('btnHealth').onclick = loadHealth;
   document.querySelectorAll('[data-repair]').forEach(b => b.onclick = () => D.repair(b.dataset.repair));
+  $('btnBrowser').onclick = $('btnHomeBrowser').onclick = () => D.openInBrowser();
+  $('btnClassic').onclick = () => D.startClassic();
   document.querySelectorAll('[data-branch]').forEach(b => b.onclick = () => D.switchBranch(b.dataset.branch));
 
   // ---------- console ----------
@@ -955,6 +1053,7 @@
     $('setPort').value = current.port;
     $('setAuto').checked = current.autoStart;
     $('setCheck').checked = current.checkUpdatesOnLaunch;
+    $('setUpdLaunch').checked = !!current.updateOnLaunch;
     $('setAppUpd').checked = current.checkAppUpdates !== false;
     $('setBackup').checked = current.backupBeforeUpdate;
     $('setConfirm').checked = current.confirmBeforeQuit;
@@ -963,6 +1062,7 @@
     document.querySelectorAll('#setLayer button').forEach(b => b.classList.toggle('on', b.dataset.layer === (current.windowLayer || 'normal')));
     $('setTabs').checked = current.tabs !== false;
     renderLogFontForm();
+    fillLanForm();
   }
   document.querySelectorAll('#setLayer button').forEach(b => b.onclick = () => D.setLayer(b.dataset.layer));
   $('setTabs').onchange = () => D.setTabs($('setTabs').checked);
@@ -1014,6 +1114,7 @@
       port: Math.min(65535, Math.max(1, parseInt($('setPort').value, 10) || 8000)),
       autoStart: $('setAuto').checked,
       checkUpdatesOnLaunch: $('setCheck').checked,
+      updateOnLaunch: $('setUpdLaunch').checked,
       checkAppUpdates: $('setAppUpd').checked,
       backupBeforeUpdate: $('setBackup').checked,
       confirmBeforeQuit: $('setConfirm').checked,
@@ -1271,8 +1372,8 @@
 
   // ---------- events ----------
   D.onLog(append);
-  D.onStarted(() => D.getState().then(s => { state.running = true; state.startedAt = s.startedAt; state.url = s.url; renderStatus(); }));
-  D.onStopped(() => { state.running = false; state.startedAt = 0; renderStatus(); });
+  D.onStarted(() => D.getState().then(s => { state.running = true; state.startedAt = s.startedAt; state.url = s.url; renderStatus(); loadLan(); }));
+  D.onStopped(() => { state.running = false; state.startedAt = 0; renderStatus(); loadLan(); });
   D.onBusy(setBusy);
   D.onRefresh(refreshAll);
   D.onTheme(loadThemes);
@@ -1293,7 +1394,7 @@
     renderMiniLog();
     setBusy(s.busy);
     const st = await loadSetup();
-    if (st.ready) { loadInfo(); loadExtensions(false); }
+    if (st.ready) { loadInfo(); loadExtensions(false); loadLan(); }
   })();
 </script>
 </body>

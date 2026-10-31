@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('desktop', {
     stopServer: () => invoke('stop-server'),
     openST: () => invoke('open-st'),
     minimizeST: () => invoke('minimize-st'),
+    openInBrowser: () => invoke('open-in-browser'),
+    startClassic: () => invoke('start-classic'),
     // version & maintenance
     stInfo: () => invoke('st-info'),
     checkUpdates: () => invoke('check-updates'),
@@ -49,6 +51,9 @@ contextBridge.exposeInMainWorld('desktop', {
     saveSettings: s => invoke('save-settings', s),
     setLayer: mode => invoke('set-layer', mode),
     setTabs: on => invoke('set-tabs', on),
+    // phone & tablet access
+    lanInfo: () => invoke('lan-info'),
+    lanSave: s => invoke('lan-save', s),
     // updates of this app
     appUpdateState: () => invoke('app-update-state'),
     appUpdateCheck: () => invoke('app-update-check'),
