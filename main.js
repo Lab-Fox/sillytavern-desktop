@@ -843,7 +843,7 @@ app.on('login', (e, _wc, details, authInfo, callback) => {
 
 // ---------- app updates ----------
 ipcMain.handle('app-update-state', () => appUpdate.getState());
-ipcMain.handle('app-update-check', () => appUpdate.check());
+ipcMain.handle('app-update-check', () => appUpdate.check({ fresh: true }));
 ipcMain.handle('app-update-download', () => appUpdate.download());
 ipcMain.handle('app-update-install', () => {
     // A restore or SillyTavern update must not be cut off halfway.
@@ -1042,12 +1042,12 @@ if (gotLock) {
             },
         });
         themes.initThemes(USER_DATA);
-        appUpdate.initAppUpdate({ logLine, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
+        appUpdate.initAppUpdate({ userData: USER_DATA, logLine, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
         createLauncherWindow();
         syncTray();
         ext.activateEnabled();
         // A few seconds in, so it doesn't compete with startup.
-        if (settings.checkAppUpdates) setTimeout(() => appUpdate.check({ quiet: true }), 4000);
+        if (settings.checkAppUpdates) setTimeout(() => appUpdate.startChecking(), 4000);
         if (!ensureInstall()) return; // the welcome screen takes it from here
         refreshInstalls();
         if (settings.updateOnLaunch) {

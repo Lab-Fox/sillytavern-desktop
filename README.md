@@ -323,6 +323,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - **Packaged apps run from a read-only archive (asar).** Never write next to `__dirname`; use `app.getPath('userData')`.
 - **Single-instance lock:** all startup wiring stays inside `if (gotLock)`. `--quit` (sent by the installer) closes a running copy and never starts one.
 - **Self-update depends on release file names:** the installed app downloads `SillyTavern-Desktop-Setup.exe`, the portable one `SillyTavern-Desktop.exe`, from the latest release with a `vX.Y.Z` tag. Keep those names. `ST_DESKTOP_UPDATE_URL` points the check at a local copy of the releases API for testing.
+- **GitHub allows 60 unauthenticated API requests per hour per connection.** The check's answer is kept for 6 hours in `app-update-check.json` (app data folder) and reused on launch; the app re-checks every 6 hours while open; a refused check (403/429 with the rate-limit headers) falls back to the remembered answer and is retried after GitHub's reset time. **Check for app updates** always asks GitHub.
 - **The portable swap uses a batch file run by `cmd`:** a detached PowerShell (no console) exits without running anything.
 - **The installer would otherwise kill the app** (electron-builder's default), and the server would never be stopped properly. `installer.nsh` overrides `customCheckAppRunning` and must include `getProcessInfo.nsh` and `Var pid` itself.
 - **Stopping the server on Windows** needs `taskkill /PID <pid> /T /F` to also stop the processes SillyTavern starts.

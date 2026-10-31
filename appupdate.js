@@ -21,9 +21,18 @@ let send = () => {};
 let state = { status: 'idle' };
 let release = null; // { version, asset } of the update on offer
 let file = null;    // the downloaded update
+let cacheFile = null;
+let retryTimer = null;
+
+// GitHub answers 60 unauthenticated API requests per hour per internet
+// connection (shared by everyone behind a VPN). So the answer is kept for a
+// few hours and reused on launch, and a refused check is retried once GitHub
+// allows it again.
+const CACHE_HOURS = 6;
 
 export function initAppUpdate(opts) {
     ({ logLine, send } = opts);
+    cacheFile = path.join(opts.userData, 'app-update-check.json');
 }
 
 export const getState = () => state;
@@ -53,14 +62,57 @@ function removeDownloads() {
     fs.rm(updateDir(), { recursive: true, force: true }, () => { /* in use or gone: next time */ });
 }
 
+function readCache() {
+    try {
+        const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        return c.url === LATEST_URL ? c : null;
+    } catch { return null; }
+}
+
+function writeCache(r) {
+    const keep = { tag_name: r.tag_name, body: r.body, assets: (r.assets || []).map(a => ({ name: a.name, size: a.size, digest: a.digest, browser_download_url: a.browser_download_url })) };
+    try { fs.writeFileSync(cacheFile, JSON.stringify({ url: LATEST_URL, checkedAt: Date.now(), release: keep })); } catch { /* next time */ }
+}
+
+function retryAt(time) {
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => check({ quiet: true, fresh: true }), Math.max(60e3, time - Date.now()));
+}
+
+// The latest release: from the cache when it's recent (unless `fresh`), else
+// from GitHub. When GitHub refuses, an older answer beats none.
+async function latestRelease(fresh) {
+    const cached = readCache();
+    if (!fresh && cached && Date.now() - cached.checkedAt < CACHE_HOURS * 3600e3) return cached.release;
+    const res = await net.fetch(LATEST_URL, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+    if (res.ok) {
+        const r = await res.json();
+        writeCache(r);
+        return r;
+    }
+    if (res.status === 429 || (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0')) {
+        const resetAt = Number(res.headers.get('x-ratelimit-reset')) * 1000 || Date.now() + 3600e3;
+        retryAt(resetAt + 60e3);
+        if (cached) return cached.release;
+        const at = new Date(resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        throw new Error(`GitHub only allows a few checks per hour; the app tries again at ${at}`);
+    }
+    throw new Error(`GitHub answered ${res.status}`);
+}
+
+// On launch (when the setting is on): check now, then every few hours while the app runs.
+export function startChecking() {
+    check({ quiet: true });
+    setInterval(() => check({ quiet: true, fresh: true }), CACHE_HOURS * 3600e3);
+}
+
 // quiet: the check on launch shouldn't fill the log when the PC is offline.
-export async function check({ quiet = false } = {}) {
+// fresh: ask GitHub even if the remembered answer is recent ("Check for app updates").
+export async function check({ quiet = false, fresh = false } = {}) {
     if (['checking', 'downloading', 'ready'].includes(state.status)) return state;
     set({ status: 'checking' });
     try {
-        const res = await net.fetch(LATEST_URL, { headers: { Accept: 'application/vnd.github+json' } });
-        if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
-        const r = await res.json();
+        const r = await latestRelease(fresh);
         const version = String(r.tag_name || '').replace(/^v/, '');
         if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`unexpected release tag "${r.tag_name}"`);
         if (!isNewer(version, app.getVersion())) {
