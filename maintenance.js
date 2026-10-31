@@ -308,12 +308,31 @@ export function deleteBackup(stRoot, name) {
 }
 
 // ---------- extensions ----------
+// The origin URL from .git/config, without starting git.
+export function originUrl(dir) {
+    try {
+        const m = fs.readFileSync(path.join(dir, '.git', 'config'), 'utf8').match(/\[remote "origin"\][^[]*?\burl\s*=\s*(\S+)/);
+        return m ? m[1] : '';
+    } catch { return ''; }
+}
+
 function extensionRoots(stRoot) {
     const roots = [{ dir: path.join(stRoot, 'public', 'scripts', 'extensions', 'third-party'), scope: 'all users' }];
     let users = [];
     try { users = fs.readdirSync(path.join(stRoot, 'data'), { withFileTypes: true }).filter(d => d.isDirectory() && !d.name.startsWith('_')); } catch { /* no data yet */ }
     for (const u of users) roots.push({ dir: path.join(stRoot, 'data', u.name, 'extensions'), scope: u.name });
     return roots;
+}
+
+// Origin addresses of every installed extension, read from the folders only.
+export function installedRemotes(stRoot) {
+    const out = [];
+    for (const { dir, scope } of extensionRoots(stRoot)) {
+        let entries = [];
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }).filter(d => d.isDirectory()); } catch { continue; }
+        for (const d of entries) out.push({ folder: d.name, scope, remote: originUrl(path.join(dir, d.name)) });
+    }
+    return out;
 }
 
 export async function listExtensions(stRoot, { fetch = false } = {}) {
@@ -323,7 +342,7 @@ export async function listExtensions(stRoot, { fetch = false } = {}) {
         try { entries = fs.readdirSync(dir, { withFileTypes: true }).filter(d => d.isDirectory()); } catch { continue; }
         for (const d of entries) {
             const extDir = path.join(dir, d.name);
-            const ext = { id: d.name, path: extDir, scope, name: d.name, version: '', author: '', isGit: false, behind: null };
+            const ext = { id: d.name, path: extDir, scope, name: d.name, version: '', author: '', isGit: false, behind: null, remote: originUrl(extDir), head: '', headDate: '', incoming: '' };
             try {
                 const m = JSON.parse(fs.readFileSync(path.join(extDir, 'manifest.json'), 'utf8'));
                 ext.name = m.display_name || d.name;
@@ -335,6 +354,10 @@ export async function listExtensions(stRoot, { fetch = false } = {}) {
                 if (fetch) await git(extDir, ['fetch', '--quiet'], { quiet: true });
                 const b = await git(extDir, ['rev-list', '--count', 'HEAD..@{u}'], { quiet: true });
                 if (b.code === 0) ext.behind = parseInt(b.out.trim(), 10);
+                // The exact commits, for safety ratings and undoing updates.
+                const h = await git(extDir, ['log', '-1', '--format=%H%x09%cI'], { quiet: true });
+                if (h.code === 0) [ext.head, ext.headDate] = h.out.trim().split('\t');
+                if (ext.behind > 0) ext.incoming = (await git(extDir, ['rev-parse', '@{u}'], { quiet: true })).out.trim();
             }
             out.push(ext);
         }
@@ -342,8 +365,12 @@ export async function listExtensions(stRoot, { fetch = false } = {}) {
     return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function updateExtensions(stRoot) {
-    const exts = (await listExtensions(stRoot, { fetch: true })).filter(e => e.isGit && e.behind > 0);
+// only: the folders to update (the launcher's review); all with updates otherwise.
+// before(exts) runs once the list is known, e.g. to remember their versions.
+export async function updateExtensions(stRoot, { only = null, before = null } = {}) {
+    const want = only && new Set(only.map(p => path.resolve(p).toLowerCase()));
+    const exts = (await listExtensions(stRoot, { fetch: !only })).filter(e => e.isGit && e.behind > 0 && (!want || want.has(path.resolve(e.path).toLowerCase())));
+    if (before) await before(exts);
     if (!exts.length) { log('All extensions are up to date.'); return 0; }
     let ok = 0;
     for (const e of exts) {

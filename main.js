@@ -22,6 +22,7 @@ import * as prof from './profiles.js';
 import * as dl from './downloader.js';
 import * as hist from './history.js';
 import * as mig from './migrate.js';
+import * as sx from './stextensions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -72,6 +73,7 @@ const DEFAULT_SETTINGS = {
     lanUser: 'user',            // with lanPassword: SillyTavern's login for other devices
     lanPassword: '',
     backupKeep: 10,             // automatic backups kept; manual ones are never pruned
+    extInstallNoticeSeen: false, // the "extensions run code" note before installing from the app
     theme: 'sillytavern',       // launcher theme id (see themes.js)
 };
 function loadSettings() {
@@ -867,8 +869,124 @@ ipcMain.handle('delete-backup', async (_e, name) => {
     broadcast('refresh');
     return ok;
 });
-ipcMain.handle('list-extensions', (_e, fetch) => mx.listExtensions(stRoot(), { fetch: !!fetch }));
-ipcMain.handle('update-extensions', () => runTask('Updating extensions', () => mx.updateExtensions(stRoot()), { needsStopped: false }));
+// ---------- SillyTavern extensions: ratings, update review, undo, Kits, installing ----------
+// Installed extensions with their safety rating (when the catalog is loaded)
+// and what can be undone.
+ipcMain.handle('list-extensions', async (_e, fetch) => {
+    const exts = await mx.listExtensions(stRoot(), { fetch: !!fetch });
+    for (const x of exts) x.rating = x.remote ? sx.rate(x) : null;
+    return { exts, undo: await sx.undoInfo(stRoot(), exts), catalog: sx.catalogInfo() };
+});
+ipcMain.handle('ext-catalog', async (_e, fresh) => {
+    const r = await sx.loadCatalog({ fresh: !!fresh });
+    if (!r.ok) logLine(`Could not load the extension catalog: ${r.error}`);
+    return { ok: r.ok, error: r.error || '', stale: r.stale || '', info: sx.catalogInfo() };
+});
+// paths: the extensions the user kept ticked in the review.
+ipcMain.handle('update-extensions', (_e, paths) => runTask('Updating extensions', async () => {
+    let snap = null;
+    const n = await mx.updateExtensions(stRoot(), { only: Array.isArray(paths) ? paths.map(String) : null, before: async exts => { snap = await sx.snapshotBefore(stRoot(), exts); } });
+    if (snap && await sx.snapshotAfter(snap)) logLine('The versions from before this update were remembered: Extensions → Undo last update puts them back.');
+    return n;
+}, { needsStopped: false }));
+ipcMain.handle('ext-undo', (_e, onlyPath) => runTask('Undoing extension updates', () => sx.undo(stRoot(), onlyPath ? String(onlyPath) : null), { needsStopped: false }));
+// After installing, updating or going back: open SillyTavern pages load the new code.
+ipcMain.handle('reload-st', () => { stWins.forEach(w => w.reloadAll()); return stWins.size; });
+// Project pages and scan reports from the catalog: web links only.
+ipcMain.handle('open-url', (_e, url) => { if (/^https:\/\//i.test(String(url))) openExternalSafe(String(url)); });
+
+// The first install from the app says what extensions are (once, unless asked again).
+async function installNotice() {
+    if (settings.extInstallNoticeSeen) return true;
+    const { response, checkboxChecked } = await dialog.showMessageBox(launcherWin, {
+        type: 'warning', buttons: ['I understand, continue', 'Cancel'], defaultId: 0, cancelId: 1,
+        message: 'Extensions run code inside SillyTavern',
+        detail: 'An extension can read your chats, characters and settings, and talk to other websites. A safety rating is information about one version, not a guarantee. Install only extensions you trust, and read their page first.',
+        checkboxLabel: "Don't show this again",
+    });
+    if (response !== 0) return false;
+    if (checkboxChecked) { settings.extInstallNoticeSeen = true; saveSettings(settings); }
+    return true;
+}
+const installedSet = () => new Set(mx.installedRemotes(stRoot()).map(i => sx.normUrl(i.remote)).filter(Boolean));
+// Several at once (a Kit) or one (from the catalog). items: [{ url, scope, commit, name, branch }]
+async function installMany(label, items) {
+    if (busyTask) return { error: `Busy with "${busyTask}" — wait for it to finish.` };
+    if (!setup.isStRoot(stRoot())) return { error: 'Choose your SillyTavern first.' };
+    if (!(await installNotice())) return { canceled: true };
+    const results = [];
+    await runTask(label, async () => {
+        for (const it of items) {
+            const scope = it.scope === 'all users' ? 'all users' : 'default-user';
+            results.push({ name: it.name, ...(await sx.install(stRoot(), { ...it, scope })) });
+        }
+        const ok = results.filter(r => r.ok).length;
+        for (const r of results.filter(x => x.error)) logLine(`ERROR: ${r.error}`);
+        logLine(`Installed ${ok} of ${items.length} extension${items.length === 1 ? '' : 's'}.${ok ? ' Reload SillyTavern to use them.' : ''}`);
+        return ok > 0;
+    }, { needsStopped: false });
+    return { results, installed: results.filter(r => r.ok).length };
+}
+ipcMain.handle('ext-search', (_e, q) => {
+    const have = installedSet();
+    return sx.search(String(q || '')).map(e => ({ ...e, installed: have.has(sx.normUrl(e.url)) }));
+});
+ipcMain.handle('ext-install', (_e, id) => {
+    const e = sx.catalogEntry(String(id));
+    if (!e) return { error: 'That extension is not in the catalog anymore.' };
+    if (installedSet().has(sx.normUrl(e.url))) return { error: `${e.name} is already installed.` };
+    return installMany(`Installing ${e.name}`, [{ url: e.repo.replace(/\.git$/, ''), branch: e.branch, name: e.name }]);
+});
+
+// Kits: saved sets of extensions, usable in every profile.
+ipcMain.handle('kits', () => {
+    const have = installedSet();
+    return sx.kits().map(k => ({ ...k, extensions: k.extensions.map(x => ({ ...x, installed: have.has(sx.normUrl(x.url)), rating: sx.rate({ remote: x.url, head: x.commit }) })) }));
+});
+ipcMain.handle('kit-save', async (_e, name, description) => {
+    const exts = (await mx.listExtensions(stRoot())).filter(x => x.isGit && x.remote);
+    if (!exts.length) return { error: 'No extensions installed with Git, so there is nothing to save.' };
+    try {
+        const kit = sx.saveKit({ name, description, created: Date.now(), extensions: exts.map(x => ({ name: x.name, url: x.remote, scope: x.scope === 'all users' ? 'all users' : 'user', commit: x.head })) });
+        logLine(`Saved the Kit "${kit.name}" (${kit.extensions.length} extensions).`);
+        return { ok: true, kit };
+    } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('kit-import', async () => {
+    const r = await dialog.showOpenDialog(launcherWin, { title: 'Import a Kit', filters: [{ name: 'Kit', extensions: ['json'] }], properties: ['openFile'] });
+    if (r.canceled) return { canceled: true };
+    try {
+        if (fs.statSync(r.filePaths[0]).size > 1024 * 1024) throw new Error('That file is too large to be a Kit.');
+        const kit = sx.saveKit(sx.readKitFile(r.filePaths[0]));
+        logLine(`Imported the Kit "${kit.name}" (${kit.extensions.length} extensions).`);
+        return { ok: true, kit };
+    } catch (e) { return { error: e instanceof SyntaxError ? 'That file is not a Kit (invalid JSON).' : e.message }; }
+});
+ipcMain.handle('kit-export', async (_e, id) => {
+    const json = sx.kitJson(String(id));
+    if (!json) return false;
+    const r = await dialog.showSaveDialog(launcherWin, { title: 'Export Kit', defaultPath: `${String(id)}.kit.json`, filters: [{ name: 'Kit', extensions: ['json'] }] });
+    if (r.canceled) return false;
+    fs.writeFileSync(r.filePath, json);
+    logLine(`Exported the Kit to ${r.filePath}.`);
+    return true;
+});
+ipcMain.handle('kit-delete', async (_e, id) => {
+    const kit = sx.kits().find(k => k.id === id);
+    if (!kit || !(await confirm(`Delete the Kit "${kit.name}"?`, 'Only the saved list is deleted. Installed extensions stay.', 'Delete'))) return false;
+    return sx.deleteKit(String(id));
+});
+// urls: the missing extensions the user kept ticked; exact: the Kit's versions instead of the newest.
+ipcMain.handle('kit-install', (_e, id, urls, exact) => {
+    const kit = sx.kits().find(k => k.id === id);
+    if (!kit) return { error: 'That Kit no longer exists.' };
+    const have = installedSet();
+    const want = new Set((Array.isArray(urls) ? urls : []).map(u => sx.normUrl(u)));
+    const items = kit.extensions.filter(x => !have.has(sx.normUrl(x.url)) && want.has(sx.normUrl(x.url))).map(x => ({ ...x, commit: exact ? x.commit : '' }));
+    if (!items.length) return { error: 'Nothing to install: those extensions are already there.' };
+    return installMany(`Installing from the Kit "${kit.name}"`, items);
+});
+
 ipcMain.handle('health-check', () => mx.healthCheck(stRoot(), { running: serverState.running }));
 ipcMain.handle('open-place', (_e, key) => {
     const p = PLACES[key]?.();
@@ -1288,6 +1406,7 @@ if (gotLock) {
         dl.initDownloader({ logLine, userData: USER_DATA });
         hist.initHistory(USER_DATA);
         mig.initMigrate({ logLine });
+        sx.initStExtensions({ logLine, userData: USER_DATA });
         instances.initInstances({ logLine, host: settings.host });
         ext.initExtensions({
             userData: USER_DATA,

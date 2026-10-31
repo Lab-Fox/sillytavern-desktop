@@ -40,6 +40,7 @@
       "downloader.js",
       "history.js",
       "migrate.js",
+      "stextensions.js",
       "bar-preload.js",
       "examples/**",
       "fonts/**",

@@ -31,7 +31,7 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 | **Moving your data** | Copy folders between installs by hand and hope nothing gets overwritten | Pick what to copy (or every single item), see what's new or different first, undo with one click |
 | **What changed** | Look up release notes on GitHub, read the git log | See what an update brings before installing it, a "What's new" card afterwards, and a history per install |
 | **Backups** | Copy the `data` folder by hand | One click, automatic before updates, restore anytime |
-| **Extensions** | Check each one for updates yourself | See which ones have updates and update them all at once |
+| **Extensions** | Check each one for updates yourself, and hope an update is safe | Safety ratings for each one, a review before updating, one-click undo, and Kits to set up the same extensions elsewhere |
 | **Problems** | Scroll through a terminal | A searchable console, a health check, one-click repair tools |
 | **Userscripts** | Need a browser add-on like Tampermonkey | Built in |
 | **On your phone** | Edit `config.yaml` (listen, whitelist) and find your PC's address | One switch, then scan a QR code |
@@ -53,6 +53,7 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 
 **Keeps your SillyTavern healthy**
 - Safe one-click updates for SillyTavern and all its extensions, and switching between the **release** and **staging** versions.
+- **Extension safety:** each extension's security rating, a review before updating, **Undo** for extension updates, **Kits** (saved sets of extensions), and finding new extensions, all in the launcher.
 - Backups that handle any filename (emoji included). Restoring never deletes anything.
 - A health check and repair tools for the most common problems.
 
@@ -100,7 +101,7 @@ Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 o
 | **Profiles** | Your SillyTavern folders by name: switch, add, rename, re-point, remove, run one next to another, or **Download SillyTavern**. |
 | **Migrate data** | Copy characters, chats, presets, extensions and more from one SillyTavern (or user) to another, and undo earlier migrations. |
 | **Backups** | Back up your data; restore or delete a backup. |
-| **Extensions** | SillyTavern's extensions with their versions; **Update all**. Also extensions for this app (**Desktop app**). |
+| **Extensions** | SillyTavern's extensions with their safety ratings; review and **Update all**, undo updates, find new extensions, Kits. Also extensions for this app (**Desktop app**). |
 | **Maintenance** | Update Node.js and Git, the health check, repair tools, ways to run SillyTavern without the app, and the release/staging switch. |
 | **Console** | Everything the server prints. Filter to problems, search, or copy it for a bug report. |
 | **Settings** | Themes, which SillyTavern to use, the port, the SillyTavern window, the console font, and how the app behaves. |
@@ -195,7 +196,7 @@ Only devices on your own home network can connect. Your `config.yaml` is never c
 
 | Kind | Where it goes |
 |---|---|
-| **SillyTavern extensions** | Install from SillyTavern's own Extensions menu, as usual. The launcher shows and updates them. |
+| **SillyTavern extensions** | **Extensions → Find extensions** in the launcher, or SillyTavern's own Extensions menu, as usual. The launcher rates, updates and undoes them (see below). |
 | **Server plugins** | SillyTavern's `plugins` folder, as usual (needs `enableServerPlugins: true` in `config.yaml`) |
 | **Userscripts** (`.user.js`) | **Extensions → Userscripts → Open folder**, then restart the app. Replaces Tampermonkey. |
 | **Desktop extensions** | Extensions for this app: menu items, page tweaks, their own settings panel. **Extensions → Desktop app**. They stay off until you turn them on. |
@@ -208,6 +209,20 @@ Don't put `.user.js` files in SillyTavern's `plugins` folder: SillyTavern would 
 Supported: `@match`, `@include`, `@exclude`, `@run-at`, `@noframes`, `@connect` (enforced), and the common `GM_*` / `GM.*` APIs: `xmlhttpRequest` (cross-site, with the window's cookies), `openInTab` (background tabs stay hidden), `getValue` / `setValue` / `deleteValue` / `listValues`, `addStyle`, `info`. Menu commands are accepted but not shown. Only install userscripts you trust.
 
 </details>
+
+### SillyTavern extensions: safety, updates, Kits
+
+**Safety ratings.** Every installed extension shows what the public [Tavernary](https://tavernary.org) catalog says about it: the result of its TavernKeeper security scan (**Low concern**, **Some concern**, **High concern**, **Not scanned yet**), a link to the full report, and whether *your* version is the one that was scanned (otherwise "older scan"). Extensions that aren't in the catalog say so; that alone means nothing good or bad. A rating is information about one version, not a guarantee. The catalog is downloaded at most once a day (about 13 MB the first time, then only when it changed).
+
+**Update all…** first shows a review: each extension with an update, its rating, and whether the exact version the update brings was scanned ("update not scanned yet" is common and usually fine). Untick anything you'd rather not update; extensions rated high concern start unticked. Single extensions have their own **Update** button.
+
+**Undo.** Before every update the app remembers the version of each extension. **Undo last update** puts them all back, and **Roll back** does it for one extension. An extension you changed yourself since is never touched. **Reload SillyTavern** (shown when a window is open) loads the changed code.
+
+**Find extensions** searches the catalog by what you want ("memory", "image generation", "tracker"…) with ratings, stars, activity and the license, and installs with one click the same way SillyTavern does. The first time, the app explains that extensions run code inside SillyTavern.
+
+**Kits** are saved lists of extensions (addresses and versions, not files): **Save my extensions as a Kit**, **Export** it as a file to share, **Import** someone's Kit, and **Install missing…** in any profile, with the newest versions or exactly the saved ones. You review the list (with ratings) before anything is installed; Kits only accept https addresses.
+
+The ratings and catalog come from Tavernary's catalog database, available under the [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). This app is not affiliated with or endorsed by Tavernary.
 
 Want to make a desktop extension? See **[EXTENSIONS.md](EXTENSIONS.md)** and the [example](examples/break-reminder).
 
@@ -362,6 +377,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `launcher.html`, `preload.js` | The launcher UI (one file, no external dependencies) and its bridge (`window.desktop.*`) |
 | `setup.js` | Finding SillyTavern, installing Node.js and Git, moving an install |
 | `profiles.js` | Profiles: named SillyTavern folders (`settings.profiles`) |
+| `stextensions.js` | SillyTavern extensions: the Tavernary catalog and ratings, update snapshots and undo, installing, Kits |
 | `migrate.js` | Migrating data: scanning both folders into categories and items, copying with a conflict rule, journals and Undo |
 | `history.js` | Change history per folder (`st-history.json`): what an update, download, branch switch or outside change brought |
 | `downloader.js` | Downloading SillyTavern: the version list (GitHub releases, `git ls-remote` as fallback), partial clone + `npm install`, cancel |
@@ -396,6 +412,8 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - **Full screen:** `isFullScreen()` lags behind the `enter-full-screen` event, and Electron ignores `setAlwaysOnTop` in full screen, so `shell.js` tracks the events and `winlayer.js` also calls `SetWindowPos`.
 - **A SillyTavern window that isn't seen must not draw.** SillyTavern pages use `backgroundThrottling: true` and Chromium's native occlusion stays on, so a minimized, covered or inactive tab stops rendering (an animated background behind other windows used to keep the GPU busy). Only the `GM_openInTab` helper windows keep `backgroundThrottling: false`.
 - **Profiles are only a list** (`settings.profiles`); the folder in use is still `settings.sillytavernPath`. Every switch goes through `runTask` + `switchTo()` in `main.js`, which also stops an extra server already running from the new folder.
+- **Extension ratings** come from `https://tavernary.org/catalog/tavernary-catalog-v8.json` (ODbL, credited on the Extensions page; keep the credit and the "not affiliated" note). `stextensions.js` keeps a slim copy in `ext-catalog.json` (app data) for 24 hours and revalidates with the ETag. Installed extensions are matched by their `origin` address (read from `.git/config`); "your version was scanned" compares the exact commit with the scan history. SillyTavern installs extensions as shallow clones (`--depth 1`), so ancestry can't be checked: newer/older is told by date. A new catalog schema version needs a code change (the app reports "unexpected catalog format").
+- **Extension snapshots** (`backups/desktop/extension-snapshots/*.json` in the SillyTavern folder) record the commit before and after each update; undo uses `git reset --hard` on the extension's branch, only when it is still at the "after" commit and has no local changes.
 - **Migration** works on items (a character card + its sprite folder, a chat folder, a group + its chats, an extension folder…), each a list of files with a state (new / same / different). `scan()` keeps the file lists in the main process; the launcher sends item keys. Small files are compared by content, big ones by size and time. Copies keep the source's modification time. Every run writes a journal to `backups/desktop/migrations/<stamp>/` in the target (added files, copies of replaced files) that `undo()` uses; the folder disappears after a complete Undo. Thumbnails, `content.log` and temp files are never copied.
 - **Change history** records commits with `git log from..to` (short hashes from `getInfo()`); release notes aren't stored, the launcher reads them from the version list. Every task that changes SillyTavern's files should go through `tracked()` in `main.js`; `checkOutsideChanges()` compares the folder with the last commit the app saw (on launch and on every switch).
 - **Security fixes per release** are lines of the release notes matching `SECURITY` in `downloader.js` (security, vulnerability, CVE, XSS, path traversal, SSRF, sanitization, injection), cleaned of Markdown. They drive the older-version warning, the "⚠ missing security fixes" marks and the profile tags (`olderStatus()` reads only the cached list; the app refreshes it in the background on launch).
@@ -410,6 +428,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] "Update on launch" option
 - [x] Profiles and a SillyTavern downloader (any version, with a warning for older ones)
 - [x] Migrate data between SillyTavern folders and users, with Undo
+- [x] Extension safety ratings, update review and undo, Kits, finding extensions
 - [x] What's new: release notes and changes before and after updates, history per install
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)

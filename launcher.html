@@ -292,6 +292,8 @@
   .commits .mono { color: var(--muted); font-size: 15px; flex-shrink: 0; }
   .notes .tag { margin-left: 6px; }
   .news { border-color: var(--accent); }
+  #xfList, #xList { max-height: 58vh; overflow: auto; }
+  #xfList .meta { white-space: normal; }
 
   /* ---------- migrate ---------- */
   .mig-ends { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: start; }
@@ -579,16 +581,39 @@
         <div class="stack" id="dxPanels"></div>
       </div>
       <div id="extSt">
-      <p class="lead">Third-party extensions installed in SillyTavern. Extensions installed from SillyTavern's own menu can be updated here in one go. Install new ones from the Extensions menu inside SillyTavern.</p>
+      <p class="lead">Third-party extensions installed in SillyTavern: see how each one was rated for safety, update them together (and undo that), find new ones, and save your set as a Kit to use in another SillyTavern.</p>
       <div class="stack">
         <div class="card">
           <h2>Installed extensions
             <span class="act row">
+              <button class="btn sm ghost" id="btnExtReload" hidden title="Open SillyTavern pages load the new extension code"><svg class="i"><use href="#i-refresh"/></svg>Reload SillyTavern</button>
+              <button class="btn sm ghost" data-task id="btnExtUndo" hidden><svg class="i"><use href="#i-restore"/></svg>Undo last update</button>
+              <button class="btn sm ghost" id="btnExtFind"><svg class="i"><use href="#i-plus"/></svg>Find extensions</button>
               <button class="btn sm ghost" id="btnExtCheck"><svg class="i"><use href="#i-refresh"/></svg>Check for updates</button>
-              <button class="btn sm primary" data-task id="btnExtUpdate"><svg class="i"><use href="#i-download"/></svg>Update all</button>
+              <button class="btn sm primary" data-task id="btnExtUpdate"><svg class="i"><use href="#i-download"/></svg>Update all…</button>
             </span>
           </h2>
           <div class="list" id="extList"></div>
+          <p class="muted small" id="extCredit" style="margin-top:10px"></p>
+        </div>
+        <div class="card">
+          <h2>Kits
+            <span class="act row">
+              <button class="btn sm ghost" id="btnKitImport"><svg class="i"><use href="#i-download"/></svg>Import…</button>
+              <button class="btn sm" id="btnKitNew"><svg class="i"><use href="#i-plus"/></svg>Save my extensions as a Kit</button>
+            </span>
+          </h2>
+          <p class="muted small" style="margin-bottom:8px">A Kit is a saved list of extensions (their addresses and versions, not their files). Use it to set up the same extensions in another profile, or share it as a file.</p>
+          <div class="form" id="kitForm" hidden style="margin-top:0;padding-top:0;border:0">
+            <div class="row" style="align-items:flex-end">
+              <div class="field" style="flex:1;min-width:180px;max-width:280px"><label>Kit name</label><input type="text" id="kitName" maxlength="60" placeholder="My extensions"></div>
+              <div class="field" style="flex:2;min-width:200px"><label>Description (optional)</label><input type="text" id="kitDesc" maxlength="300"></div>
+              <button class="btn sm primary" id="btnKitSave"><svg class="i"><use href="#i-check"/></svg>Save Kit</button>
+              <button class="btn sm ghost" id="btnKitCancel">Cancel</button>
+            </div>
+            <p class="err" id="kitErr"></p>
+          </div>
+          <div class="list" id="kitList"></div>
         </div>
         <div class="card">
           <h2>Userscripts</h2>
@@ -878,6 +903,27 @@
     </div>
   </div>
 
+  <!-- ===== Extension review (update all, install from a Kit) ===== -->
+  <div class="modal" id="xModal">
+    <div class="card stack">
+      <h2><span id="xTitle"></span><button class="btn sm ghost act" id="btnXClose">Close</button></h2>
+      <p class="muted" id="xLead"></p>
+      <div class="list" id="xList"></div>
+      <label class="switch" id="xExactBox" hidden style="border:0;padding:0"><input type="checkbox" id="xExact"><div><b>Install the exact versions saved in the Kit</b><span>Off: the newest version of each. On: the versions the Kit was saved with (if they are still available).</span></div></label>
+      <div class="row"><button class="btn primary" id="btnXGo"></button><span class="muted small" id="xNote"></span></div>
+    </div>
+  </div>
+
+  <!-- ===== Find extensions (Tavernary catalog) ===== -->
+  <div class="modal" id="xfModal">
+    <div class="card stack">
+      <h2>Find extensions<button class="btn sm ghost act" id="btnXfClose">Close</button></h2>
+      <input type="search" id="xfSearch" placeholder="What should it do? e.g. memory, image generation, tracker…">
+      <div class="list" id="xfList"></div>
+      <p class="muted small" id="xfCredit"></p>
+    </div>
+  </div>
+
   <!-- ===== What changed / history ===== -->
   <div class="modal" id="chgModal">
     <div class="card stack">
@@ -960,7 +1006,7 @@
     if (page === 'profiles') loadProfiles();
     if (page === 'migrate') loadMigrate();
     if (page === 'backups') loadBackups();
-    if (page === 'extensions') { loadExtensions(false); if (state.extTab === 'desktop') loadDesktopExtensions(); }
+    if (page === 'extensions') { loadExtensions(false); loadKits(); if (state.extTab === 'desktop') loadDesktopExtensions(); }
     if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); }
     if (page === 'console') renderConsole();
     if (page === 'settings') loadSettingsForm();
@@ -1155,23 +1201,205 @@
   $('btnQuickBackup').onclick = () => D.backup();
 
   // ---------- extensions ----------
+  // ---------- SillyTavern extensions ----------
+  // Ratings come from the Tavernary catalog (TavernKeeper scans), credited below the list.
+  const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 2 ? 'just now' : m < 120 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+  const RISK = {
+    low: ['good', 'Low concern'], medium: ['warn', 'Some concern'], moderate: ['warn', 'Some concern'],
+    high: ['bad', 'High concern'], critical: ['bad', 'Serious concern'],
+  };
+  const riskBad = r => ['high', 'critical'].includes(r);
+  // The badge for an installed extension (or a catalog entry).
+  function ratingTag(r, { remote = true } = {}) {
+    if (!r) return remote ? '<span class="tag" title="This extension is not in the Tavernary catalog, so there is no scan for it. That alone says nothing good or bad.">not in catalog</span>' : '';
+    const [cls, label] = RISK[r.risk] || ['', r.state === 'unsupported' ? 'Scan not possible' : 'Not scanned yet'];
+    const version = { scanned: 'your version was scanned', newer: 'your version is newer than the last scan', other: 'your version is not the scanned one' }[r.version] || '';
+    const tip = [r.headline, r.scanSummary || r.summary, version && `Note: ${version}.`, r.scannedAt && `Scanned ${new Date(r.scannedAt).toLocaleDateString()}.`, 'A scan is information about one version, not a guarantee.'].filter(Boolean).join(' ');
+    return `<span class="tag ${cls}" title="${esc(tip)}">${esc(label)}${r.version === 'newer' || r.version === 'other' ? ' · older scan' : ''}</span>`;
+  }
+  const reportLink = r => (r?.reportUrl ? `<button class="link" data-xurl="${esc(r.reportUrl)}">report</button>` : '');
+  document.addEventListener('click', e => { const b = e.target.closest('[data-xurl]'); if (b) D.openUrl(b.dataset.xurl); });
+
+  const xs = { list: [], undo: { last: null, back: {} }, catalog: null, needsReload: false };
   async function loadExtensions(fetch) {
     const el = $('extList');
-    if (fetch) el.innerHTML = `<div class="empty">Checking each extension for updates…</div>`;
-    const list = await D.listExtensions(fetch);
-    const behind = list.filter(e => e.behind > 0).length;
+    if (fetch) el.innerHTML = '<div class="empty">Checking each extension for updates…</div>';
+    // The ratings: loaded once a day (in the background the first time).
+    if (!xs.catalogTried) { xs.catalogTried = true; D.extCatalog(false).then(r => { xs.catalogErr = r.ok ? r.stale : r.error; if (r.ok) loadExtensions(false); else renderCredit(); }); }
+    const r = await D.listExtensions(fetch);
+    Object.assign(xs, { list: r.exts, undo: r.undo, catalog: r.catalog });
+    const behind = r.exts.filter(e => e.behind > 0).length;
     $('navExt').hidden = !behind;
     $('navExt').textContent = behind;
-    if (!list.length) { el.innerHTML = `<div class="empty">No third-party extensions installed.</div>`; return; }
-    el.innerHTML = list.map(e => {
-      const status = !e.isGit ? '<span class="tag">Manual install</span>'
+    $('btnExtUndo').hidden = !r.undo.last;
+    if (r.undo.last) $('btnExtUndo').title = `Puts back ${r.undo.last.names.join(', ')} as ${r.undo.last.count === 1 ? 'it was' : 'they were'} before the update of ${new Date(r.undo.last.at).toLocaleString()}.`;
+    $('btnExtReload').hidden = !xs.needsReload || !state.windows.open;
+    renderCredit();
+    if (!r.exts.length) { el.innerHTML = '<div class="empty">No third-party extensions installed. <button class="link" id="btnExtFind2">Find extensions</button></div>'; $('btnExtFind2').onclick = openFind; return; }
+    el.innerHTML = r.exts.map(e => {
+      const status = !e.isGit ? '<span class="tag" title="Not installed with Git: it can\'t be updated here">manual install</span>'
         : e.behind > 0 ? `<span class="tag fox">${e.behind} update${e.behind === 1 ? '' : 's'}</span>`
-        : e.behind === 0 ? '<span class="tag good">Up to date</span>' : '<span class="tag">Unknown</span>';
+        : e.behind === 0 ? '<span class="tag good">up to date</span>' : '<span class="tag">unknown</span>';
       const meta = [e.version && `v${e.version}`, e.author, e.scope === 'all users' ? 'all users' : `user: ${e.scope}`].filter(Boolean).map(esc).join(' · ');
-      return `<div class="item"><div class="main"><div class="title">${esc(e.name)}</div><div class="meta">${meta}</div></div>${status}</div>`;
+      const back = xs.undo.back[e.path];
+      const acts = [
+        e.behind > 0 ? `<button class="btn sm" data-task data-xupd="${esc(e.path)}">Update</button>` : '',
+        back ? `<button class="btn sm ghost" data-task data-xback="${esc(e.path)}" title="Back to the version from before the update of ${esc(new Date(back.at).toLocaleString())}">${icon('restore')}Roll back</button>` : '',
+      ].join('');
+      return `<div class="item"><div class="main"><div class="title">${esc(e.name)} ${e.isGit ? ratingTag(e.rating, { remote: !!e.remote }) : ''} ${reportLink(e.rating)}</div><div class="meta">${meta}</div></div>${status}<div class="acts">${acts}</div></div>`;
     }).join('');
+    el.querySelectorAll('[data-xupd]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => reviewUpdates([b.dataset.xupd]); });
+    el.querySelectorAll('[data-xback]').forEach(b => { b.disabled = !!state.busy; b.onclick = async () => { await D.extUndo(b.dataset.xback); afterExtChange(); }; });
+  }
+  function renderCredit() {
+    const c = xs.catalog;
+    $('extCredit').innerHTML = c
+      ? `Safety ratings: TavernKeeper scans from the <button class="link" data-xurl="https://tavernary.org">Tavernary</button> catalog (${num(c.count)} extensions, data under the <button class="link" data-xurl="${esc(c.credit.licenseUrl)}">ODbL</button>), checked ${ago(c.checkedAt)}. <button class="link" id="btnExtRatings">Refresh</button> · A rating describes one version and is not a guarantee; this app is not affiliated with Tavernary.${xs.catalogErr ? ` <span class="err">(${esc(xs.catalogErr)})</span>` : ''}`
+      : xs.catalogErr ? `<span class="err">Safety ratings unavailable: ${esc(xs.catalogErr)}.</span> <button class="link" id="btnExtRatings">Try again</button>` : 'Loading safety ratings…';
+    if ($('btnExtRatings')) $('btnExtRatings').onclick = async () => { $('extCredit').textContent = 'Loading safety ratings…'; const r = await D.extCatalog(true); xs.catalogErr = r.ok ? r.stale : r.error; loadExtensions(false); };
   }
   $('btnExtCheck').onclick = () => loadExtensions(true);
+  // After installing, updating or going back, open SillyTavern pages still run the old code.
+  async function afterExtChange() {
+    xs.needsReload = true;
+    await loadExtensions(false);
+    loadKits();
+  }
+  $('btnExtReload').onclick = async () => { await D.reloadST(); xs.needsReload = false; $('btnExtReload').hidden = true; };
+  $('btnExtUndo').onclick = async () => { await D.extUndo(); afterExtChange(); };
+
+  // ----- review before updating -----
+  // Every extension with an update, ticked unless its rating is high-risk.
+  // The versions from before are remembered, so the update can be undone.
+  const closeX = () => $('xModal').classList.remove('show');
+  $('btnXClose').onclick = closeX;
+  async function reviewUpdates(only) {
+    const fresh = !only;
+    if (fresh) { $('extList').innerHTML = '<div class="empty">Checking each extension for updates…</div>'; await loadExtensions(true); }
+    const list = xs.list.filter(e => e.behind > 0 && (!only || only.includes(e.path)));
+    if (!list.length) { append('All extensions are up to date.'); return; }
+    $('xTitle').textContent = list.length === 1 ? `Update ${list[0].name}` : `Update ${list.length} extensions`;
+    $('xLead').textContent = 'Untick anything you don\'t want to update now. The versions from before are remembered, so you can undo this update afterwards.';
+    $('xExactBox').hidden = true;
+    $('xList').innerHTML = list.map(e => {
+      const r = e.rating;
+      const incoming = !r ? '<span class="tag" title="Not in the Tavernary catalog: no scan">no scan</span>'
+        : r.incoming === 'scanned' ? `<span class="tag ${(RISK[r.incomingRisk] || ['good'])[0]}" title="The exact version this update brings was scanned.">update scanned${r.incomingRisk && r.incomingRisk !== 'low' ? `: ${esc((RISK[r.incomingRisk] || [, r.incomingRisk])[1])}` : ''}</span>`
+        : '<span class="tag warn" title="The version this update brings has not been scanned yet. Most updates are fine; read the changes if you are unsure.">update not scanned yet</span>';
+      const bad = riskBad(r?.latestRisk) || riskBad(r?.incomingRisk);
+      return `<label class="item" style="cursor:pointer"><input type="checkbox" data-xpick="${esc(e.path)}"${bad ? '' : ' checked'} style="width:16px;height:16px;accent-color:var(--accent)">
+        <div class="main"><div class="title">${esc(e.name)} ${ratingTag(r, { remote: !!e.remote })} ${reportLink(r)}</div><div class="meta">${e.behind} new change${e.behind === 1 ? '' : 's'}${bad ? ' · <span style="color:var(--bad)">rated high concern: read the report before updating</span>' : ''}</div></div>${incoming}</label>`;
+    }).join('');
+    const count = () => $('xList').querySelectorAll('[data-xpick]:checked').length;
+    const sync = () => { const n = count(); $('btnXGo').innerHTML = `${icon('download')}Update ${n || ''} extension${n === 1 ? '' : 's'}`; $('btnXGo').disabled = !n || !!state.busy; };
+    $('xList').querySelectorAll('[data-xpick]').forEach(c => c.onchange = sync);
+    sync();
+    $('xNote').textContent = '';
+    $('btnXGo').onclick = async () => {
+      const paths = [...$('xList').querySelectorAll('[data-xpick]:checked')].map(c => c.dataset.xpick);
+      closeX();
+      await D.updateExtensions(paths);
+      afterExtChange();
+    };
+    $('xModal').classList.add('show');
+  }
+  $('btnExtUpdate').onclick = () => reviewUpdates(null);
+
+  // ----- find and install (catalog) -----
+  let xfTimer = null;
+  function openFind() {
+    $('xfModal').classList.add('show');
+    $('xfSearch').focus();
+    runFind();
+  }
+  $('btnExtFind').onclick = openFind;
+  $('btnXfClose').onclick = () => $('xfModal').classList.remove('show');
+  $('xfSearch').oninput = () => { clearTimeout(xfTimer); xfTimer = setTimeout(runFind, 200); };
+  async function runFind() {
+    const el = $('xfList');
+    if (!xs.catalog) {
+      el.innerHTML = '<div class="empty">Loading the catalog…</div>';
+      const r = await D.extCatalog(false);
+      if (!r.ok) { el.innerHTML = `<div class="empty err">The catalog could not be loaded: ${esc(r.error)}</div>`; return; }
+      xs.catalog = r.info;
+    }
+    const q = $('xfSearch').value.trim();
+    const res = await D.extSearch(q);
+    $('xfCredit').innerHTML = `From the <button class="link" data-xurl="https://tavernary.org">Tavernary</button> catalog (ODbL). It lists projects by their creators; listing and ratings are not endorsements, and installing runs the creator's code. ${q ? '' : 'Most-starred first. '}${res.length >= 60 ? 'Showing the first 60: search to narrow it down.' : ''}`;
+    el.innerHTML = res.length ? res.map(e => {
+      const [cls, label] = RISK[e.risk] || ['', e.state === 'unsupported' ? 'Scan not possible' : 'Not scanned yet'];
+      const when = e.lastActivity ? `active ${new Date(e.lastActivity).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })}` : '';
+      return `<div class="item"><div class="main">
+          <div class="title">${esc(e.name)} <span class="tag ${cls}" title="${esc(e.headline || '')}">${esc(label)}</span>${e.dormant ? ' <span class="tag" title="No recent activity from its creator">dormant</span>' : ''}</div>
+          <div class="meta" style="white-space:normal">${esc(e.summary)}</div>
+          <div class="meta">${[e.tags.join(', '), e.stars ? `★ ${num(e.stars)}` : '', when, e.license].filter(Boolean).map(esc).join(' · ')} · <button class="link" data-xurl="${esc(e.url)}">page</button>${e.reportUrl ? ` · <button class="link" data-xurl="${esc(e.reportUrl)}">scan report</button>` : ''}</div></div>
+        ${e.installed ? '<span class="tag good">installed</span>' : `<button class="btn sm" data-task data-xinst="${esc(e.id)}">${icon('download')}Install</button>`}</div>`;
+    }).join('') : '<div class="empty">Nothing found. Try other words.</div>';
+    el.querySelectorAll('[data-xinst]').forEach(b => {
+      b.disabled = !!state.busy;
+      b.onclick = async () => {
+        b.disabled = true;
+        const r = await D.extInstall(b.dataset.xinst);
+        if (r.error) append(`ERROR: ${r.error}`);
+        if (r.installed) { xs.needsReload = true; runFind(); loadExtensions(false); loadKits(); } else b.disabled = false;
+      };
+    });
+  }
+
+  // ----- Kits -----
+  async function loadKits() {
+    const kits = await D.kits();
+    xs.kits = kits;
+    $('kitList').innerHTML = kits.length ? kits.map(k => {
+      const missing = k.extensions.filter(x => !x.installed).length;
+      return `<div class="item"><div class="main"><div class="title">${esc(k.name)}</div>
+          <div class="meta">${k.extensions.length} extension${k.extensions.length === 1 ? '' : 's'} · ${missing ? `<span style="color:var(--accent2)">${missing} not installed in this profile</span>` : 'all installed here'}${k.description ? ` · ${esc(k.description)}` : ''}</div></div>
+        <div class="acts">${missing ? `<button class="btn sm" data-task data-kinst="${esc(k.id)}">${icon('download')}Install missing…</button>` : ''}
+        <button class="btn sm ghost" data-kexp="${esc(k.id)}" title="Save as a file to share">Export</button>
+        <button class="btn sm ghost danger" data-kdel="${esc(k.id)}" title="Delete the Kit (installed extensions stay)">${icon('trash')}</button></div></div>`;
+    }).join('') : '<div class="empty">No Kits yet. <b style="color:var(--title)">Save my extensions as a Kit</b> remembers the ones installed now.</div>';
+    $('kitList').querySelectorAll('[data-kinst]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => reviewKit(xs.kits.find(k => k.id === b.dataset.kinst)); });
+    $('kitList').querySelectorAll('[data-kexp]').forEach(b => b.onclick = () => D.kitExport(b.dataset.kexp));
+    $('kitList').querySelectorAll('[data-kdel]').forEach(b => b.onclick = async () => { if (await D.kitDelete(b.dataset.kdel)) loadKits(); });
+  }
+  $('btnKitNew').onclick = () => { $('kitForm').hidden = false; $('kitErr').textContent = ''; $('kitName').value = $('kitName').value || 'My extensions'; $('kitName').focus(); };
+  $('btnKitCancel').onclick = () => { $('kitForm').hidden = true; };
+  $('kitName').onkeydown = e => { if (e.key === 'Enter') $('btnKitSave').click(); };
+  $('btnKitSave').onclick = async () => {
+    $('btnKitSave').disabled = true;
+    const r = await D.kitSave($('kitName').value, $('kitDesc').value);
+    $('btnKitSave').disabled = false;
+    if (r.error) { $('kitErr').textContent = r.error; return; }
+    $('kitForm').hidden = true; $('kitName').value = ''; $('kitDesc').value = '';
+    loadKits();
+  };
+  $('btnKitImport').onclick = async () => { const r = await D.kitImport(); if (r.error) append(`ERROR: ${r.error}`); loadKits(); };
+
+  // What a Kit would install here, with ratings; nothing is installed without a tick.
+  function reviewKit(kit) {
+    const missing = kit.extensions.filter(x => !x.installed);
+    $('xTitle').textContent = `Install from "${kit.name}"`;
+    $('xLead').textContent = `${missing.length} of its ${kit.extensions.length} extensions are not installed in this profile. Untick any you don't want. Extensions from a Kit someone else made run their code like any other: check the ratings and pages first.`;
+    $('xExactBox').hidden = !missing.some(x => x.commit);
+    $('xExact').checked = false;
+    $('xList').innerHTML = missing.map(x => `<label class="item" style="cursor:pointer"><input type="checkbox" data-xpick="${esc(x.url)}"${riskBad(x.rating?.latestRisk) ? '' : ' checked'} style="width:16px;height:16px;accent-color:var(--accent)">
+        <div class="main"><div class="title">${esc(x.name || x.url)} ${ratingTag(x.rating ? { ...x.rating, version: '' } : null)} ${reportLink(x.rating)}</div><div class="meta"><button class="link" data-xurl="${esc(x.url)}">${esc(x.url)}</button>${x.scope === 'all users' ? ' · for all users' : ''}</div></div></label>`).join('');
+    const sync = () => { const n = $('xList').querySelectorAll('[data-xpick]:checked').length; $('btnXGo').innerHTML = `${icon('download')}Install ${n || ''} extension${n === 1 ? '' : 's'}`; $('btnXGo').disabled = !n || !!state.busy; };
+    $('xList').querySelectorAll('[data-xpick]').forEach(c => c.onchange = sync);
+    sync();
+    $('xNote').textContent = '';
+    $('btnXGo').onclick = async () => {
+      const urls = [...$('xList').querySelectorAll('[data-xpick]:checked')].map(c => c.dataset.xpick);
+      $('btnXGo').disabled = true;
+      $('xNote').textContent = 'Installing…';
+      const r = await D.kitInstall(kit.id, urls, $('xExact').checked);
+      if (r.canceled) { $('xNote').textContent = ''; sync(); return; }
+      closeX();
+      if (r.error) append(`ERROR: ${r.error}`);
+      afterExtChange();
+    };
+    $('xModal').classList.add('show');
+  }
 
   // ----- desktop extensions (add-ons for this app) -----
   document.querySelectorAll('[data-ext-tab]').forEach(b => b.onclick = () => {
@@ -1225,7 +1453,6 @@
     append(r.exists ? `The example extension "${r.id}" is already in the extensions folder.` : `Added the example extension "${r.id}". Turn it on to try it.`);
     loadDesktopExtensions();
   };
-  $('btnExtUpdate').onclick = () => D.updateExtensions();
 
   // ---------- maintenance ----------
   async function loadHealth() {
