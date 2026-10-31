@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: http://127.0.0.1:* http://localhost:*">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: crx: http://127.0.0.1:* http://localhost:*">
 <title>bar</title>
 <style>
   @font-face { font-family: "Pixelify Sans"; src: url("fonts/pixelify-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
@@ -76,6 +76,11 @@
   button.on { color: var(--accent); border-color: var(--accent); background: var(--tint); }
   svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: square; shape-rendering: crispEdges; }
   .controls { flex-shrink: 0; }
+  /* Chrome extension buttons (their element draws them in its shadow DOM). */
+  #crx { flex-shrink: 0; display: flex; align-items: center; -webkit-app-region: no-drag; }
+  #crx browser-action-list { --browser-action-hover-bg: var(--tint); }
+  #crx browser-action-list::part(action) { width: 26px; height: 26px; border-radius: 0; image-rendering: auto; }
+  #crx browser-action-list::part(action):hover { outline: var(--px) solid var(--border); }
   /* Dragging a tab: it follows the mouse, the others slide out of its way. */
   .tabs.sorting .tab { transition: transform .15s ease-out; }
   .tabs.sorting .tab.dragging { transition: none; z-index: 2; background: var(--bg); border-color: var(--accent); color: var(--title); }
@@ -87,6 +92,7 @@
   <div class="bar" id="bar">
     <div class="tabs" id="tabs"><button id="btnNewTab" title="New tab (Ctrl+T)" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button id="btnNewMenu" title="New SillyTavern: another tab, a read-only copy, another port or another install"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></button></div>
     <div class="info" id="info"></div>
+    <div id="crx"></div>
     <button id="btnReload" title="Reload (F5)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button>
     <button id="btnLayer" title="Window layer"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5zM3 13l9 5 9-5"/></svg><span id="layerText" hidden></span></button>
     <button id="btnFull" title="Full screen (F11)"><svg viewBox="0 0 24 24" id="icoFull"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><span id="fullText" hidden>Exit full screen</span></button>
@@ -230,7 +236,25 @@
     $('layerText').textContent = LAYER_TEXT[s.layer] || '';
     $('btnFull').classList.toggle('on', s.fullScreen);
     $('fullText').hidden = !s.fullScreen;
+    renderCrx(s);
   });
+
+  // The buttons of the active tab's Chrome extensions. The element watches
+  // one session from when it is added, so another session gets a new one.
+  function renderCrx(s) {
+    const box = $('crx');
+    if (s.chromePartition == null || !customElements.get('browser-action-list')) { box.replaceChildren(); return; }
+    const want = s.chromePartition || '_self';
+    let list = box.firstElementChild;
+    if (!list || list.dataset.partition !== want) {
+      list = document.createElement('browser-action-list');
+      list.dataset.partition = want;
+      if (s.chromePartition) list.setAttribute('partition', s.chromePartition);
+      list.setAttribute('alignment', 'bottom left');
+      box.replaceChildren(list);
+    }
+    if (list.getAttribute('tab') !== String(s.active)) list.setAttribute('tab', String(s.active));
+  }
 </script>
 </body>
 </html>

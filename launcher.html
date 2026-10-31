@@ -178,7 +178,7 @@
   .item .main { flex: 1; min-width: 0; }
   .item .title { color: var(--title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .item .meta { color: var(--muted); font-size: 13.5px; }
-  #extList .item .title, #xList .item .title { white-space: normal; overflow-wrap: anywhere; }
+  #extList .item .title, #xList .item .title, #crxList .item .title, #dxList .item .title, #addonList .item .title { white-space: normal; overflow-wrap: anywhere; }
   .item .meta.tagline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 2px 0; }
   .empty { color: var(--muted); text-align: center; padding: 28px 10px; }
   .check-ico { width: 22px; height: 22px; display: grid; place-items: center; flex-shrink: 0; border: var(--px) solid currentColor; }
@@ -637,6 +637,20 @@
       <div class="seg" id="extTabs" style="width:max-content;margin-bottom:14px">
         <button data-ext-tab="st" class="on">SillyTavern</button>
         <button data-ext-tab="desktop">Desktop app</button>
+        <button data-ext-tab="chrome">Chrome</button>
+      </div>
+      <div id="extChrome" class="stack" hidden>
+        <p class="lead">Extensions from the Chrome Web Store, such as spelling and grammar checkers, inside SillyTavern. Open the store, click <b style="color:var(--title)">Add to Chrome</b> on an extension, and it works in your SillyTavern pages. Their buttons appear in the SillyTavern window's top bar.</p>
+        <div class="card">
+          <h2>Chrome extensions
+            <span class="act row">
+              <button class="btn sm ghost" id="btnCrxUpdate"><svg class="i"><use href="#i-refresh"/></svg>Check for updates</button>
+              <button class="btn sm primary" id="btnCrxStore"><svg class="i"><use href="#i-plus"/></svg>Open Chrome Web Store</button>
+            </span>
+          </h2>
+          <div class="list" id="crxList"><div class="empty">Loading…</div></div>
+          <p class="muted small" style="margin-top:10px">Chrome extensions only partly work outside Chrome: this app gives them most of what they use (buttons and popups, right-click entries, tabs, storage, notifications), but not everything. Each one says what it can't use here. They run in your SillyTavern pages (also other installs and other computers, not the read-only copy) and can read what you type there, so only add ones you trust. They update themselves from the Chrome Web Store.</p>
+        </div>
       </div>
       <div id="extDesktop" class="stack" hidden>
         <p class="lead">Add-ons for this app itself (not for SillyTavern): they can add entries to the right-click menu and the window's menu, add features to SillyTavern pages, and show a panel here. Anyone can make one: each is a folder with a <span class="mono">manifest.json</span>.</p>
@@ -1578,8 +1592,37 @@
     document.querySelectorAll('[data-ext-tab]').forEach(x => x.classList.toggle('on', x === b));
     $('extSt').hidden = state.extTab !== 'st';
     $('extDesktop').hidden = state.extTab !== 'desktop';
+    $('extChrome').hidden = state.extTab !== 'chrome';
     if (state.extTab === 'desktop') loadDesktopExtensions();
+    if (state.extTab === 'chrome') loadChromeExtensions();
   });
+
+  // ----- Chrome extensions (chromeext.js) -----
+  function renderChromeExtensions(list) {
+    $('crxList').innerHTML = list.length ? list.map(e => {
+      const icon = e.icon ? `<img src="${esc(e.icon)}" alt="" width="32" height="32" style="flex-shrink:0;align-self:flex-start">` : '';
+      const tags = [
+        e.known ? `<span class="tag ${e.known.status === 'works' ? 'good' : ''}" title="${esc(e.known.note || '')}">${esc({ works: 'Works', partly: 'Partly works', broken: 'Does not work' }[e.known.status] || 'Tested')}</span>` : '<span class="tag" title="Not tested in this app yet: try it, most of it may work.">Not tested yet</span>',
+        e.everySite ? '<span class="tag" title="It can read and change every SillyTavern page, including what you type">All pages</span>' : '',
+      ].join(' ');
+      const missing = e.missing.length ? `<div class="meta" style="color:var(--warn)">Not available here: ${esc(e.missing.join(', '))}</div>` : '';
+      const note = e.known?.note ? `<div class="meta">${esc(e.known.note)}</div>` : '';
+      return `<div class="item">${icon}<div class="main"><div class="title">${esc(e.name)} <span class="muted small">v${esc(e.version)}</span></div>
+        <div class="meta">${esc(e.description)}</div>${note}${missing}<div class="meta tagline">${tags}</div>
+        <div class="row" style="margin-top:6px;gap:6px">${e.options ? `<button class="btn sm ghost" data-crx-open="${esc(e.id)}" data-what="options">Options</button>` : ''}<button class="btn sm ghost" data-crx-open="${esc(e.id)}" data-what="store">Store page</button><button class="btn sm ghost danger" data-crx-remove="${esc(e.id)}"><svg class="i"><use href="#i-trash"/></svg>Remove</button></div></div>
+        <label class="switch" style="border:0;padding:0" title="${e.enabled ? 'Turn off' : 'Turn on'}"><input type="checkbox" data-crx="${esc(e.id)}"${e.enabled ? ' checked' : ''}></label></div>`;
+    }).join('') : `<div class="empty">No Chrome extensions yet. <b style="color:var(--title)">Open Chrome Web Store</b>, find one and click <b style="color:var(--title)">Add to Chrome</b>.</div>`;
+    $('crxList').querySelectorAll('[data-crx]').forEach(c => c.onchange = async () => { c.disabled = true; await D.chromeExtSetEnabled(c.dataset.crx, c.checked); loadChromeExtensions(); });
+    $('crxList').querySelectorAll('[data-crx-open]').forEach(b => b.onclick = () => D.chromeExtOpen(b.dataset.crxOpen, b.dataset.what));
+    $('crxList').querySelectorAll('[data-crx-remove]').forEach(b => b.onclick = async () => { if (await D.chromeExtRemove(b.dataset.crxRemove)) loadChromeExtensions(); });
+  }
+  async function loadChromeExtensions() { renderChromeExtensions(await D.chromeExtList()); }
+  $('btnCrxStore').onclick = () => D.chromeExtStore();
+  $('btnCrxUpdate').onclick = async () => {
+    $('btnCrxUpdate').disabled = true;
+    try { renderChromeExtensions(await D.chromeExtUpdate()); } finally { $('btnCrxUpdate').disabled = false; }
+  };
+  D.onChromeExt(() => { if (state.page === 'extensions' && state.extTab === 'chrome') loadChromeExtensions(); });
   async function loadDesktopExtensions() {
     const list = await D.extList();
     $('dxList').innerHTML = list.length ? list.map(e => {

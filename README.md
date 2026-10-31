@@ -50,6 +50,7 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 
 **A better SillyTavern window**
 - Tabs for pages that SillyTavern or its extensions open: drag them into any order, or out into a window of their own. Plus full screen (**F11**), **always on top**, or **stay in background**.
+- **Chrome extensions** from the Chrome Web Store, such as LanguageTool for spelling and grammar, with their buttons in the top bar.
 - A **right-click menu** like a browser's: cut, copy, paste, paste as plain text, spelling suggestions, open links and images in a new tab, save or copy images, search the web for selected text.
 - Several SillyTavern at once, including a **read-only copy** to browse chats and presets without changing anything, and other installs on your PC side by side.
 - **SillyTavern on another computer** (another PC, a home server, a VPS) as a tab, with its login saved encrypted and a warning for unencrypted addresses.
@@ -214,7 +215,24 @@ Only devices on your own home network can connect. Your `config.yaml` is never c
 | **SillyTavern extensions** | **Extensions → Find extensions** in the launcher, or SillyTavern's own Extensions menu, as usual. The launcher rates, updates and undoes them (see below). |
 | **Server plugins** | SillyTavern's `plugins` folder, as usual (needs `enableServerPlugins: true` in `config.yaml`) |
 | **Userscripts** (`.user.js`) | **Extensions → Userscripts → Open folder**, then restart the app. Replaces Tampermonkey. |
+| **Chrome extensions** | From the Chrome Web Store, such as spelling and grammar checkers: **Extensions → Chrome → Open Chrome Web Store** (or the window's **▾** menu), then **Add to Chrome**. They work in your SillyTavern pages, their buttons sit in the top bar ([details](#chrome-extensions)). |
 | **Desktop extensions** | Extensions for this app: right-click and menu entries, features in SillyTavern pages, their own settings panel. Install them from **Extensions → Desktop app → Get add-ons** (each download is checked against its published SHA256; updates keep their settings), or add your own. They stay off until you turn them on. |
+
+#### Chrome extensions
+
+Open the Chrome Web Store from **Extensions → Chrome**, or from the SillyTavern window's **▾** menu. It opens as a tab; click **Add to SillyTavern Desktop** on an extension, and the app asks first, telling you what the extension can read and what it can't use here.
+
+- They run in your SillyTavern pages, on this PC and on other computers, but not in the read-only copy. Each SillyTavern keeps its own extension settings.
+- Their buttons and popups are in the top bar, their entries in the right-click menu. Pages they open (sign-in, options, welcome) open as tabs marked **web**.
+- They update themselves from the Chrome Web Store (about every 5 hours, or **Check for updates**). Turn one off or remove it in **Extensions → Chrome**.
+- **Not everything works:** this app gives Chrome extensions most of what they use (buttons and popups, right-click entries, tabs, storage, notifications, alarms), but not a side panel, Google sign-in, text to speech, history, bookmarks or request blocking. The list in the launcher says what each extension can't use here.
+
+| Tested | Result |
+|---|---|
+| LanguageTool | **Works:** checks spelling and grammar in SillyTavern's text boxes; button, popup, options and right-click entry work |
+| Grammarly | **Partly:** loads, but checks text only after you sign in to a Grammarly account (not tested with an account); no side panel |
+
+The app adds one small script to each Chrome extension it installs, so the extension's settings storage also works inside web pages (Electron, which this app is built on, supports only part of it there).
 
 Don't put `.user.js` files in SillyTavern's `plugins` folder: SillyTavern would try to run them as server code. The app warns you if it finds one.
 
@@ -412,6 +430,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `extensions.js` | Desktop extensions: loading, the `api` object, menu and right-click entries, page calls, downloads, panels |
 | `addons.js` | "Get add-ons": the desktop extension catalog, SHA256-checked install and update, remove |
 | `contextmenu.js` | The right-click menu of SillyTavern pages and the launcher's text fields |
+| `chromeext.js` | Chrome extensions: the Chrome Web Store ([electron-chrome-web-store](https://github.com/samuelmaddock/electron-browser-shell/tree/master/packages/electron-chrome-web-store)), Chrome APIs ([electron-chrome-extensions](https://github.com/samuelmaddock/electron-browser-shell/tree/master/packages/electron-chrome-extensions)), loading them into every SillyTavern session, on/off, remove |
 | `appupdate.js` | Self-update from GitHub releases (SHA256-checked) |
 | `lan.js` | Phone access: local networks, the server's environment variables, QR codes (`qrcode-generator`) |
 | `themes.js` | Built-in and custom themes, import/export |
@@ -464,6 +483,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] Scheduled backups, import by drag & drop / Open with, the app's own Node.js and Git
 - [x] Preview versions of the app, SillyTavern on another computer, a clearer pixel font and font/size settings
 - [x] Right-click menu, dragging tabs (also into their own window), installing desktop extensions from a list
+- [x] Chrome extensions from the Chrome Web Store
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)
 
@@ -476,6 +496,7 @@ Pull requests are welcome. One rule: **wrap, never fork.** No SillyTavern files 
 - [SillyTavern](https://github.com/SillyTavern/SillyTavern), the software this app runs. Go give it a star.
 - SillyTavern's own `src/electron` launcher showed that this approach works.
 - [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT) draws the phone QR code.
+- [electron-chrome-extensions and electron-chrome-web-store](https://github.com/samuelmaddock/electron-browser-shell) by Samuel Maddock (MIT) make Chrome extensions and the Chrome Web Store work.
 - Fonts: [Departure Mono](https://departuremono.com/) by Helena Zhang, [DotGothic16](https://fonts.google.com/specimen/DotGothic16), [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) and [VT323](https://fonts.google.com/specimen/VT323) (all SIL Open Font License; the licences are in `fonts/`).
 
 ## License

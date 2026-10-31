@@ -29,6 +29,7 @@ import * as bs from './backupsched.js';
 import * as remote from './remote.js';
 import * as cm from './contextmenu.js';
 import * as addons from './addons.js';
+import * as crx from './chromeext.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -91,6 +92,7 @@ const DEFAULT_SETTINGS = {
     extInstallNoticeSeen: false, // the "extensions run code" note before installing from the app
     searchEngine: 'google',     // right-click → Search for selected text (contextmenu.js SEARCH_ENGINES)
     inspectMenu: false,         // "Inspect element" in the right-click menu (for extension makers)
+    chromeExtDisabled: [],      // Chrome extension ids turned off (installed but not loaded; chromeext.js)
     theme: 'sillytavern',       // launcher theme id (see themes.js)
 };
 function loadSettings() {
@@ -526,7 +528,9 @@ function isLocal(url) {
 }
 
 // A remote SillyTavern's pages stay on its own address; local ones on this PC.
+// Web tabs (the Chrome Web Store, pages Chrome extensions open) may show any website.
 const insideOf = instance => url => {
+    if (instance?.anyWeb) return /^(https?|chrome-extension):/i.test(url);
     if (!instance?.origin) return isLocal(url);
     try { return new URL(url).origin === instance.origin; } catch { return false; }
 };
@@ -536,7 +540,12 @@ const insideOf = instance => url => {
 // host: the StWindow the page lives in, which takes new pages as tabs.
 // instance: the SillyTavern the page belongs to; pages it opens stay in it.
 function lockToServer(wc, host, instance) {
-    ext.attachPage(wc);
+    // Desktop extensions and Chrome extensions belong to SillyTavern pages;
+    // web tabs (other websites) get neither the page scripts nor a session of their own.
+    if (!instance.anyWeb) {
+        ext.attachPage(wc);
+        crx.attachSession(wc.session, instance.webPreferences?.partition || '');
+    }
     attachPageMenu(wc, host, instance);
     const inside = insideOf(instance);
     wc.on('will-navigate', (e, url) => { if (!inside(url)) { e.preventDefault(); openExternalSafe(url); } });
@@ -574,8 +583,78 @@ function attachPageMenu(wc, host, instance) {
         openExternal: openExternalSafe,
         search: () => settings.searchEngine,
         inspect: () => settings.inspectMenu,
-        extra: (p, page) => ext.contextItems(p, page),
+        extra: (p, page) => [...ext.contextItems(p, page), ...crx.contextItems(page, p)],
     });
+}
+
+// ---------- web tabs and Chrome extensions (chromeext.js) ----------
+// A tab for a website: the Chrome Web Store, or a page a Chrome extension
+// opens (its options, its sign-in). In the extension's session, so the
+// extension sees it; without SillyTavern's preload or desktop extensions.
+const webInsts = new Map();
+function webInstance(partition = '') {
+    if (!webInsts.has(partition)) {
+        webInsts.set(partition, {
+            kind: 'web', anyWeb: true, url: crx.STORE_URL, chip: 'web',
+            tip: 'A website (the Chrome Web Store or a page a Chrome extension opened)', info: 'Website',
+            webPreferences: { ...(partition ? { partition } : {}), contextIsolation: true, nodeIntegration: false },
+        });
+    }
+    return webInsts.get(partition);
+}
+const firstStWin = () => [...stWins].find(w => !w.isDestroyed());
+function openWebTab(url, partition = '', { windowId, focus = true } = {}) {
+    const inst = webInstance(partition);
+    let w = [...stWins].find(x => !x.isDestroyed() && x.win.id === windowId) || [...stWins].find(x => !x.isDestroyed() && x.win.isFocused()) || firstStWin();
+    if (!w) {
+        w = createStWindow({ ...inst, url });
+        return w.active;
+    }
+    const tab = w.openUrl(url, inst);
+    if (focus) w.focus();
+    return tab;
+}
+function openChromeStore() { openWebTab(crx.STORE_URL); }
+
+function initChrome() {
+    return crx.initChromeExtensions({
+        userData: USER_DATA, logLine,
+        settings: () => settings,
+        saveSettings: () => saveSettings(settings),
+        createTab: (url, { partition, active, windowId }) => {
+            const tab = openWebTab(url || crx.STORE_URL, partition, { windowId, focus: active });
+            return [tab.view.webContents, windowOf(tab.view.webContents).win];
+        },
+        createWindow: (url, partition) => createStWindow({ ...webInstance(partition), url }).win,
+        // Like Chrome's tabs.update({ active }): switches the tab, doesn't pull the window to the front.
+        selectTab: wc => { const w = windowOf(wc); if (w) w.activate(w.tabById(wc.id)); },
+        closeTab: wc => { const w = windowOf(wc); w?.closeTab(w.tabById(wc.id)); },
+        confirmInstall: confirmChromeInstall,
+        changed: () => { broadcast('chrome-ext'); stWins.forEach(w => w.push()); },
+    });
+}
+
+async function confirmChromeInstall({ name, manifest, icon }) {
+    const d = crx.describe(manifest);
+    const lines = [
+        d.everySite ? 'It can read and change every page you open in SillyTavern, including what you type in chats.' : 'It can read and change the pages it was made for.',
+        'Chrome extensions only partly work in apps like this one: some features may be missing.',
+    ];
+    if (d.missing.length) lines.push(`Not available here: ${d.missing.join(', ')}.`);
+    // No parent window: with the SillyTavern window as parent the box
+    // sometimes never appeared (and the store's install waited forever).
+    const opts = {
+        type: 'question', buttons: ['Add extension', 'Cancel'], defaultId: 0, cancelId: 1, noLink: true,
+        title: 'Add Chrome extension', message: `Add "${name}"?`, detail: lines.join('\n\n'),
+        ...(icon && !icon.isEmpty() ? { icon: icon.resize({ width: 48, height: 48 }) } : {}),
+    };
+    try {
+        const { response } = await dialog.showMessageBox(opts);
+        return response === 0;
+    } catch (err) {
+        logLine(`ERROR: could not ask about the Chrome extension "${name}": ${err.message}`);
+        return false;
+    }
 }
 
 // The launcher: only its text fields get a menu (cut, copy, paste).
@@ -722,6 +801,8 @@ function newSillyTavernMenu(w) {
             ? others.map(o => ({ label: menuText(o.label), click: () => openExtra(o.path, 'other', w) }))
             : [{ label: 'No other SillyTavern installs found', enabled: false }]),
         ...(settings.remotes.length ? [{ type: 'separator' }, { label: 'On other computers', enabled: false }, ...remoteMenuItems(w)] : []),
+        { type: 'separator' },
+        { label: 'Chrome Web Store (add Chrome extensions)', click: openChromeStore },
     ];
 }
 
@@ -779,6 +860,13 @@ function createStWindow(instance, extra = {}) {
         menu: stWindowMenu,
         newMenu: newSillyTavernMenu,
         detach: detachTab,
+        tabHook: (event, tab, w) => {
+            const wc = tab.view.webContents;
+            if (event === 'bound') crx.tabAdded(wc, w.win);
+            else if (event === 'activated') crx.tabSelected(wc);
+            else if (event === 'releasing') crx.tabMoving(wc);
+        },
+        chromePartition: wc => crx.partitionForBar(wc),
         // Remember size and full screen — saved once on close, not on every resize
         // (not from windows made for a dragged-out tab)
         onClose: ({ width, height, fullScreen }) => {
@@ -1350,6 +1438,25 @@ ipcMain.handle('ext:remove', async (_e, id) => {
     try { addons.remove(id); } catch (err) { logLine(`ERROR: could not remove "${e.name}": ${err.message}`); return false; }
     return true;
 });
+// Chrome extensions (chromeext.js)
+ipcMain.handle('chrome-ext-list', () => crx.list());
+ipcMain.handle('chrome-ext-set-enabled', (_e, id, on) => crx.setEnabled(String(id), !!on));
+ipcMain.handle('chrome-ext-remove', async (_e, id) => {
+    const e = (await crx.list()).find(x => x.id === id);
+    if (!e || !(await confirm(`Remove "${e.name}"?`, 'The Chrome extension is removed from this app. You can add it again from the Chrome Web Store.', 'Remove'))) return false;
+    return crx.remove(e.id);
+});
+ipcMain.handle('chrome-ext-store', () => openChromeStore());
+// Its options page or its Web Store page, as a tab of the SillyTavern window.
+ipcMain.handle('chrome-ext-open', async (_e, id, what) => {
+    const e = (await crx.list()).find(x => x.id === id);
+    if (!e) return;
+    openWebTab(what === 'options' && e.options ? e.options : e.store);
+});
+ipcMain.handle('chrome-ext-update', async () => {
+    try { await crx.checkUpdates(); } catch (err) { logLine(`ERROR: Chrome extension update check failed: ${err.message}`); }
+    return crx.list();
+});
 ipcMain.handle('ext:page-invoke', (e, id, channel, args) => ext.pageInvoke(e.sender, id, channel, Array.isArray(args) ? args : []));
 ipcMain.handle('ext:panel', (_e, id) => (ext.isValidId(id) && settings.desktopExtensions[id] ? ext.panelCode(id) : null));
 ipcMain.handle('ext:invoke', (_e, id, channel, args) => ext.invoke(id, channel, Array.isArray(args) ? args : []));
@@ -1875,6 +1982,8 @@ if (gotLock) {
             },
         });
         addons.initAddons({ logLine, userData: USER_DATA, extensionsDir: ext.extensionsDir() });
+        // Before any SillyTavern window: tabs register with it as they open.
+        initChrome();
         themes.initThemes(USER_DATA);
         appUpdate.initAppUpdate({ userData: USER_DATA, logLine, preview: () => settings.appPreview, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
         bs.initBackupSchedule({

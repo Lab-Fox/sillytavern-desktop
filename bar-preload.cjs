@@ -5,3 +5,6 @@ contextBridge.exposeInMainWorld('bar', {
     action: (name, data) => ipcRenderer.send('bar:action', name, data),
     onState: cb => ipcRenderer.on('bar:state', (_e, s) => cb(s)),
 });
+
+// <browser-action-list>: the buttons of Chrome extensions (chromeext.js).
+try { require('electron-chrome-extensions/browser-action').injectBrowserAction(); } catch (e) { console.error('Chrome extension buttons unavailable:', e); }

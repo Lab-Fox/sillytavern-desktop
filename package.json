@@ -47,7 +47,8 @@
       "remote.js",
       "contextmenu.js",
       "addons.js",
-      "bar-preload.js",
+      "chromeext.js",
+      "bar-preload.cjs",
       "examples/**",
       "fonts/**",
       "launcher.html",
@@ -79,6 +80,8 @@
     ]
   },
   "dependencies": {
+    "electron-chrome-extensions": "^4.10.0",
+    "electron-chrome-web-store": "^0.13.0",
     "koffi": "^2.16.3",
     "qrcode-generator": "2.0.4",
     "yauzl": "^3.4.0",

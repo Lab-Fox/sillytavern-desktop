@@ -24,7 +24,9 @@ export class StWindow {
     //       onClose({ width, height, fullScreen }),
     //       detach(stWindow, tab, { x, y } | null): a tab dragged out of the bar,
     //       tab: start with this tab (moved from another window) instead of a new one,
-    //       x, y: where the window goes
+    //       x, y: where the window goes,
+    //       tabHook('bound' | 'activated' | 'releasing', tab, stWindow) (Chrome extensions' tab list),
+    //       chromePartition(webContents) → partition of its extensions for the bar's buttons, or null
     //
     // An instance is one SillyTavern a tab can show: { kind, url,
     // webPreferences, chip, tip, info, readOnly, server?, onUnused? }.
@@ -50,7 +52,9 @@ export class StWindow {
         });
 
         this.bar = new WebContentsView({
-            webPreferences: { preload: path.join(__dirname, 'bar-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
+            // Not sandboxed: its preload loads the Chrome extension buttons'
+            // element from node_modules. The page is our own local file.
+            webPreferences: { preload: path.join(__dirname, 'bar-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false, backgroundThrottling: false },
         });
         this.bar.setBackgroundColor('#00000000');
         win.contentView.addChildView(this.bar);
@@ -192,6 +196,7 @@ export class StWindow {
         // Closed by us, by the page (window.close()) or by its opener.
         on('destroyed', () => this.removeTab(tab), true);
         tab.unbind = () => { offs.forEach(f => f()); if (byPage.get(tab.id) === this) byPage.delete(tab.id); };
+        this.opts.tabHook?.('bound', tab, this);
     }
     // Takes a tab out of this window without closing its page (it moves to
     // another window). The window closes when it was the last one.
@@ -199,6 +204,7 @@ export class StWindow {
         const i = this.tabs.indexOf(tab);
         if (i < 0) return null;
         this.tabs.splice(i, 1);
+        this.opts.tabHook?.('releasing', tab, this);
         tab.unbind();
         this.win.contentView.removeChildView(tab.view);
         if (!this.tabs.length) { this.win.close(); return tab; }
@@ -227,6 +233,7 @@ export class StWindow {
         tab.view.setVisible(true);
         this.win.setTitle(windowTitle(tab));
         tab.view.webContents.focus();
+        this.opts.tabHook?.('activated', tab, this);
         this.layout();
         this.push();
     }
@@ -311,6 +318,8 @@ export class StWindow {
             colors: this.opts.colors,
             font: this.opts.font?.(),
             controlsWidth: this.fullScreen ? 0 : CONTROLS_W,
+            // Chrome extension buttons: the active tab's session ('' = main), null = none
+            chromePartition: this.active ? this.opts.chromePartition?.(this.active.view.webContents) ?? null : null,
         });
     }
     // at: { x, y } in window coordinates; default is the mouse position.

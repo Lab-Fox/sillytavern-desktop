@@ -143,6 +143,12 @@ contextBridge.exposeInMainWorld('desktop', {
     extRemove: id => invoke('ext:remove', id),
     addons: fresh => invoke('addons', fresh),
     addonInstall: id => invoke('addon-install', id),
+    chromeExtList: () => invoke('chrome-ext-list'),
+    chromeExtSetEnabled: (id, on) => invoke('chrome-ext-set-enabled', id, on),
+    chromeExtRemove: id => invoke('chrome-ext-remove', id),
+    chromeExtStore: () => invoke('chrome-ext-store'),
+    chromeExtOpen: (id, what) => invoke('chrome-ext-open', id, what),
+    chromeExtUpdate: () => invoke('chrome-ext-update'),
     // events
     onLog: on('server-log'),
     onStarted: on('server-started'),
@@ -153,6 +159,7 @@ contextBridge.exposeInMainWorld('desktop', {
     onSettings: on('settings'),
     onWindows: on('st-windows'),
     onBackupSchedule: on('backup-schedule'),
+    onChromeExt: on('chrome-ext'),
     onRuntimeProgress: on('runtime-progress'),
     onImportFiles: on('import-files'),
 });
