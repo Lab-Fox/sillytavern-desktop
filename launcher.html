@@ -275,6 +275,10 @@
   .modal.show { display: block; }
   .modal .card { max-width: 720px; margin: 0 auto; }
   .modal .card > h2 { font-size: 15px; color: var(--title); }
+  .drop-hint { position: fixed; inset: 0; z-index: 70; display: none; place-items: center; pointer-events: none; background: color-mix(in srgb, var(--bg) 78%, transparent); }
+  .drop-hint.show { display: grid; }
+  .drop-hint div { border: calc(var(--px) * 2) dashed var(--accent); padding: 28px 34px; color: var(--title); font-size: 18px; display: flex; gap: 10px; align-items: center; background: var(--panel); }
+  #impList { max-height: 46vh; overflow: auto; }
   .progress.wait i { width: 30%; animation: wait 1.4s steps(14) infinite; }
   @keyframes wait { from { transform: translateX(-100%); } to { transform: translateX(333%); } }
   .progress { overflow: hidden; }
@@ -374,6 +378,11 @@
             <span class="muted small" id="appUpdHint"></span>
             <button class="btn sm primary" id="btnAppUpd" style="margin-left:auto"></button>
           </div>
+        </div>
+
+        <div class="card" id="bkErrCard" hidden>
+          <h2>A scheduled backup failed<button class="link act" data-goto="backups">Backups</button></h2>
+          <div class="list" id="bkErrList"></div>
         </div>
 
         <div class="card news" id="newsCard" hidden>
@@ -547,7 +556,36 @@
 
     <!-- ===== Backups ===== -->
     <section class="page" id="page-backups">
-      <p class="lead">Backups zip your <span class="mono">data</span> folder: characters, chats, settings, presets and extensions. One is made automatically before every update. Restoring never deletes anything — your current data is moved aside first.</p>
+      <p class="lead">Backups zip your <span class="mono">data</span> folder: characters, chats, settings, presets and extensions. Restoring never deletes anything — your current data is moved aside first.</p>
+      <div class="card stack" style="margin-bottom:16px">
+        <h2>Scheduled backups<span class="act row"><button class="btn sm" data-task id="btnSchedNow" hidden><svg class="i"><use href="#i-archive"/></svg>Back up now</button></span></h2>
+        <div class="row">
+          <div class="seg" id="schedMode">
+            <button data-mode="off">Off</button>
+            <button data-mode="start">On app start</button>
+            <button data-mode="daily">Daily</button>
+            <button data-mode="weekly">Weekly</button>
+          </div>
+          <div class="seg" id="schedScope">
+            <button data-scope="active">This profile</button>
+            <button data-scope="all">All profiles</button>
+          </div>
+        </div>
+        <div id="schedMore" class="stack" style="gap:10px">
+          <div class="field"><label>Save to (a folder per profile is made inside)</label><div class="path" id="schedDir"></div></div>
+          <div class="row">
+            <button class="btn sm" id="btnSchedDir"><svg class="i"><use href="#i-folder"/></svg>Choose folder…</button>
+            <button class="btn sm ghost" id="btnSchedDirOpen" hidden>Open</button>
+            <button class="btn sm ghost" id="btnSchedDirReset" hidden>Back to the SillyTavern folder</button>
+            <span style="flex:1"></span>
+            <label class="muted small" for="schedKeep">Keep per profile</label>
+            <input type="number" id="schedKeep" min="1" max="100" style="width:72px" title="Scheduled backups kept per profile. Backups before updates and your own are counted apart.">
+          </div>
+          <div class="list" id="schedStatus"></div>
+          <span class="err" id="schedErr"></span>
+        </div>
+        <p class="muted small" id="schedHint"></p>
+      </div>
       <div class="card">
         <h2>Saved backups
           <span class="act row">
@@ -632,7 +670,15 @@
         <div class="card">
           <h2>Back end<button class="btn sm primary act" data-task id="btnUpdateBackend"><svg class="i"><use href="#i-download"/></svg>Update Node.js &amp; Git</button></h2>
           <div class="list" id="backendList"></div>
-          <p class="muted small" style="margin-top:8px">Installs the latest Node.js (LTS) and Git with Windows' package manager, then reinstalls SillyTavern's dependencies so everything matches.</p>
+          <p class="muted small" style="margin-top:8px" id="backendHint">Installs the latest Node.js (LTS) and Git with Windows' package manager, then reinstalls SillyTavern's dependencies so everything matches.</p>
+          <div class="form stack" style="gap:10px">
+            <label class="switch" style="border:0;padding:0"><input type="checkbox" id="rtUse"><div><b>Use this app's own Node.js and Git</b><span>A private copy for this app only, downloaded from nodejs.org and Git for Windows and checked against their published checksums. Nothing is installed in Windows and no admin permission is needed. Your PC's own Node.js and Git (if any) stay as they are.</span></div></label>
+            <div class="row">
+              <span class="muted small" id="rtState" style="flex:1"></span>
+              <button class="btn sm primary" data-task id="btnRtGet"><svg class="i"><use href="#i-download"/></svg>Download</button>
+              <button class="btn sm ghost danger" data-task id="btnRtRemove" hidden><svg class="i"><use href="#i-trash"/></svg>Remove</button>
+            </div>
+          </div>
         </div>
         <div class="card">
           <h2>Health check<button class="link act" id="btnHealth">Run again</button></h2>
@@ -838,6 +884,7 @@
         <div class="list" id="reqList"></div>
         <div class="row" style="margin-top:12px">
           <span class="muted small" id="reqHint" style="flex:1"></span>
+          <button class="btn sm" data-task id="btnSetupRt" hidden title="A private copy for this app: nothing is installed in Windows, no admin permission"><svg class="i"><use href="#i-download"/></svg>Get them for this app only</button>
           <button class="btn sm primary" data-task id="btnInstallReq" hidden><svg class="i"><use href="#i-download"/></svg>Install for me</button>
         </div>
       </div>
@@ -913,6 +960,18 @@
       <div class="row"><button class="btn primary" id="btnXGo"></button><span class="muted small" id="xNote"></span></div>
     </div>
   </div>
+
+  <!-- ===== Import cards, lorebooks, presets ===== -->
+  <div class="modal" id="impModal">
+    <div class="card stack">
+      <h2>Import into SillyTavern<button class="btn sm ghost act" id="btnImpClose">Close</button></h2>
+      <p class="muted">SillyTavern imports these itself, the same way as its own Import buttons. Names that are already taken get a number.</p>
+      <div class="list" id="impList"></div>
+      <div class="field" id="impProfileBox"><label>Into profile</label><select id="impProfile"></select></div>
+      <div class="row"><button class="btn primary" data-task id="btnImpGo"><svg class="i"><use href="#i-download"/></svg>Import</button><button class="btn" id="btnImpReload" hidden><svg class="i"><use href="#i-refresh"/></svg>Reload SillyTavern</button><span class="muted small" id="impNote"></span></div>
+    </div>
+  </div>
+  <div class="drop-hint" id="dropHint"><div><svg class="i"><use href="#i-download"/></svg>Drop character cards, lorebooks or presets to import them</div></div>
 
   <!-- ===== Find extensions (Tavernary catalog) ===== -->
   <div class="modal" id="xfModal">
@@ -1180,6 +1239,7 @@
 
   // ---------- backups ----------
   async function loadBackups() {
+    loadSchedule();
     const list = await D.listBackups();
     const el = $('backupList');
     if (!list.length) { el.innerHTML = `<div class="empty">No backups yet. Click <b>Back up now</b> to make your first one.</div>`; return; }
@@ -1187,16 +1247,66 @@
       <div class="item">
         <div class="main">
           <div class="title">${esc(new Date(b.mtime).toLocaleString())}</div>
-          <div class="meta mono">${esc(b.name)}</div>
+          <div class="meta mono">${esc(b.name)}${b.where === 'elsewhere' ? ` · in ${esc(b.dir)}` : ''}</div>
         </div>
-        <span class="tag ${b.auto ? '' : 'fox'}">${b.auto ? 'Automatic' : 'Manual'}</span>
+        <span class="tag ${b.auto ? '' : 'fox'}">${b.scheduled ? 'Scheduled' : b.auto ? 'Before update' : 'Manual'}</span>
         <span class="muted small" style="width:70px;text-align:right">${esc(b.sizeText)}</span>
-        <button class="btn sm" data-task data-restore="${esc(b.name)}">${icon('restore')}Restore</button>
-        <button class="btn sm ghost danger" data-del="${esc(b.name)}" title="Delete">${icon('trash')}</button>
+        <button class="btn sm" data-task data-restore="${esc(b.name)}" data-where="${esc(b.where)}">${icon('restore')}Restore</button>
+        <button class="btn sm ghost danger" data-del="${esc(b.name)}" data-where="${esc(b.where)}" title="Delete">${icon('trash')}</button>
       </div>`).join('');
-    el.querySelectorAll('[data-restore]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => D.restoreBackup(b.dataset.restore); });
-    el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => D.deleteBackup(b.dataset.del));
+    el.querySelectorAll('[data-restore]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => D.restoreBackup(b.dataset.restore, b.dataset.where); });
+    el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => D.deleteBackup(b.dataset.del, b.dataset.where));
   }
+
+  // ----- scheduled backups -----
+  const SCHED_HINT = {
+    off: 'Turn it on and the app backs up by itself — only when something changed since the last scheduled backup.',
+    start: 'Each time the app starts (a minute in), if something changed since the last scheduled backup.',
+    daily: 'Once a day while the app runs, if something changed since the last scheduled backup.',
+    weekly: 'Once a week while the app runs, if something changed since the last scheduled backup.',
+  };
+  function renderSchedule(s) {
+    state.sched = s;
+    document.querySelectorAll('#schedMode button').forEach(b => b.classList.toggle('on', b.dataset.mode === s.mode));
+    document.querySelectorAll('#schedScope button').forEach(b => b.classList.toggle('on', b.dataset.scope === s.scope));
+    const on = s.mode !== 'off';
+    $('schedScope').hidden = !on;
+    $('schedMore').hidden = !on;
+    $('btnSchedNow').hidden = !on;
+    $('schedHint').textContent = SCHED_HINT[s.mode] || '';
+    $('schedDir').textContent = s.dir || 'backups/desktop inside each SillyTavern folder';
+    $('btnSchedDirOpen').hidden = !s.dir;
+    $('btnSchedDirReset').hidden = !s.dir;
+    if (document.activeElement !== $('schedKeep')) $('schedKeep').value = s.keep;
+    $('schedErr').textContent = s.error || '';
+    $('schedStatus').innerHTML = s.profiles.map(p => `<div class="item" title="Saved in ${esc(p.dest)}">
+        <span class="check-ico ${p.error ? 'bad' : p.last ? 'ok' : ''}">${icon(p.error ? 'x' : p.last ? 'check' : 'clock')}</span>
+        <div class="main"><div class="title">${esc(p.name)}</div><div class="meta">${p.error ? `<span style="color:var(--bad)">Failed ${esc(ago(p.errorAt))}: ${esc(p.error)}</span>` : p.last ? `Last scheduled backup ${esc(ago(p.last))}` : 'No scheduled backup yet'}</div></div>
+      </div>`).join('') || '<div class="empty">No profile to back up.</div>';
+    renderBackupErrors(s);
+  }
+  // Home: failed scheduled backups, until they work again or are dismissed.
+  function renderBackupErrors(s) {
+    const bad = s.mode === 'off' ? [] : s.profiles.filter(p => p.error);
+    $('bkErrCard').hidden = !bad.length;
+    $('bkErrList').innerHTML = bad.map(p => `<div class="item"><span class="check-ico bad">${icon('x')}</span>
+      <div class="main"><div class="title">${esc(p.name)}</div><div class="meta">${esc(p.error.charAt(0).toUpperCase() + p.error.slice(1))} · ${esc(ago(p.errorAt))}</div></div>
+      <button class="btn sm" data-task data-sched-retry>Try again</button><button class="btn sm ghost" data-sched-dismiss="${esc(p.path)}">Dismiss</button></div>`).join('');
+    $('bkErrList').querySelectorAll('[data-sched-retry]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => D.backupScheduleRun(); });
+    $('bkErrList').querySelectorAll('[data-sched-dismiss]').forEach(b => b.onclick = async () => renderSchedule(await D.backupScheduleDismiss(b.dataset.schedDismiss)));
+  }
+  const loadSchedule = async () => renderSchedule(await D.backupSchedule());
+  document.querySelectorAll('#schedMode button').forEach(b => b.onclick = async () => renderSchedule(await D.backupScheduleSave({ mode: b.dataset.mode })));
+  document.querySelectorAll('#schedScope button').forEach(b => b.onclick = async () => renderSchedule(await D.backupScheduleSave({ scope: b.dataset.scope })));
+  $('schedKeep').onchange = async () => renderSchedule(await D.backupScheduleSave({ keep: $('schedKeep').value }));
+  $('btnSchedDir').onclick = async () => {
+    const s = await D.backupSchedulePick();
+    if (!s.error) await loadBackups(); // its own refresh would clear the error
+    renderSchedule(s);
+  };
+  $('btnSchedDirReset').onclick = async () => { renderSchedule(await D.backupScheduleSave({ clearDir: true })); loadBackups(); };
+  $('btnSchedDirOpen').onclick = () => D.openBackupDest();
+  $('btnSchedNow').onclick = () => D.backupScheduleRun();
   $('btnBackup').onclick = () => D.backup();
   $('btnQuickBackup').onclick = () => D.backup();
 
@@ -1623,9 +1733,12 @@
     $('reqNum').classList.toggle('done', reqOk);
     $('reqNum').innerHTML = reqOk ? icon('check') : '1';
     $('btnInstallReq').hidden = reqOk || !req.canAutoInstall;
-    $('reqHint').innerHTML = reqOk ? 'All set.'
-      : req.canAutoInstall ? 'Click <b>Install for me</b> — Windows may ask for permission once.'
-      : 'Install them from <button class="link" data-link="node">nodejs.org</button> and <button class="link" data-link="git">git-scm.com</button>, then restart this app.';
+    // Without winget, the app's own copy is the easy way; with it, a second choice.
+    $('btnSetupRt').hidden = reqOk;
+    $('btnSetupRt').classList.toggle('primary', !req.canAutoInstall);
+    $('reqHint').innerHTML = reqOk ? (st.runtime.active ? 'All set (this app\'s own copies).' : 'All set.')
+      : req.canAutoInstall ? '<b>Install for me</b> installs them in Windows (it may ask for permission once). <b>Get them for this app only</b> keeps a private copy instead, no permission needed.'
+      : 'Click <b>Get them for this app only</b>: a private copy for this app, nothing to install. Or install them from <button class="link" data-link="node">nodejs.org</button> and <button class="link" data-link="git">git-scm.com</button>, then restart this app.';
     $('reqHint').querySelectorAll('[data-link]').forEach(b => b.onclick = () => D.openLink(b.dataset.link));
 
     const named = st.profiles.filter(p => p.ok).map(p => ({ path: p.path, version: p.version, name: p.name, isGit: true }));
@@ -1654,6 +1767,7 @@
     if (!wasReady && current.autoStart) D.openST();
   }
   $('btnInstallReq').onclick = () => D.installRequirements();
+  $('btnSetupRt').onclick = () => D.runtimeInstall();
   $('btnInstallST').onclick = async () => {
     const wasReady = (await D.setupState()).ready;
     openDownload({ onDone: r => { if (r.used) { closeDownload(); finishSetup(true, wasReady); } } });
@@ -2346,12 +2460,35 @@
 
   // ---------- back end ----------
   async function loadBackend() {
-    const req = (await D.setupState()).requirements;
-    const row = (name, r) => `<div class="item"><span class="check-ico ${r.ok ? 'ok' : 'bad'}">${icon(r.ok ? 'check' : 'x')}</span><div class="main"><div class="title">${name}</div><div class="meta">${r.installed ? `Version ${esc(r.version)}` : 'Not installed'}</div></div></div>`;
-    $('backendList').innerHTML = row('Node.js', req.node) + row('Git', req.git);
-    $('btnUpdateBackend').hidden = !req.canAutoInstall;
+    const st = await D.setupState();
+    const req = st.requirements, rt = st.runtime;
+    // Which copy is in use: the app's own when it's switched on and downloaded.
+    const ownNode = rt.active && rt.node, ownGit = rt.active && rt.git;
+    const row = (name, r, own) => `<div class="item"><span class="check-ico ${r.ok ? 'ok' : 'bad'}">${icon(r.ok ? 'check' : 'x')}</span><div class="main"><div class="title">${name}</div><div class="meta">${r.installed ? `Version ${esc(r.version)} · ${own ? 'this app\'s own copy' : 'installed on this PC'}` : 'Not installed'}</div></div></div>`;
+    $('backendList').innerHTML = row('Node.js', req.node, ownNode) + row('Git', req.git, ownGit);
+    $('btnUpdateBackend').hidden = !req.canAutoInstall || rt.active;
+    $('backendHint').textContent = rt.active
+      ? 'The app uses its own copies. Download checks for newer ones; switch it off below to use the ones installed on this PC.'
+      : 'Update installs the latest Node.js (LTS) and Git with Windows\' package manager, then reinstalls SillyTavern\'s dependencies so everything matches.';
+    const have = rt.node || rt.git;
+    $('rtUse').checked = !!st.runtime.on;
+    $('rtUse').disabled = !have;
+    $('btnRtGet').innerHTML = `${icon('download')}${have ? 'Check for newer' : 'Download'}`;
+    $('btnRtGet').title = have ? '' : 'About 70 MB to download, about 210 MB on disk';
+    $('btnRtRemove').hidden = !have;
+    if (!state.rtProgress) $('rtState').textContent = have
+      ? `Downloaded: Node.js ${rt.node ? rt.node.version : '—'}, Git ${rt.git ? rt.git.version : '—'}.${st.runtime.on && !rt.active ? ' Missing files — download again.' : ''}`
+      : 'Not downloaded (about 70 MB to download, 210 MB on disk).';
   }
   $('btnUpdateBackend').onclick = () => D.updateBackend();
+  $('btnRtGet').onclick = () => D.runtimeInstall();
+  $('btnRtRemove').onclick = () => D.runtimeRemove();
+  $('rtUse').onchange = async () => { await D.runtimeUse($('rtUse').checked); loadBackend(); };
+  D.onRuntimeProgress(t => {
+    state.rtProgress = t;
+    if (t) { $('rtState').textContent = t; $('reqHint').textContent = t; }
+    else if (state.page === 'maintenance') loadBackend();
+  });
 
   function refreshAll() {
     stLogoSrc = null;
@@ -2520,7 +2657,72 @@
     if (r.error) append(`ERROR: Theme import failed: ${r.error}`);
   };
 
+  // ---------- importing cards, lorebooks, presets ----------
+  // From drag & drop on the launcher or "Open with SillyTavern Desktop".
+  let imp = { paths: [], items: [] };
+  async function openImport(paths) {
+    paths = [...new Set([...(dlgOpen('impModal') && !imp.done ? imp.paths : []), ...paths])];
+    if (!paths.length) return;
+    const r = await D.importClassify(paths);
+    imp = { paths, items: r.items, done: false };
+    const ok = r.items.filter(i => i.kind);
+    $('impList').innerHTML = r.items.map(i => `<div class="item">
+        <span class="check-ico ${i.kind ? 'ok' : 'bad'}">${icon(i.kind ? 'check' : 'x')}</span>
+        <div class="main"><div class="title">${esc(i.file)}</div><div class="meta" data-imp-meta="${esc(i.file)}">${i.kind ? esc(i.label) : `<span style="color:var(--bad)">${esc(i.error)}</span>`}</div></div>
+      </div>`).join('');
+    const sel = $('impProfile');
+    sel.innerHTML = r.profiles.map(p => `<option value="${esc(p.id)}"${p.active ? ' selected' : ''}>${esc(p.name)}${p.active ? ' (in use)' : ''} · SillyTavern ${esc(p.version)}</option>`).join('');
+    $('impProfileBox').hidden = r.profiles.length < 2;
+    $('btnImpGo').hidden = false;
+    $('btnImpGo').disabled = !ok.length || !r.profiles.length || !!state.busy;
+    $('btnImpGo').innerHTML = `${icon('download')}Import ${ok.length || ''} file${ok.length === 1 ? '' : 's'}`;
+    $('btnImpReload').hidden = true;
+    $('impNote').textContent = !r.profiles.length ? 'Set up SillyTavern first.' : ok.length ? (state.running ? '' : 'The server starts for this.') : '';
+    $('impModal').classList.add('show');
+  }
+  const dlgOpen = id => $(id).classList.contains('show');
+  $('impProfile').onchange = () => {
+    const active = $('impProfile').selectedOptions[0]?.textContent.includes('(in use)');
+    $('impNote').textContent = active ? (state.running ? '' : 'The server starts for this.') : 'A server for that profile runs just for the import.';
+  };
+  $('btnImpGo').onclick = async () => {
+    $('btnImpGo').disabled = true;
+    $('impNote').textContent = 'Importing…';
+    const r = await D.importRun({ paths: imp.items.filter(i => i.kind).map(i => i.path), profileId: $('impProfile').value });
+    imp.done = true;
+    if (r.error) { $('impNote').textContent = r.error; $('btnImpGo').disabled = false; return; }
+    for (const x of r.results) {
+      const el = [...document.querySelectorAll('[data-imp-meta]')].find(e => e.dataset.impMeta === x.file);
+      if (!el) continue;
+      el.innerHTML = x.ok ? `<span style="color:var(--good)">Imported as ${esc(x.as)}</span>` : `<span style="color:var(--bad)">${esc(x.error)}</span>`;
+      el.closest('.item').querySelector('.check-ico').className = `check-ico ${x.ok ? 'ok' : 'bad'}`;
+    }
+    const n = r.results.filter(x => x.ok).length;
+    $('btnImpGo').hidden = true;
+    $('btnImpReload').hidden = !n || !r.reloadable;
+    $('impNote').textContent = `${n} of ${r.results.length} imported into "${r.profile}".${n && r.reloadable ? ' Reload SillyTavern to see them.' : ''}`;
+  };
+  $('btnImpReload').onclick = async () => { await D.reloadST(); $('impModal').classList.remove('show'); };
+  $('btnImpClose').onclick = () => $('impModal').classList.remove('show');
+  D.onImportFiles(openImport);
+  // The whole launcher is a drop target. Only files count (not dragged text or links).
+  let dragDepth = 0;
+  const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+  document.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $('dropHint').classList.add('show'); });
+  document.addEventListener('dragover', e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('dropHint').classList.remove('show'); } });
+  document.addEventListener('drop', e => {
+    dragDepth = 0;
+    $('dropHint').classList.remove('show');
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    // The theme editor's logo field takes its own drops.
+    if (e.target.closest?.('input[type=file]')) return;
+    openImport(D.pathsOf([...e.dataTransfer.files]));
+  });
+
   // ---------- events ----------
+  D.onBackupSchedule(() => (state.page === 'backups' ? loadBackups() : loadSchedule()));
   D.onLog(append);
   D.onStarted(() => D.getState().then(s => { state.running = true; state.startedAt = s.startedAt; state.url = s.url; renderStatus(); loadLan(); }));
   D.onStopped(() => { state.running = false; state.startedAt = 0; renderStatus(); loadLan(); });
@@ -2549,6 +2751,8 @@
     loadProfiles();
     const st = await loadSetup();
     if (st.ready) { loadInfo(); loadExtensions(false); loadLan(); loadNews(); }
+    loadSchedule();
+    openImport(await D.importPending());
   })();
 </script>
 </body>

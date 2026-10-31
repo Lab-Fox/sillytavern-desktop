@@ -32,3 +32,38 @@ Var pid
   ${endIf}
   !insertmacro _CHECK_APP_RUNNING
 !macroend
+
+; "Open with → SillyTavern Desktop" for character cards, lorebooks and
+; presets. Only an Open-with entry (OpenWithProgids): the app never becomes
+; the default for .png or .json, and Windows' own choice stays as it was.
+!define ST_IMPORT_PROGID "SillyTavernDesktop.Import"
+!macro stOpenWith EXT
+  WriteRegStr SHCTX "Software\Classes\${EXT}\OpenWithProgids" "${ST_IMPORT_PROGID}" ""
+!macroend
+!macro stNoOpenWith EXT
+  DeleteRegValue SHCTX "Software\Classes\${EXT}\OpenWithProgids" "${ST_IMPORT_PROGID}"
+!macroend
+
+!macro customInstall
+  WriteRegStr SHCTX "Software\Classes\${ST_IMPORT_PROGID}" "" "SillyTavern import"
+  WriteRegStr SHCTX "Software\Classes\${ST_IMPORT_PROGID}\DefaultIcon" "" "$INSTDIR\${APP_EXECUTABLE_FILENAME},0"
+  WriteRegStr SHCTX "Software\Classes\${ST_IMPORT_PROGID}\shell\open\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
+  !insertmacro stOpenWith ".png"
+  !insertmacro stOpenWith ".json"
+  !insertmacro stOpenWith ".charx"
+  !insertmacro stOpenWith ".byaf"
+  !insertmacro stOpenWith ".yaml"
+  !insertmacro stOpenWith ".yml"
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend
+
+!macro customUnInstall
+  !insertmacro stNoOpenWith ".png"
+  !insertmacro stNoOpenWith ".json"
+  !insertmacro stNoOpenWith ".charx"
+  !insertmacro stNoOpenWith ".byaf"
+  !insertmacro stNoOpenWith ".yaml"
+  !insertmacro stNoOpenWith ".yml"
+  DeleteRegKey SHCTX "Software\Classes\${ST_IMPORT_PROGID}"
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+!macroend

@@ -40,11 +40,12 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 ## Features
 
 **Easy start**
-- Finds an existing SillyTavern install on your PC by itself, or installs Node.js, Git and SillyTavern for you.
+- Finds an existing SillyTavern install on your PC by itself, or installs Node.js, Git and SillyTavern for you, or keeps **its own private copy of Node.js and Git** (nothing installed in Windows, no admin prompt).
 - **Profiles:** give each SillyTavern folder a name and switch between them from the top bar, the tray or the SillyTavern window.
 - **Download any SillyTavern version** into a folder you choose: the latest release (recommended), staging, or an older version (with a clear warning about the security fixes it misses).
 - **Migrate data** between SillyTavern folders or users: characters, chats, presets, extensions and more, simple or item by item, never touching the source, always undoable.
 - **What's new:** release notes and the list of changes before you update, after every update or download, and a history for each install, even for changes made outside the app.
+- **Import by drag & drop:** drop character cards (`.png`, `.json`, `.charx`, `.byaf`, `.yaml`), lorebooks and presets onto the launcher, or right-click a file → **Open with → SillyTavern Desktop**.
 - Opens SillyTavern in its own window. The server runs hidden in the background.
 
 **A better SillyTavern window**
@@ -54,7 +55,7 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 **Keeps your SillyTavern healthy**
 - Safe one-click updates for SillyTavern and all its extensions, and switching between the **release** and **staging** versions.
 - **Extension safety:** each extension's security rating, a review before updating, **Undo** for extension updates, **Kits** (saved sets of extensions), and finding new extensions, all in the launcher.
-- Backups that handle any filename (emoji included). Restoring never deletes anything.
+- Backups that handle any filename (emoji included), **scheduled backups** (on start, daily or weekly, only when something changed, to a folder of your choice such as a second drive or OneDrive). Restoring never deletes anything.
 - A health check and repair tools for the most common problems.
 
 **Comfort**
@@ -82,14 +83,17 @@ Both use the same settings, so you can switch any time.
 ### 2. Run it
 
 - **Already have SillyTavern?** The app looks for it on your PC and uses it. If it finds more than one, it asks which.
-- **New to SillyTavern?** The welcome screen takes two clicks: **Install for me** (Node.js and Git), then **Install SillyTavern** (choose a version and a folder; the latest release is preselected).
+- **New to SillyTavern?** The welcome screen takes two clicks: **Install for me** (Node.js and Git) or **Get them for this app only** (a private copy, no installing), then **Install SillyTavern** (choose a version and a folder; the latest release is preselected).
 - **Not found?** Click **Find it myself…** and pick your SillyTavern folder.
 
 SillyTavern then opens in its own window. The very first start can take a minute.
 
 ### What it needs
 
-Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 or newer and [Git](https://git-scm.com/); the app installs both with winget, Windows' built-in installer (Windows may ask for permission once). On a PC without winget, it links to their download pages instead.
+Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 or newer and [Git](https://git-scm.com/). The app gets them for you in one of two ways:
+
+- **Install for me** installs both in Windows with winget, Windows' built-in installer (Windows may ask for permission once).
+- **Get them for this app only** downloads the official Node.js (LTS, from nodejs.org) and Git (MinGit, from Git for Windows) into the app's own folder, checks them against their published SHA256 checksums, and uses them for everything it runs. Nothing is installed in Windows and no admin permission is needed; about 70 MB to download, 210 MB on disk. Also under **Maintenance → Back end**, where you can switch between them and your PC's own, check for newer versions, or remove them.
 
 ## Using the app
 
@@ -100,15 +104,19 @@ Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 o
 | **Home** | Open, show or minimize SillyTavern. See your version and **Update now** when there's an update. Quick links to your characters, chats and data. |
 | **Profiles** | Your SillyTavern folders by name: switch, add, rename, re-point, remove, run one next to another, or **Download SillyTavern**. |
 | **Migrate data** | Copy characters, chats, presets, extensions and more from one SillyTavern (or user) to another, and undo earlier migrations. |
-| **Backups** | Back up your data; restore or delete a backup. |
+| **Backups** | Back up your data, scheduled or now; restore or delete a backup. |
 | **Extensions** | SillyTavern's extensions with their safety ratings; review and **Update all**, undo updates, find new extensions, Kits. Also extensions for this app (**Desktop app**). |
-| **Maintenance** | Update Node.js and Git, the health check, repair tools, ways to run SillyTavern without the app, and the release/staging switch. |
+| **Maintenance** | Node.js and Git (your PC's or the app's own), the health check, repair tools, ways to run SillyTavern without the app, and the release/staging switch. |
 | **Console** | Everything the server prints. Filter to problems, search, or copy it for a bug report. |
 | **Settings** | Themes, which SillyTavern to use, the port, the SillyTavern window, the console font, and how the app behaves. |
 
 **Updates are safe:** **Update now** stops the server, can back up your data first, runs `git pull` and `npm install`, and starts SillyTavern again. If something blocks the update, the console says why and which repair tool fixes it.
 
 **Backups** are saved in `backups\desktop\` inside your SillyTavern folder. Automatic ones (before updates) are trimmed to the number you choose; manual ones are kept. Restoring first moves your current `data` folder aside, so nothing is lost.
+
+**Scheduled backups** (Backups page): **On app start**, **Daily** or **Weekly**, for **this profile** or **all profiles**. A backup is only made when something in `data` changed since the last scheduled one. They can go to another folder, for example a second drive or a OneDrive/Dropbox folder (a folder per profile is made inside it), and the newest 7 per profile are kept (your choice; backups before updates and your own are counted apart). Before each one the app checks the free space. If one fails (say, the backup drive isn't connected), Home shows it with **Try again**. Backups in that other folder are listed and restored like the others.
+
+**Import cards, lorebooks and presets:** drop the files anywhere on the launcher, or right-click them in Explorer → **Open with → SillyTavern Desktop** (added by the installer; it never becomes the default app for `.png` or `.json`). A list shows what each file is: a character card (`.png` with card data, `.json`, `.charx`, `.byaf`, `.yaml`), a lorebook, or a preset (Chat Completion, Text Completion, instruct, context, system prompt, reasoning). Pick the profile and click **Import**: SillyTavern imports them itself, the same way as its own Import buttons, and names that are already taken get a number instead of being overwritten. The server starts if needed; for a profile that isn't in use, a server runs just for the import. Dropping a card onto the SillyTavern window works too: that's SillyTavern's own import.
 
 ### Profiles
 
@@ -259,6 +267,8 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | Update SillyTavern on launch | Off | When an update is out, installs it before the server starts |
 | Check for app updates on launch | On | Shows on Home when this app has a new version. **Download update**, then **Restart and update** |
 | Back up before updating | On | Back up your data before every update or channel switch |
+| Scheduled backups | Off | On the **Backups** page: when, which profiles, where to, how many to keep |
+| Use this app's own Node.js and Git | Off | Under **Maintenance → Back end** |
 | Confirm before quitting | On | Ask before quitting while the server runs |
 | Keep running in the tray | Off | Closing the launcher hides it to the tray and the server keeps running. Right-click the tray icon for more, including **Quit** |
 | Automatic backups to keep | 10 | Older automatic backups are removed; manual ones never are |
@@ -274,7 +284,7 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | The console says | What to do |
 |---|---|
 | `SillyTavern not found at …` | The welcome screen opens: pick your install or click **Find it myself…** |
-| `failed to launch node` | **Settings → Change…** shows what's missing; **Install for me** installs it |
+| `failed to launch node` | **Settings → Change…** shows what's missing; **Install for me** installs it, **Get them for this app only** downloads a private copy |
 | `Update blocked by a changed package-lock.json` | **Maintenance → Reset package-lock.json**, then update again |
 | `Cannot find module …` after an update | **Maintenance → Install missing dependencies** |
 | `plugins/<name>.user.js is a browser userscript…` | Move that file into the userscripts folder and restart |
@@ -376,6 +386,9 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `stbar.html`, `bar-preload.js` | The top bar's page and its bridge to `shell.js` |
 | `launcher.html`, `preload.js` | The launcher UI (one file, no external dependencies) and its bridge (`window.desktop.*`) |
 | `setup.js` | Finding SillyTavern, installing Node.js and Git, moving an install |
+| `runtime.js` | The app's own Node.js and Git: download from nodejs.org / Git for Windows, SHA256 check, unpack, put in front of `PATH` |
+| `importer.js` | Import: telling cards, lorebooks and presets apart, and sending them to SillyTavern's own import endpoints |
+| `backupsched.js` | Scheduled backups: when they are due, "did anything change", where they go, failures |
 | `profiles.js` | Profiles: named SillyTavern folders (`settings.profiles`) |
 | `stextensions.js` | SillyTavern extensions: the Tavernary catalog and ratings, update snapshots and undo, installing, Kits |
 | `migrate.js` | Migrating data: scanning both folders into categories and items, copying with a conflict rule, journals and Undo |
@@ -389,7 +402,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `appupdate.js` | Self-update from GitHub releases (SHA256-checked) |
 | `lan.js` | Phone access: local networks, the server's environment variables, QR codes (`qrcode-generator`) |
 | `themes.js` | Built-in and custom themes, import/export |
-| `installer.nsh` | Installer step that asks a running app to close itself (`--quit`) first |
+| `installer.nsh` | Installer steps: ask a running app to close itself (`--quit`) first; the **Open with** entries for cards, lorebooks and presets |
 | `examples/`, `EXTENSIONS.md` | Example desktop extension and the extension guide |
 | `fonts/`, `icon.*`, `splash.bmp` | Pixel fonts (OFL), app icon, portable splash screen |
 
@@ -418,6 +431,9 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - **Change history** records commits with `git log from..to` (short hashes from `getInfo()`); release notes aren't stored, the launcher reads them from the version list. Every task that changes SillyTavern's files should go through `tracked()` in `main.js`; `checkOutsideChanges()` compares the folder with the last commit the app saw (on launch and on every switch).
 - **Security fixes per release** are lines of the release notes matching `SECURITY` in `downloader.js` (security, vulnerability, CVE, XSS, path traversal, SSRF, sanitization, injection), cleaned of Markdown. They drive the older-version warning, the "⚠ missing security fixes" marks and the profile tags (`olderStatus()` reads only the cached list; the app refreshes it in the background on launch).
 - **Downloads are partial clones** (`git clone --filter=blob:none --branch <ref>`): ~100 MB instead of ~210 MB, and `git pull` and branch switches still work. A specific version is a tag, so the checkout is on no branch: `getInfo()` reports it as `pinned` and `update()` refuses with a clear message. The version list is cached for an hour in `st-versions.json` (app data folder).
+- **The app's own Node.js and Git** live in `runtime\node` and `runtime\git` in the app data folder. `runtime.apply()` puts `runtime\node` and `runtime\git\cmd` in front of `process.env.Path`; every child process inherits it, so nothing else needs to know. `setup.refreshPath()` (after winget) replaces `Path`, so it calls `runtime.reapply()`. Replacing or removing a copy that a server runs on needs the servers stopped (`runTask` with `needsStopped`), so updating looks first and only stops them when something is newer.
+- **Import goes through SillyTavern's endpoints** (`/api/characters/import`, `/api/worldinfo/import`, `/api/presets/save`) with a session of its own: `GET /csrf-token` gives the token and cookie. Multipart uploads use the field name `avatar` (SillyTavern's multer setup). Lorebook and preset imports overwrite a file of the same name, so `importer.js` picks a free name first (for the default user). With SillyTavern's user accounts on, these requests need a login, and the app says to import from SillyTavern itself.
+- **Scheduled backups** compare a fingerprint of `data` (file count, total size, newest change; stats only) with the last one, kept in `backup-schedule.json` (app data folder). Their zips end in `-auto-scheduled.zip` and are pruned separately from the ones before updates.
 - **SillyTavern opens a browser tab on start** when `browserLaunch.enabled` is on (the default in a fresh `config.yaml`). `instances.serverEnv()` turns that off for every server the app starts (`SILLYTAVERN_BROWSERLAUNCH_ENABLED`, and `SILLYTAVERN_AUTORUN` for older versions).
 
 </details>
@@ -430,6 +446,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] Migrate data between SillyTavern folders and users, with Undo
 - [x] Extension safety ratings, update review and undo, Kits, finding extensions
 - [x] What's new: release notes and changes before and after updates, history per install
+- [x] Scheduled backups, import by drag & drop / Open with, the app's own Node.js and Git
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)
 

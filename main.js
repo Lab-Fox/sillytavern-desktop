@@ -23,6 +23,9 @@ import * as dl from './downloader.js';
 import * as hist from './history.js';
 import * as mig from './migrate.js';
 import * as sx from './stextensions.js';
+import * as rt from './runtime.js';
+import * as imp from './importer.js';
+import * as bs from './backupsched.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -73,6 +76,11 @@ const DEFAULT_SETTINGS = {
     lanUser: 'user',            // with lanPassword: SillyTavern's login for other devices
     lanPassword: '',
     backupKeep: 10,             // automatic backups kept; manual ones are never pruned
+    backupSchedule: 'off',      // 'off' | 'start' | 'daily' | 'weekly' (backupsched.js)
+    backupScheduleScope: 'active', // 'active' profile or 'all' profiles
+    backupScheduleDir: '',      // '' = backups/desktop in each SillyTavern folder
+    backupScheduleKeep: 7,      // scheduled backups kept per profile
+    ownRuntime: false,          // use this app's own Node.js and Git (runtime.js) instead of the PC's
     extInstallNoticeSeen: false, // the "extensions run code" note before installing from the app
     theme: 'sillytavern',       // launcher theme id (see themes.js)
 };
@@ -109,7 +117,13 @@ if (!gotLock) {
     app.quit();
 } else {
     app.on('second-instance', (_e, argv) => {
-        if (!argv.includes('--quit')) return showLauncher();
+        if (!argv.includes('--quit')) {
+            showLauncher();
+            // "Open with SillyTavern Desktop" while the app runs.
+            const files = importArgs(argv);
+            if (files.length) offerImport(files);
+            return;
+        }
         // will-quit stops the servers and writes the log.
         logLine('Closing for the installer (update or uninstall).');
         isQuitting = true;
@@ -858,16 +872,64 @@ ipcMain.handle('switch-branch', async (_e, branch) => {
     return runTask(`Switching to ${branch}`, () => tracked('branch', () => mx.switchBranch(stRoot(), branch, { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
 });
 ipcMain.handle('backup', () => runTask('Backing up', async () => !!(await mx.createBackup(stRoot(), 'manual', keep())), { needsStopped: false }));
-ipcMain.handle('list-backups', () => mx.listBackups(stRoot()));
-ipcMain.handle('restore-backup', async (_e, name) => {
-    if (!(await confirm('Restore this backup?', `${name}\n\nYour current data folder is moved to backups/desktop first, so nothing is lost. The server restarts afterwards.`, 'Restore'))) return false;
-    return runTask('Restoring backup', () => mx.restoreBackup(stRoot(), name));
+// Backups live in backups/desktop, and scheduled ones maybe in the folder chosen for them.
+const activeProfile = () => prof.list(settings).find(p => p.active) || { name: path.basename(stRoot() || 'SillyTavern'), path: stRoot() };
+function backupDirs() {
+    const dirs = { local: mx.backupsDir(stRoot()) };
+    if (settings.backupScheduleDir) {
+        const ext = bs.destFor(activeProfile());
+        if (path.resolve(ext).toLowerCase() !== path.resolve(dirs.local).toLowerCase()) dirs.elsewhere = ext;
+    }
+    return dirs;
+}
+ipcMain.handle('list-backups', () => {
+    const dirs = backupDirs();
+    return Object.entries(dirs).flatMap(([where, dir]) => mx.listBackups(stRoot(), dir).map(b => ({ ...b, where, dir })))
+        .sort((a, b) => b.mtime - a.mtime);
 });
-ipcMain.handle('delete-backup', async (_e, name) => {
+// `where` names one of backupDirs(): the launcher never passes a folder.
+ipcMain.handle('restore-backup', async (_e, name, where = 'local') => {
+    const dir = backupDirs()[where];
+    if (!dir) return false;
+    if (!(await confirm('Restore this backup?', `${name}\n\nYour current data folder is moved to backups/desktop first, so nothing is lost. The server restarts afterwards.`, 'Restore'))) return false;
+    return runTask('Restoring backup', () => mx.restoreBackup(stRoot(), name, dir));
+});
+ipcMain.handle('delete-backup', async (_e, name, where = 'local') => {
+    const dir = backupDirs()[where];
+    if (!dir) return false;
     if (!(await confirm('Delete this backup permanently?', name, 'Delete'))) return false;
-    const ok = mx.deleteBackup(stRoot(), name);
+    const ok = mx.deleteBackup(stRoot(), name, dir);
     broadcast('refresh');
     return ok;
+});
+// ---------- scheduled backups ----------
+const scheduleTargets = () => prof.list(settings).filter(p => p.ok && (settings.backupScheduleScope === 'all' || p.active));
+ipcMain.handle('backup-schedule', () => bs.status());
+ipcMain.handle('backup-schedule-save', (_e, o = {}) => {
+    if (bs.MODES.includes(o.mode)) settings.backupSchedule = o.mode;
+    if (['active', 'all'].includes(o.scope)) settings.backupScheduleScope = o.scope;
+    if (o.keep !== undefined) settings.backupScheduleKeep = Math.min(100, Math.max(1, parseInt(o.keep, 10) || 7));
+    if (o.clearDir) settings.backupScheduleDir = '';
+    saveSettings(settings);
+    broadcast('settings', publicSettings());
+    return bs.status();
+});
+ipcMain.handle('backup-schedule-pick', async () => {
+    const dir = await pickFolder('Where should scheduled backups go? (a folder per profile is made inside)', settings.backupScheduleDir || os.homedir());
+    if (!dir) return bs.status();
+    // Inside a SillyTavern folder they'd be zipped into each other (data/) or moved along with it.
+    if (prof.list(settings).some(p => p.ok && (path.resolve(dir).toLowerCase() + path.sep).startsWith(path.resolve(p.path).toLowerCase() + path.sep))) {
+        return { ...bs.status(), error: 'Pick a folder outside your SillyTavern folders, for example on another drive.' };
+    }
+    settings.backupScheduleDir = dir;
+    saveSettings(settings);
+    return bs.status();
+});
+ipcMain.handle('backup-schedule-run', () => bs.runDue({ now: true }));
+ipcMain.handle('backup-schedule-dismiss', (_e, dir) => { bs.dismiss(String(dir || '')); return bs.status(); });
+ipcMain.handle('open-backup-dest', () => {
+    const d = settings.backupScheduleDir;
+    if (d && fs.existsSync(d)) shell.openPath(d);
 });
 // ---------- SillyTavern extensions: ratings, update review, undo, Kits, installing ----------
 // Installed extensions with their safety rating (when the catalog is loaded)
@@ -1126,6 +1188,7 @@ ipcMain.handle('setup-state', async () => ({
     installs: setup.detectInstalls(exeBases()),
     profiles: prof.list(settings),
     requirements: await setup.checkRequirements(),
+    runtime: { ...rt.info(), on: settings.ownRuntime },
 }));
 // Switching installs restarts the server (if running) on the new one.
 ipcMain.handle('use-install', (_e, dir) => {
@@ -1145,6 +1208,117 @@ ipcMain.handle('browse-install', async () => {
     return { error: `No SillyTavern found in ${dir}. Pick the folder that contains server.js.` };
 });
 ipcMain.handle('install-requirements', () => runTask('Installing Node.js and Git', () => setup.installRequirements(), { needsStopped: false }));
+// ---------- the app's own Node.js and Git ----------
+ipcMain.handle('runtime-latest', () => rt.latest());
+// Download (or update) both and use them. Replacing a copy in use needs the
+// servers stopped, so look first: nothing newer means nothing is stopped.
+ipcMain.handle('runtime-install', async () => {
+    const have = rt.info();
+    broadcast('runtime-progress', 'Looking for the latest versions …');
+    const want = await rt.latest();
+    broadcast('runtime-progress', '');
+    const which = ['node', 'git'].filter(w => !have[w] || !want[w] || have[w].version !== want[w]);
+    const turnOn = () => {
+        if (!(rt.info().node || rt.info().git)) return;
+        const was = settings.ownRuntime && rt.info().active;
+        settings.ownRuntime = true;
+        saveSettings(settings);
+        rt.apply(true);
+        if (!was) logLine('This app now uses its own Node.js and Git. Your PC\'s own installs (if any) are not touched.');
+    };
+    if (!which.length) {
+        logLine(`This app's Node.js ${have.node.version} and Git ${have.git.version} are the latest.`);
+        turnOn();
+        broadcast('refresh');
+        return true;
+    }
+    return runTask('Getting Node.js and Git', async () => {
+        const ok = await rt.install(which, text => broadcast('runtime-progress', text));
+        broadcast('runtime-progress', '');
+        turnOn();
+        return ok;
+    }, { needsStopped: have.active && which.some(w => have[w]) });
+});
+ipcMain.handle('runtime-use', (_e, on) => {
+    settings.ownRuntime = !!on;
+    saveSettings(settings);
+    const active = rt.apply(settings.ownRuntime);
+    logLine(active ? 'Using this app\'s own Node.js and Git from now on.' : 'Using the Node.js and Git installed on this PC from now on.');
+    if (serverState.running && !serverState.attached) logLine('The running server keeps its current Node.js until it restarts.');
+    broadcast('settings', publicSettings());
+    return true;
+});
+ipcMain.handle('runtime-remove', async () => {
+    if (!(await confirm('Remove this app\'s own Node.js and Git?', 'The app goes back to the Node.js and Git installed on this PC. If they aren\'t installed, SillyTavern can\'t start until you install them or download the app\'s own copy again.', 'Remove'))) return false;
+    return runTask('Removing Node.js and Git', async () => {
+        rt.apply(false);
+        settings.ownRuntime = false;
+        saveSettings(settings);
+        return rt.remove();
+    }, { needsStopped: rt.info().active });
+});
+
+// ---------- importing cards, lorebooks and presets ----------
+// Files from "Open with" (argv) and from drag & drop on the launcher.
+function importArgs(argv) {
+    return argv.slice(1).filter(a => !a.startsWith('-') && imp.EXTENSIONS.includes(path.extname(a).toLowerCase()) && fs.existsSync(a));
+}
+let pendingImport = [];
+function offerImport(files) {
+    if (launcherWin && !launcherWin.isDestroyed() && !launcherWin.webContents.isLoading()) launcherWin.webContents.send('import-files', files);
+    else pendingImport.push(...files);
+}
+ipcMain.handle('import-pending', () => pendingImport.splice(0));
+ipcMain.handle('import-classify', (_e, paths) => ({
+    items: (Array.isArray(paths) ? paths : []).slice(0, 200).map(p => imp.classify(String(p))),
+    profiles: prof.list(settings).filter(p => p.ok).map(p => ({ id: p.id, name: p.name, active: p.active, version: p.version })),
+}));
+// Waits for the main server to answer (it may just have been started).
+async function serverUp(ms = 120000) {
+    const t = Date.now();
+    while (Date.now() - t < ms) {
+        if (await checkPortOpen()) return true;
+        if (!serverState.running) return false;
+        await new Promise(r => setTimeout(r, 800));
+    }
+    return false;
+}
+ipcMain.handle('import-run', (_e, { paths, profileId } = {}) => {
+    const target = prof.list(settings).find(p => p.id === profileId && p.ok);
+    if (!target) return { error: 'That profile is not available.' };
+    // Sorted again here: the launcher only says which files.
+    const items = (Array.isArray(paths) ? paths : []).slice(0, 200).map(p => imp.classify(String(p))).filter(i => i.kind);
+    if (!items.length) return { error: 'None of these files can be imported.' };
+    let res = null;
+    return runTask('Importing', async () => {
+        let base, srv = null, auth;
+        if (target.active) {
+            if (!serverState.running) { logLine('Starting the server to import …'); await startServer(); }
+            if (!(await serverUp())) { res = { error: 'SillyTavern did not start (see the Console).' }; return false; }
+            base = mainInstance().url;
+            if (settings.lanAccess && settings.lanPassword) auth = { user: settings.lanUser, password: settings.lanPassword };
+        } else {
+            // Another profile: its server just for the import, unless one already runs.
+            srv = instances.find(target.path);
+            if (!srv) {
+                srv = instances.startServer(target.path, await instances.freePort(settings.port + 1, [settings.port]), `import into ${target.name}`);
+                srv.temporary = true;
+            }
+            if (!(await srv.ready)) { res = { error: `SillyTavern in "${target.name}" did not start (see the Console).` }; return false; }
+            base = `http://${settings.host}:${srv.port}/`;
+        }
+        try {
+            const results = await imp.importAll(base, target.path, items);
+            results.forEach(r => logLine(r.ok ? `Imported ${r.file} as ${r.as} into "${target.name}".` : `Could not import ${r.file}: ${r.error}`));
+            res = { results, profile: target.name, reloadable: target.active && stWins.size > 0 };
+        } catch (e) {
+            res = { error: e.message };
+        } finally {
+            if (srv?.temporary) await instances.stopServer(srv);
+        }
+        return true;
+    }, { needsStopped: false }).then(() => res || { error: 'Busy with another task. Try again when it has finished.' });
+});
 // ---------- profiles ----------
 const profilesChanged = () => { saveSettings(settings); broadcast('profiles'); };
 // "older": how far behind the newest release a profile's version is (from the remembered version list).
@@ -1402,7 +1576,10 @@ if (gotLock) {
             .replace(/ sillytavern-?desktop\/\S+/i, '');
         userscriptsDir = setupUserscripts({ userData: USER_DATA, logLine }).scriptsDir;
         mx.initMaintenance({ logLine });
-        setup.initSetup({ logLine });
+        // Before anything starts node or git.
+        rt.initRuntime({ logLine, userData: USER_DATA });
+        if (settings.ownRuntime && !rt.apply(true)) logLine('WARNING: "use this app\'s own Node.js and Git" is on, but they are missing. Download them again under Maintenance → Back end.');
+        setup.initSetup({ logLine, onPathRefresh: () => rt.reapply() });
         dl.initDownloader({ logLine, userData: USER_DATA });
         hist.initHistory(USER_DATA);
         mig.initMigrate({ logLine });
@@ -1423,9 +1600,17 @@ if (gotLock) {
         });
         themes.initThemes(USER_DATA);
         appUpdate.initAppUpdate({ userData: USER_DATA, logLine, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
+        bs.initBackupSchedule({
+            logLine, userData: USER_DATA, getSettings: () => settings, targets: scheduleTargets,
+            runTask: (label, fn) => runTask(label, fn, { needsStopped: false }),
+            changed: () => broadcast('backup-schedule'),
+        });
+        // Files the app was opened with ("Open with SillyTavern Desktop"); the launcher asks for them once loaded.
+        pendingImport.push(...importArgs(process.argv));
         createLauncherWindow();
         syncTray();
         ext.activateEnabled();
+        bs.start();
         // A few seconds in, so it doesn't compete with startup.
         if (settings.checkAppUpdates) setTimeout(() => appUpdate.startChecking(), 4000);
         // SillyTavern's release list (kept an hour): marks profiles that are behind

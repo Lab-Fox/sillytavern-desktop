@@ -10,7 +10,8 @@ const IS_WIN = process.platform === 'win32';
 const MIN_NODE = 20;
 
 let log = () => {};
-export function initSetup({ logLine }) { log = logLine; }
+let onPathRefresh = () => {};
+export function initSetup(opts) { log = opts.logLine; onPathRefresh = opts.onPathRefresh || onPathRefresh; }
 
 // ---------- finding SillyTavern ----------
 // A folder counts only if it really is SillyTavern: server.js plus a
@@ -90,6 +91,7 @@ export async function refreshPath() {
         "[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')"],
     os.homedir(), { quiet: true });
     if (r.code === 0 && r.out.trim()) process.env.Path = r.out.trim();
+    onPathRefresh();
 }
 
 const WINGET_IDS = { node: 'OpenJS.NodeJS.LTS', git: 'Git.Git' };

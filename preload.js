@@ -1,5 +1,5 @@
 // preload.js — safe IPC bridge for the launcher UI
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 const on = channel => cb => ipcRenderer.on(channel, (_e, ...args) => cb(...args));
@@ -23,8 +23,20 @@ contextBridge.exposeInMainWorld('desktop', {
     // backups
     backup: () => invoke('backup'),
     listBackups: () => invoke('list-backups'),
-    restoreBackup: name => invoke('restore-backup', name),
-    deleteBackup: name => invoke('delete-backup', name),
+    restoreBackup: (name, where) => invoke('restore-backup', name, where),
+    deleteBackup: (name, where) => invoke('delete-backup', name, where),
+    // scheduled backups
+    backupSchedule: () => invoke('backup-schedule'),
+    backupScheduleSave: o => invoke('backup-schedule-save', o),
+    backupSchedulePick: () => invoke('backup-schedule-pick'),
+    backupScheduleRun: () => invoke('backup-schedule-run'),
+    backupScheduleDismiss: dir => invoke('backup-schedule-dismiss', dir),
+    openBackupDest: () => invoke('open-backup-dest'),
+    // import (drag & drop, Open with)
+    pathsOf: files => [...files].map(f => webUtils.getPathForFile(f)).filter(Boolean),
+    importPending: () => invoke('import-pending'),
+    importClassify: paths => invoke('import-classify', paths),
+    importRun: o => invoke('import-run', o),
     // extensions
     listExtensions: fetch => invoke('list-extensions', fetch),
     updateExtensions: paths => invoke('update-extensions', paths),
@@ -45,6 +57,10 @@ contextBridge.exposeInMainWorld('desktop', {
     useInstall: dir => invoke('use-install', dir),
     browseInstall: () => invoke('browse-install'),
     installRequirements: () => invoke('install-requirements'),
+    runtimeLatest: () => invoke('runtime-latest'),
+    runtimeInstall: () => invoke('runtime-install'),
+    runtimeUse: on => invoke('runtime-use', on),
+    runtimeRemove: () => invoke('runtime-remove'),
     updateBackend: () => invoke('update-backend'),
     moveST: () => invoke('move-st'),
     // profiles
@@ -122,4 +138,7 @@ contextBridge.exposeInMainWorld('desktop', {
     onTheme: on('theme'),
     onSettings: on('settings'),
     onWindows: on('st-windows'),
+    onBackupSchedule: on('backup-schedule'),
+    onRuntimeProgress: on('runtime-progress'),
+    onImportFiles: on('import-files'),
 });

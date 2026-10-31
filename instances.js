@@ -190,6 +190,11 @@ export function stopServer(srv) {
     });
 }
 
+// A running extra server on this folder, if there is one.
+export function find(stRoot) {
+    return [...servers].find(s => !s.exited && path.resolve(s.stRoot).toLowerCase() === path.resolve(stRoot).toLowerCase()) || null;
+}
+
 // Before an update or repair: servers running from that folder hold its files.
 export function stopAll(stRoot) {
     const list = [...servers].filter(s => !stRoot || path.resolve(s.stRoot).toLowerCase() === path.resolve(stRoot).toLowerCase());

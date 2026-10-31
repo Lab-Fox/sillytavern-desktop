@@ -239,9 +239,9 @@ async function unzipData(file, stRoot) {
 }
 
 // label 'manual' or 'auto-…'; auto backups beyond `keep` are pruned.
-export async function createBackup(stRoot, label, keep) {
+// dir: where the zip goes (default backups/desktop; scheduled backups may go elsewhere).
+export async function createBackup(stRoot, label, keep, { dir = backupsDir(stRoot) } = {}) {
     if (!fs.existsSync(path.join(stRoot, 'data'))) { log('No data folder found to back up.'); return null; }
-    const dir = backupsDir(stRoot);
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `st-backup-${stamp()}-${label}.zip`);
     log(`Backing up your data → ${path.basename(file)} ...`);
@@ -253,30 +253,45 @@ export async function createBackup(stRoot, label, keep) {
         try { fs.unlinkSync(`${file}.partial`); } catch { /* nothing written */ }
         return null;
     }
-    if (label.startsWith('auto-') && keep > 0) pruneAutoBackups(stRoot, keep);
+    if (label.startsWith('auto-') && keep > 0) pruneAutoBackups(dir, keep, label === 'auto-scheduled');
     return file;
 }
 
-function pruneAutoBackups(stRoot, keep) {
-    const autos = listBackups(stRoot).filter(b => b.auto);
+// Scheduled backups and the ones before updates are counted apart, so one
+// kind never pushes out the other.
+function pruneAutoBackups(dir, keep, scheduled) {
+    const autos = listBackups(null, dir).filter(b => b.auto && b.scheduled === scheduled);
     for (const b of autos.slice(keep)) {
-        try { fs.unlinkSync(path.join(backupsDir(stRoot), b.name)); log(`Removed old automatic backup ${b.name}.`); } catch { /* in use — try next time */ }
+        try { fs.unlinkSync(path.join(dir, b.name)); log(`Removed old automatic backup ${b.name}.`); } catch { /* in use — try next time */ }
     }
 }
 
-export function listBackups(stRoot) {
-    const dir = backupsDir(stRoot);
+export function listBackups(stRoot, dir = backupsDir(stRoot)) {
     let files = [];
-    try { files = fs.readdirSync(dir).filter(f => f.endsWith('.zip')); } catch { return []; }
+    try { files = fs.readdirSync(dir).filter(f => /^st-backup-.*\.zip$/.test(f)); } catch { return []; }
     return files.map(name => {
         const st = fs.statSync(path.join(dir, name));
-        return { name, size: st.size, sizeText: formatSize(st.size), mtime: st.mtimeMs, auto: /-auto-/.test(name) };
+        return { name, size: st.size, sizeText: formatSize(st.size), mtime: st.mtimeMs, auto: /-auto-/.test(name), scheduled: /-auto-scheduled\.zip$/.test(name) };
     }).sort((a, b) => b.mtime - a.mtime);
 }
 
+// Cheap "did anything change?": file count, total size and newest change in
+// data/ (caches left out, like in backups). Only stats files, reads none.
+export async function dataFingerprint(stRoot) {
+    let files = 0, bytes = 0, newest = 0;
+    for await (const [abs] of walk(stRoot, 'data')) {
+        try {
+            const st = await fs.promises.stat(abs);
+            files++; bytes += st.size;
+            if (st.mtimeMs > newest) newest = st.mtimeMs;
+        } catch { /* removed while walking */ }
+    }
+    return { key: `${files}:${bytes}:${Math.floor(newest)}`, files, bytes };
+}
+
 // Restore never deletes: the current data/ is moved aside first.
-export async function restoreBackup(stRoot, name) {
-    const file = path.join(backupsDir(stRoot), path.basename(name));
+export async function restoreBackup(stRoot, name, dir = backupsDir(stRoot)) {
+    const file = path.join(dir, path.basename(name));
     if (!fs.existsSync(file)) { log('ERROR: backup file not found.'); return false; }
     const dataDir = path.join(stRoot, 'data');
     const aside = path.join(backupsDir(stRoot), `data-before-restore-${stamp()}`);
@@ -303,8 +318,8 @@ export async function restoreBackup(stRoot, name) {
     }
 }
 
-export function deleteBackup(stRoot, name) {
-    try { fs.unlinkSync(path.join(backupsDir(stRoot), path.basename(name))); log(`Deleted backup ${name}.`); return true; } catch (e) { log(`ERROR: ${e.message}`); return false; }
+export function deleteBackup(stRoot, name, dir = backupsDir(stRoot)) {
+    try { fs.unlinkSync(path.join(dir, path.basename(name))); log(`Deleted backup ${name}.`); return true; } catch (e) { log(`ERROR: ${e.message}`); return false; }
 }
 
 // ---------- extensions ----------
