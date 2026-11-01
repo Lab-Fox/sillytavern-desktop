@@ -34,7 +34,7 @@ zip.outputStream.pipe(fs.createWriteStream(file)).on('close', () => {
     const buf = fs.readFileSync(file);
     const entry = {
         id, name: m.name, version: m.version, author: m.author, description: m.description,
-        homepage: 'https://github.com/Lab-Fox/sillytavern-desktop-extensions',
+        homepage: `https://github.com/Lab-Fox/sillytavern-desktop/tree/main/addons/${id}`,
         minAppVersion: m.minAppVersion, uses: m.uses || [],
         download: `https://github.com/Lab-Fox/sillytavern-desktop-extensions/releases/download/${id}-${m.version}/${id}-${m.version}.zip`,
         sha256: crypto.createHash('sha256').update(buf).digest('hex'), size: buf.length,
