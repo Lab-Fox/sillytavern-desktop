@@ -188,7 +188,9 @@ function makeApi(id, entry) {
         contextMenu: Object.freeze({
             add(item) {
                 const it = {
-                    label: String(item.label || '').slice(0, 80),
+                    // A string (%s = selection) or a function(info) → string ('' hides the entry).
+                    label: typeof item.label === 'function' ? item.label : String(item.label || '').slice(0, 80),
+                    group: item.group === 'spelling' ? 'spelling' : '',
                     contexts: (Array.isArray(item.contexts) && item.contexts.length ? item.contexts : ['all']).map(String),
                     when: typeof item.when === 'function' ? item.when : null,
                     click: item.click,
@@ -206,7 +208,13 @@ function makeApi(id, entry) {
             add: words => forSessions(s => words.forEach(w => s.addWordToSpellCheckerDictionary(String(w)))),
             remove: words => forSessions(s => words.forEach(w => s.removeWordFromSpellCheckerDictionary(String(w)))),
             list: () => session.defaultSession.listWordsInSpellCheckerDictionary(),
+            // { engine: in use now, chosen: after the next start } — 'windows' | 'builtin'
+            engine: () => host.spellEngine(),
+            // Returns { engine, restart } (restart: the app must restart to switch).
+            setEngine: engine => host.setSpellEngine(String(engine)),
         }),
+        // Restart the whole app (after setEngine, for example). Asks nothing.
+        app: Object.freeze({ relaunch: () => host.relaunch() }),
         // Items under "Extensions" in the SillyTavern window's menu.
         menu: Object.freeze({
             add(item) {
@@ -285,14 +293,23 @@ export function contextItems(p, wc) {
         const mine = [];
         for (const it of entry.reg.context) {
             if (!it.contexts.some(c => ctx.has(c))) continue;
-            try { if (it.when && !it.when(info)) continue; } catch (err) { say(id, `ERROR in a menu entry's "when": ${err.message}`); continue; }
+            let label;
+            try {
+                if (it.when && !it.when(info)) continue;
+                label = typeof it.label === 'function' ? String(it.label(info) || '').slice(0, 80) : it.label.replace(/%s/g, shown);
+            } catch (err) { say(id, `ERROR in a menu entry's "when" or label: ${err.message}`); continue; }
+            if (!label) continue;
             mine.push({
-                label: it.label.replace(/%s/g, shown),
+                label,
+                spelling: it.group === 'spelling',
                 click: () => { Promise.resolve().then(() => it.click?.(info)).catch(err => say(id, `ERROR in a right-click entry: ${err.message}`)); },
             });
         }
-        if (mine.length > 2) items.push({ label: entry.manifest?.name || id, submenu: mine });
-        else items.push(...mine);
+        // Spelling entries go next to the spellchecker's suggestions (contextmenu.js).
+        const spelling = mine.filter(m => m.spelling), rest = mine.filter(m => !m.spelling);
+        items.push(...spelling);
+        if (rest.length > 2) items.push({ label: entry.manifest?.name || id, submenu: rest });
+        else items.push(...rest);
     }
     return items;
 }

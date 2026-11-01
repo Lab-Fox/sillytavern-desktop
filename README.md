@@ -50,6 +50,7 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 
 **A better SillyTavern window**
 - Tabs for pages that SillyTavern or its extensions open: drag them into any order, or out into a window of their own. Plus full screen (**F11**), **always on top**, or **stay in background**.
+- **Writing helper** (an add-on from **Get add-ons**): a dictionary with adult and roleplay words, your own words and your characters' names; word suggestions above the text box; autocorrect that Backspace undoes. Stays on your PC.
 - **Chrome extensions** from the Chrome Web Store, such as LanguageTool for spelling and grammar, with their buttons in the top bar.
 - A **right-click menu** like a browser's: cut, copy, paste, paste as plain text, spelling suggestions, open links and images in a new tab, save or copy images, search the web for selected text.
 - Several SillyTavern at once, including a **read-only copy** to browse chats and presets without changing anything, and other installs on your PC side by side.
@@ -218,6 +219,18 @@ Only devices on your own home network can connect. Your `config.yaml` is never c
 | **Chrome extensions** | From the Chrome Web Store, such as spelling and grammar checkers: **Extensions → Chrome → Open Chrome Web Store** (or the window's **▾** menu), then **Add to Chrome**. They work in your SillyTavern pages, their buttons sit in the top bar ([details](#chrome-extensions)). |
 | **Desktop extensions** | Extensions for this app: right-click and menu entries, features in SillyTavern pages, their own settings panel. Install them from **Extensions → Desktop app → Get add-ons** (each download is checked against its published SHA256; updates keep their settings), or add your own. They stay off until you turn them on. |
 
+#### Writing helper
+
+An add-on made with this app's extension system: install it from **Extensions → Desktop app → Get add-ons**, then turn it on. It downloads its English word lists once (about 1 MB, checked against their SHA256) and builds its dictionary in about two seconds.
+
+- **Suggestions** above SillyTavern's text box while you type: endings of the word, the word that usually comes next, or corrections (✎). **Tab** / **Alt+1** takes the first, **Alt+2** / **Alt+3** the others, **Esc** hides them.
+- **Autocorrect** when you finish a word, only when it's clear: "teh" → "the", "dont" → "don't", "i" → "I", "alot" → "a lot". **Backspace right after** undoes it. Macros, links, code and names are left alone.
+- **Dictionary:** about 165,000 English words plus an adult pack (can be turned off) and a roleplay pack; your characters', personas' and groups' names and lorebook keywords count as words. Right-click a word → **Add to dictionary** (adds "word" and "Word"), **Add only "Name"**, **Ignore**. Search, import and export your words in its panel.
+- **Learns** from what you send, and if you ask, from your own messages in saved chats. Only on this PC.
+- Prefer Windows' own suggestions? Switch it to **Windows** in its panel.
+
+Details: [addons/writing-helper](addons/writing-helper/README.md).
+
 #### Chrome extensions
 
 Open the Chrome Web Store from **Extensions → Chrome**, or from the SillyTavern window's **▾** menu. It opens as a tab; click **Add to SillyTavern Desktop** on an extension, and the app asks first, telling you what the extension can read and what it can't use here.
@@ -301,6 +314,7 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | Port | `8000` | The port SillyTavern runs on |
 | Phone & tablet | Off | Let devices on your Wi-Fi open SillyTavern, with an optional password ([how](#on-your-phone-or-tablet)) |
 | Window layer, tabs | Normal, on | The SillyTavern window's defaults (also in its right-click menu) |
+| Spellchecker | Windows' own | **Built-in English** marks mistakes on every PC (Windows' own only does for languages installed in Windows). Needs a restart |
 | Right-click search, Inspect element | Google, off | Which site **Search for "…"** uses, and an **Inspect element** entry (developer tools) for making themes and extensions |
 | App font, Size | Departure Mono, 100 % | The font of the launcher and the SillyTavern window's top bar, and the launcher's size |
 | Console font | Pixel | Any font on your PC, and its size |
@@ -430,6 +444,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `extensions.js` | Desktop extensions: loading, the `api` object, menu and right-click entries, page calls, downloads, panels |
 | `addons.js` | "Get add-ons": the desktop extension catalog, SHA256-checked install and update, remove |
 | `contextmenu.js` | The right-click menu of SillyTavern pages and the launcher's text fields |
+| `addons/` | Add-ons for the "Get add-ons" list (`writing-helper`) and `build.cjs`, which zips one and prints its list entry |
 | `chromeext.js` | Chrome extensions: the Chrome Web Store ([electron-chrome-web-store](https://github.com/samuelmaddock/electron-browser-shell/tree/master/packages/electron-chrome-web-store)), Chrome APIs ([electron-chrome-extensions](https://github.com/samuelmaddock/electron-browser-shell/tree/master/packages/electron-chrome-extensions)), loading them into every SillyTavern session, on/off, remove |
 | `appupdate.js` | Self-update from GitHub releases (SHA256-checked) |
 | `lan.js` | Phone access: local networks, the server's environment variables, QR codes (`qrcode-generator`) |
@@ -484,6 +499,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] Preview versions of the app, SillyTavern on another computer, a clearer pixel font and font/size settings
 - [x] Right-click menu, dragging tabs (also into their own window), installing desktop extensions from a list
 - [x] Chrome extensions from the Chrome Web Store
+- [x] Writing helper add-on: dictionary, suggestions, autocorrect; built-in English spellchecker
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)
 
@@ -497,6 +513,7 @@ Pull requests are welcome. One rule: **wrap, never fork.** No SillyTavern files 
 - SillyTavern's own `src/electron` launcher showed that this approach works.
 - [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT) draws the phone QR code.
 - [electron-chrome-extensions and electron-chrome-web-store](https://github.com/samuelmaddock/electron-browser-shell) by Samuel Maddock (MIT) make Chrome extensions and the Chrome Web Store work.
+- Writing helper word lists (downloaded by the add-on, not included): [SCOWL / en-wl wordlist](https://github.com/en-wl/wordlist) by Kevin Atkinson and contributors (MIT-like) and [FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave (CC BY-SA 4.0, from OpenSubtitles).
 - Fonts: [Departure Mono](https://departuremono.com/) by Helena Zhang, [DotGothic16](https://fonts.google.com/specimen/DotGothic16), [Pixelify Sans](https://fonts.google.com/specimen/Pixelify+Sans) and [VT323](https://fonts.google.com/specimen/VT323) (all SIL Open Font License; the licences are in `fonts/`).
 
 ## License

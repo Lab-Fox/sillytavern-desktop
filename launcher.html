@@ -904,6 +904,12 @@
             <label>Right-click → Search selected text with</label>
             <select id="setSearch" style="max-width:220px"><option value="google">Google</option><option value="duckduckgo">DuckDuckGo</option><option value="bing">Bing</option></select>
           </div>
+          <div class="field" style="padding-top:10px;border-top:var(--px) dashed var(--border)">
+            <label>Spellchecker (red underlines)</label>
+            <select id="setSpell" style="max-width:320px"><option value="windows">Windows' own (needs the language in Windows)</option><option value="builtin">Built-in English (works on every PC)</option></select>
+            <p class="muted small" id="setSpellNote" style="margin-top:4px">Windows' own only marks mistakes in languages installed in Windows. The built-in one downloads an English dictionary once from Google. Changing it needs a restart.</p>
+            <button class="btn sm" id="btnSpellRestart" hidden style="margin-top:6px;width:max-content"><svg class="i"><use href="#i-refresh"/></svg>Restart now</button>
+          </div>
           <label class="switch" style="border:0;padding:0"><input type="checkbox" id="setInspect"><div><b>Show "Inspect element" in the right-click menu</b><span>Opens Chromium's developer tools on what you clicked. For making themes, userscripts and extensions.</span></div></label>
         </div>
         <div class="card stack">
@@ -1801,6 +1807,7 @@
     $('setTabs').checked = current.tabs !== false;
     $('setSearch').value = current.searchEngine || 'google';
     $('setInspect').checked = !!current.inspectMenu;
+    loadSpellEngine();
     renderLogFontForm();
     renderUiFontForm();
     if (!unsaved.lan) fillLanForm();
@@ -1811,6 +1818,13 @@
   const saveNow = async s => { await D.saveSettings(s); current = { ...current, ...s }; };
   $('setSearch').onchange = () => saveNow({ searchEngine: $('setSearch').value });
   $('setInspect').onchange = () => saveNow({ inspectMenu: $('setInspect').checked });
+  async function loadSpellEngine() {
+    const s = await D.spellEngine();
+    $('setSpell').value = s.chosen;
+    $('btnSpellRestart').hidden = s.chosen === s.engine;
+  }
+  $('setSpell').onchange = async () => { await D.setSpellEngine($('setSpell').value); loadSpellEngine(); };
+  $('btnSpellRestart').onclick = () => D.relaunch();
 
   // ----- console font: presets first, then every installed font -----
   const LOG_FONTS = [['', 'Pixel (default)', 18], ['Departure Mono', 'Departure Mono (pixel)', 14], ['Cascadia Mono', 'Cascadia Mono', 14], ['Consolas', 'Consolas', 14], ['Courier New', 'Courier New', 14], ['Segoe UI', 'Segoe UI', 14]];

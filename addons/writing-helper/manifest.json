@@ -1,0 +1,10 @@
+{
+    "name": "Writing helper",
+    "version": "1.0.0",
+    "author": "Lab-Fox",
+    "description": "A dictionary of its own (with adult and roleplay words, your words and your characters' names), word suggestions above SillyTavern's text boxes, and autocorrect that Backspace undoes. Stays on your PC.",
+    "minAppVersion": "1.7.0",
+    "main": "main.cjs",
+    "panel": "panel.js",
+    "uses": ["pages", "contextMenu", "download", "spellcheck", "files", "panel"]
+}

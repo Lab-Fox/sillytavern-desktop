@@ -48,13 +48,21 @@ export function build(wc, p, opts) {
     const f = p.editFlags || {};
     const groups = [];
     const sel = p.selectionText?.trim() || '';
+    // Extension entries; those marked `spelling` join the spelling group.
+    const extra = opts.extra?.(p, wc) || [];
+    const spellingExtra = extra.filter(i => i.spelling);
 
-    // Spelling: Chromium's suggestions for the word under the cursor.
+    // Spelling: Chromium's suggestions for the word under the cursor. An
+    // extension with its own dictionary entries replaces "Add to dictionary".
     if (p.isEditable && p.misspelledWord) {
         const g = (p.dictionarySuggestions || []).slice(0, 5).map(s => ({ label: s, click: () => wc.replaceMisspelling(s) }));
         if (!g.length) g.push({ label: 'No spelling suggestions', enabled: false });
-        g.push({ label: `Add "${short(p.misspelledWord, 20)}" to dictionary`, click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
+        if (!spellingExtra.length) g.push({ label: `Add "${short(p.misspelledWord, 20)}" to dictionary`, click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
         groups.push(g);
+    }
+    if (spellingExtra.length) {
+        if (p.isEditable && p.misspelledWord) groups.at(-1).push(...spellingExtra);
+        else groups.push(spellingExtra);
     }
 
     if (p.linkURL && !p.linkURL.startsWith('javascript:')) {
@@ -96,8 +104,8 @@ export function build(wc, p, opts) {
         groups.push([{ label: `Search ${name} for "${short(sel)}"`, click: () => opts.openExternal(base + encodeURIComponent(sel.slice(0, 500))) }]);
     }
 
-    const extra = opts.extra?.(p, wc) || [];
-    if (extra.length) groups.push(extra);
+    const others = extra.filter(i => !i.spelling);
+    if (others.length) groups.push(others);
 
     // Empty space on a page: navigation, like a browser.
     if (!p.isEditable && !sel && !p.linkURL && p.mediaType === 'none' && opts.openTab) {

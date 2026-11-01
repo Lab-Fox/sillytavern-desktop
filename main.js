@@ -93,6 +93,7 @@ const DEFAULT_SETTINGS = {
     searchEngine: 'google',     // right-click → Search for selected text (contextmenu.js SEARCH_ENGINES)
     inspectMenu: false,         // "Inspect element" in the right-click menu (for extension makers)
     chromeExtDisabled: [],      // Chrome extension ids turned off (installed but not loaded; chromeext.js)
+    spellcheckEngine: 'windows', // red underlines: 'windows' (Windows' spellchecker) or 'builtin' (Chromium's Hunspell, English); needs a restart
     theme: 'sillytavern',       // launcher theme id (see themes.js)
 };
 function loadSettings() {
@@ -119,6 +120,30 @@ let userscriptsDir = path.join(USER_DATA, 'userscripts');
 // (see stWebPreferences) a SillyTavern window hidden behind other windows
 // stops drawing. (It used to be turned off because the top bar came back
 // blank after "Stay in background"; that no longer happens, checked 2026-10-31.)
+
+// Spellchecker: Windows' own (Electron's default on Windows: needs the
+// language installed in Windows, which many PCs don't have for English) or
+// Chromium's built-in Hunspell (English dictionary downloaded once from
+// Google's servers). A Chromium feature switch, so it must be set before the
+// app is ready: changing it needs a restart.
+const SPELL_ENGINES = ['windows', 'builtin'];
+if (settings.spellcheckEngine === 'builtin') app.commandLine.appendSwitch('disable-features', 'WinUseBrowserSpellChecker');
+const spellEngineAtStart = SPELL_ENGINES.includes(settings.spellcheckEngine) ? settings.spellcheckEngine : 'windows';
+// The built-in one would follow Windows' language (en-ID here, which it has
+// no dictionary for): English for every session SillyTavern pages use.
+const spellSessions = new WeakSet();
+function useSpellLanguage(ses) {
+    if (spellEngineAtStart !== 'builtin' || spellSessions.has(ses)) return;
+    spellSessions.add(ses);
+    try { ses.setSpellCheckerLanguages(['en-US']); } catch (e) { logLine(`Spellchecker: ${e.message}`); }
+}
+function setSpellEngine(engine) {
+    if (!SPELL_ENGINES.includes(engine)) return { error: 'unknown spellchecker' };
+    settings.spellcheckEngine = engine;
+    saveSettings(settings);
+    broadcast('settings', publicSettings());
+    return { engine, restart: engine !== spellEngineAtStart };
+}
 
 // ---------- single instance lock ----------
 // `--quit` comes from the installer before it replaces the app: it closes a
@@ -547,6 +572,7 @@ function lockToServer(wc, host, instance) {
         crx.attachSession(wc.session, instance.webPreferences?.partition || '');
     }
     attachPageMenu(wc, host, instance);
+    useSpellLanguage(wc.session);
     const inside = insideOf(instance);
     wc.on('will-navigate', (e, url) => { if (!inside(url)) { e.preventDefault(); openExternalSafe(url); } });
     wc.setWindowOpenHandler(({ url, disposition }) => {
@@ -1439,6 +1465,15 @@ ipcMain.handle('ext:remove', async (_e, id) => {
     return true;
 });
 // Chrome extensions (chromeext.js)
+ipcMain.handle('spell-engine', () => ({ engine: spellEngineAtStart, chosen: settings.spellcheckEngine || 'windows' }));
+ipcMain.handle('set-spell-engine', (_e, engine) => setSpellEngine(String(engine)));
+ipcMain.handle('relaunch', async () => {
+    if (!(await confirm('Restart SillyTavern Desktop now?', 'The SillyTavern server stops and starts again with the app. Unsaved text in SillyTavern pages is lost.', 'Restart'))) return false;
+    app.relaunch();
+    isQuitting = true;
+    app.quit();
+    return true;
+});
 ipcMain.handle('chrome-ext-list', () => crx.list());
 ipcMain.handle('chrome-ext-set-enabled', (_e, id, on) => crx.setEnabled(String(id), !!on));
 ipcMain.handle('chrome-ext-remove', async (_e, id) => {
@@ -1973,6 +2008,9 @@ if (gotLock) {
             appVersion: app.getVersion(),
             logLine,
             isEnabled: id => !!settings.desktopExtensions[id],
+            spellEngine: () => ({ engine: spellEngineAtStart, chosen: settings.spellcheckEngine || 'windows' }),
+            setSpellEngine,
+            relaunch: () => { app.relaunch(); isQuitting = true; app.quit(); },
             sillytavern: {
                 folder: () => stRoot(),
                 url: () => mainInstance().url,

@@ -101,7 +101,9 @@ export function deactivate() {}
 | `api.menu.add({ label, click })` | An item under **Extensions** in the SillyTavern window's menu. Returns `{ remove() }` |
 | `api.contextMenu.add({ label, contexts, when, click })` | An entry in the right-click menu of SillyTavern pages. See below. Returns `{ remove() }` |
 | `api.download(url, { file, sha256, maxBytes })` | Downloads an `https` file into your `downloads/` folder (`file` is its name there, folders allowed). Checks `sha256` if given; refuses files over `maxBytes` (default 200 MiB). Returns a promise of `{ path, bytes, sha256 }` |
-| `api.spellcheck.add(words)` / `.remove(words)` / `.list()` | Words the built-in spellchecker (the red underline) accepts, in every SillyTavern page. They stay after your extension turns off: remove them yourself if needed |
+| `api.spellcheck.add(words)` / `.remove(words)` / `.list()` | Words the spellchecker (the red underline) accepts, in every SillyTavern page. They stay after your extension turns off: remove them yourself if needed |
+| `api.spellcheck.engine()` / `.setEngine('windows' \| 'builtin')` | Which spellchecker the app uses: `{ engine, chosen }` (in use now / after the next start). `setEngine` returns `{ engine, restart }` |
+| `api.app.relaunch()` | Restarts the app (ask the user first) |
 | `api.handle(channel, fn)` | Lets your launcher panel call `fn` with `ext.invoke(channel, ...args)`. Return a value (or a promise) to answer |
 
 ### Right-click menu entries
@@ -116,6 +118,8 @@ api.contextMenu.add({
 ```
 
 `contexts` can be `all`, `page` (empty space), `selection`, `editable` (a text box), `link`, `image` and `misspelled` (a word the spellchecker underlined). The entry shows when any of them matches.
+
+`label` can also be a function: `label: info => \`Add "${info.misspelledWord}"\`` (an empty string hides the entry). `group: 'spelling'` puts the entry next to the spellchecker's suggestions; the app then leaves out its own "Add to dictionary", so the menu doesn't show two.
 
 `info` has `contexts`, `selectionText`, `linkURL`, `srcURL` (images), `pageURL`, `frameURL`, `isEditable`, `misspelledWord`, `suggestions` (the spellchecker's), and `page`:
 
@@ -185,6 +189,7 @@ The launcher's **Get add-ons** list comes from [`catalog.json`](https://github.c
 }
 ```
 
+- `node addons/build.cjs <folder>` (in this repository) zips an add-on from `addons/` and prints this entry with its `sha256` and `size`. The same files always give the same zip.
 - `id` becomes the folder name (letters, numbers, `.` `_` `-`).
 - The zip holds the extension's files, either at its root or in one folder. It must have a `manifest.json` with a `name`.
 - `download` must be `https`. The app refuses a file whose SHA256 doesn't match, so publish a new version (new zip, new `sha256`) instead of replacing a file.
