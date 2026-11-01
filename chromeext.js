@@ -15,6 +15,7 @@
 import { session as sessions, nativeImage } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import { t, N } from './i18n.js';
 import { ElectronChromeExtensions } from 'electron-chrome-extensions';
 import { installChromeWebStore, uninstallExtension, updateExtensions } from 'electron-chrome-web-store';
 
@@ -32,11 +33,11 @@ let ready = null;
 export const KNOWN = {
     oldceeleldhonbafppcapldpdifcinji: { // LanguageTool, tested 2026-11-01 (11.5.0)
         status: 'works',
-        note: 'Checks spelling and grammar in SillyTavern\'s text boxes; its button, popup, options and right-click entry work.',
+        note: N('Checks spelling and grammar in SillyTavern\'s text boxes; its button, popup, options and right-click entry work.'),
     },
     kbfnbcaeplbcioakkpcpgfkobkghlhen: { // Grammarly, tested 2026-11-01 (14.1343.0)
         status: 'partly',
-        note: 'Loads in SillyTavern pages, but only checks text after you sign in to a Grammarly account (in the tab it opens). Checking with an account was not tested. Its side panel isn\'t available here.',
+        note: N('Loads in SillyTavern pages, but only checks text after you sign in to a Grammarly account (in the tab it opens). Checking with an account was not tested. Its side panel isn\'t available here.'),
     },
 };
 
@@ -342,7 +343,7 @@ export async function list() {
             options: opts ? `chrome-extension://${e.id}/${String(opts).replace(/^\/+/, '')}` : '',
             store: `https://chromewebstore.google.com/detail/${e.id}`,
             ...d,
-            known: KNOWN[e.id] || null,
+            known: KNOWN[e.id] ? { ...KNOWN[e.id], note: t(KNOWN[e.id].note) } : null,
         };
     }).sort((a, b) => a.name.localeCompare(b.name));
 }

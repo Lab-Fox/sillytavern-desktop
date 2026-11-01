@@ -12,6 +12,7 @@ import fs from 'fs';
 import { pipeline } from 'stream/promises';
 import yazl from 'yazl';
 import yauzl from 'yauzl';
+import { t } from './i18n.js';
 
 const IS_WIN = process.platform === 'win32';
 // Like SillyTavern's own Start.bat. --no-save keeps package-lock.json as
@@ -45,6 +46,7 @@ export function onLines(stream, fn) {
 export function run(cmd, args, cwd, { quiet = false, shell = false, onChild, onRaw } = {}) {
     return new Promise(resolve => {
         let out = '';
+        let stdout = ''; // without git's warnings (they go to stderr)
         let done = false;
         const finish = r => { if (!done) { done = true; resolve(r); } };
         let child;
@@ -59,11 +61,11 @@ export function run(cmd, args, cwd, { quiet = false, shell = false, onChild, onR
             out += `${l}\n`;
             if (!quiet && l.trim()) log(l.trim());
         };
-        onLines(child.stdout, onLine);
+        onLines(child.stdout, l => { stdout += `${l}\n`; onLine(l); });
         onLines(child.stderr, onLine);
         if (onRaw) { child.stdout.on('data', onRaw); child.stderr.on('data', onRaw); }
         child.on('error', e => finish({ code: -1, out: e.message }));
-        child.on('close', code => finish({ code, out }));
+        child.on('close', code => finish({ code, out, stdout }));
     });
 }
 export const git = (cwd, args, opts) => run('git', args, cwd, opts);
@@ -91,7 +93,7 @@ export async function getInfo(stRoot) {
     // A specific version (downloaded or checked out by tag) is on no branch, so there is nothing to pull.
     if (!info.branch) info.pinned = (await pinnedVersion(stRoot)) || info.version || 'a fixed version';
     if (behind.code === 0) info.behind = parseInt(behind.out.trim(), 10);
-    info.dirty = status.out.split(/\r?\n/).filter(Boolean).map(l => l.slice(3));
+    info.dirty = status.stdout.split(/\r?\n/).filter(Boolean).map(l => l.slice(3));
     return info;
 }
 
@@ -424,7 +426,7 @@ async function realignRewritten(e) {
     const status = await git(e.path, ['status', '--porcelain'], { quiet: true });
     const tree = (await git(e.path, ['rev-parse', 'HEAD^{tree}'], { quiet: true })).out.trim();
     const upstreamTrees = (await git(e.path, ['log', '--format=%T', '@{u}'], { quiet: true })).out.split(/\r?\n/);
-    if (status.out.trim() || !tree || !upstreamTrees.includes(tree)) {
+    if (status.stdout.trim() || !tree || !upstreamTrees.includes(tree)) {
         log(`ERROR: ${e.name} has changes of its own that aren't in the official version, so it was left untouched. Update it from SillyTavern's Extensions menu, or reinstall it.`);
         return false;
     }
@@ -443,44 +445,44 @@ export async function healthCheck(stRoot) {
     const add = (label, status, detail, fix = '') => checks.push({ label, status, detail, fix });
 
     const hasServer = fs.existsSync(path.join(stRoot, 'server.js'));
-    add('SillyTavern folder', hasServer ? 'ok' : 'bad', hasServer ? stRoot : `server.js not found in ${stRoot}`, hasServer ? '' : 'Set the right folder in Settings.');
+    add(t('SillyTavern folder'), hasServer ? 'ok' : 'bad', hasServer ? stRoot : t('server.js not found in {dir}', { dir: stRoot }), hasServer ? '' : t('Set the right folder in Settings.'));
 
     const node = await run('node', ['-v'], stRoot, { quiet: true });
     const major = parseInt(node.out.trim().replace(/^v/, ''), 10);
-    if (node.code !== 0) add('Node.js', 'bad', 'Not found', 'Install Node.js 20 or newer from nodejs.org, then restart this app.');
-    else add('Node.js', major >= 20 ? 'ok' : 'bad', node.out.trim(), major >= 20 ? '' : 'SillyTavern needs Node.js 20 or newer.');
+    if (node.code !== 0) add('Node.js', 'bad', t('Not found'), t('Install Node.js 20 or newer from nodejs.org, then restart this app.'));
+    else add('Node.js', major >= 20 ? 'ok' : 'bad', node.out.trim(), major >= 20 ? '' : t('SillyTavern needs Node.js 20 or newer.'));
 
     const gitV = await run('git', ['--version'], stRoot, { quiet: true });
-    add('git', gitV.code === 0 ? 'ok' : 'warn', gitV.code === 0 ? gitV.out.trim().replace('git version ', '') : 'Not found', gitV.code === 0 ? '' : 'Install git to use Update and branch switching.');
+    add('Git', gitV.code === 0 ? 'ok' : 'warn', gitV.code === 0 ? gitV.out.trim().replace('git version ', '') : t('Not found'), gitV.code === 0 ? '' : t('Install Git to use Update and branch switching.'));
 
     const npmV = await npm(stRoot, ['-v'], { quiet: true });
-    add('npm', npmV.code === 0 ? 'ok' : 'bad', npmV.code === 0 ? npmV.out.trim() : 'Not found', npmV.code === 0 ? '' : 'npm comes with Node.js — reinstall Node.js.');
+    add('npm', npmV.code === 0 ? 'ok' : 'bad', npmV.code === 0 ? npmV.out.trim() : t('Not found'), npmV.code === 0 ? '' : t('npm comes with Node.js — reinstall Node.js.'));
 
     if (hasServer) {
         const deps = fs.existsSync(path.join(stRoot, 'node_modules'));
-        add('Dependencies', deps ? 'ok' : 'bad', deps ? 'Installed' : 'node_modules is missing', deps ? '' : 'Run "Install missing dependencies".');
+        add(t('Dependencies'), deps ? 'ok' : 'bad', deps ? t('Installed') : t('node_modules is missing'), deps ? '' : t('Run "Install missing dependencies".'));
 
         const config = fs.existsSync(path.join(stRoot, 'config.yaml'));
-        add('config.yaml', config ? 'ok' : 'warn', config ? 'Present' : 'Not created yet', config ? '' : 'Created automatically the first time the server starts.');
+        add('config.yaml', config ? 'ok' : 'warn', config ? t('Present') : t('Not created yet'), config ? '' : t('Created automatically the first time the server starts.'));
 
         const status = await git(stRoot, ['status', '--porcelain', '--untracked-files=no'], { quiet: true });
         if (status.code === 0) {
-            const dirty = status.out.split(/\r?\n/).filter(Boolean).map(l => l.slice(3));
+            const dirty = status.stdout.split(/\r?\n/).filter(Boolean).map(l => l.slice(3));
             const lockOnly = dirty.length === 1 && dirty[0] === 'package-lock.json';
-            if (!dirty.length) add('SillyTavern files', 'ok', 'Unmodified');
-            else add('SillyTavern files', 'warn', `${dirty.length} changed: ${dirty.slice(0, 3).join(', ')}${dirty.length > 3 ? ', …' : ''}`,
-                lockOnly ? 'Run "Reset package-lock.json" before updating.' : 'Changed program files can block updates. Your data folder is not affected.');
+            if (!dirty.length) add(t('SillyTavern files'), 'ok', t('Unmodified'));
+            else add(t('SillyTavern files'), 'warn', t('{n} changed: {files}', { n: dirty.length, files: `${dirty.slice(0, 3).join(', ')}${dirty.length > 3 ? ', …' : ''}` }),
+                lockOnly ? t('Run "Reset package-lock.json" before updating.') : t('Changed program files can block updates. Your data folder is not affected.'));
         }
 
         let misplaced = [];
         try { misplaced = fs.readdirSync(path.join(stRoot, 'plugins')).filter(f => f.endsWith('.user.js')); } catch { /* no plugins dir */ }
-        if (misplaced.length) add('Server plugins', 'warn', `Userscript in plugins/: ${misplaced.join(', ')}`, 'Move it to the userscripts folder (Folders → Userscripts).');
+        if (misplaced.length) add(t('Server plugins'), 'warn', t('Userscript in plugins/: {files}', { files: misplaced.join(', ') }), t('Move it to the userscripts folder (Extensions → Userscripts → Open folder).'));
     }
 
     try {
         const st = fs.statfsSync(stRoot);
         const free = st.bavail * st.bsize;
-        add('Free disk space', free > 2 * 1024 ** 3 ? 'ok' : 'warn', formatSize(free), free > 2 * 1024 ** 3 ? '' : 'Updates and backups need room — free up some space.');
+        add(t('Free disk space'), free > 2 * 1024 ** 3 ? 'ok' : 'warn', formatSize(free), free > 2 * 1024 ** 3 ? '' : t('Updates and backups need room — free up some space.'));
     } catch { /* statfs unsupported */ }
 
     return checks;
@@ -491,4 +493,83 @@ function formatSize(n) {
     if (n < 1024 ** 2) return `${(n / 1024).toFixed(0)} KB`;
     if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
     return `${(n / 1024 ** 3).toFixed(2)} GB`;
+}
+
+// ---------- troubleshooting ----------
+export async function clearNpmCache(stRoot) {
+    log('Clearing npm\'s download cache (npm cache clean --force) ...');
+    const r = await npm(stRoot, ['cache', 'clean', '--force']);
+    log(r.code === 0 ? 'npm\'s cache is empty now.' : 'ERROR: npm cache clean failed.');
+    return r.code === 0;
+}
+
+// What blocks updating: a merge or rebase left half done, conflicted files,
+// changed program files, or commits of its own on the branch.
+export async function gitTrouble(stRoot) {
+    const gitDir = path.join(stRoot, '.git');
+    if (!fs.existsSync(gitDir)) return { git: false };
+    const merging = fs.existsSync(path.join(gitDir, 'MERGE_HEAD'));
+    const rebasing = fs.existsSync(path.join(gitDir, 'rebase-merge')) || fs.existsSync(path.join(gitDir, 'rebase-apply'));
+    const [unmerged, status, ahead, upstream] = await Promise.all([
+        git(stRoot, ['diff', '--name-only', '--diff-filter=U'], { quiet: true }),
+        git(stRoot, ['status', '--porcelain', '--untracked-files=no'], { quiet: true }),
+        git(stRoot, ['rev-list', '--count', '@{u}..HEAD'], { quiet: true }),
+        git(stRoot, ['rev-parse', '--abbrev-ref', '@{u}'], { quiet: true }),
+    ]);
+    const conflicts = unmerged.stdout.split(/\r?\n/).filter(Boolean);
+    const changed = status.stdout.split(/\r?\n/).filter(Boolean).map(l => l.slice(3));
+    return {
+        git: true, merging, rebasing, conflicts, changed,
+        ahead: Number(ahead.stdout.trim()) || 0,
+        upstream: upstream.code === 0 ? upstream.stdout.trim() : '',
+        stuck: merging || rebasing || conflicts.length > 0,
+    };
+}
+
+// Puts SillyTavern's program files back to the official version of its
+// branch. Whatever was changed or committed is kept on a backup branch first;
+// the data folder (not part of git) is never touched.
+export async function fixGit(stRoot) {
+    const tr = await gitTrouble(stRoot);
+    if (!tr.git || !tr.upstream) { log('ERROR: this SillyTavern has no branch to go back to (a fixed version or not a git install).'); return false; }
+    if (tr.merging) await git(stRoot, ['merge', '--abort']);
+    if (tr.rebasing) await git(stRoot, ['rebase', '--abort']);
+    const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const branch = `desktop-backup-${stamp}`;
+    // `stash create` makes a commit of the changes without touching anything.
+    const stash = await git(stRoot, ['stash', 'create', 'Changes kept by SillyTavern Desktop'], { quiet: true });
+    const keep = stash.stdout.trim() || 'HEAD';
+    const b = await git(stRoot, ['branch', branch, keep]);
+    if (b.code !== 0) { log('ERROR: could not make the backup branch, so nothing was changed.'); return false; }
+    log(`Changed files and own commits are kept on the branch ${branch}.`);
+    const fetched = await git(stRoot, ['fetch', '--quiet']);
+    if (fetched.code !== 0) log('WARNING: could not fetch from GitHub; going back to the last version this PC knows.');
+    const r = await git(stRoot, ['reset', '--hard', tr.upstream]);
+    log(r.code === 0 ? `SillyTavern's files are the official ${tr.upstream} again. Update works now.` : 'ERROR: git reset failed.');
+    return r.code === 0;
+}
+
+// SillyTavern's welcome tour ("onboarding") runs when its settings say firstRun.
+export function users(stRoot) {
+    try {
+        return fs.readdirSync(path.join(stRoot, 'data'), { withFileTypes: true })
+            .filter(d => d.isDirectory() && fs.existsSync(path.join(stRoot, 'data', d.name, 'settings.json'))).map(d => d.name);
+    } catch { return []; }
+}
+export function onboarding(stRoot, user = 'default-user') {
+    try { return !!JSON.parse(fs.readFileSync(path.join(stRoot, 'data', user, 'settings.json'), 'utf8')).firstRun; } catch { return null; }
+}
+// Only this one value changes; a copy of the file is kept in backups/desktop.
+export function setOnboarding(stRoot, user, on) {
+    const file = path.join(stRoot, 'data', user, 'settings.json');
+    const text = fs.readFileSync(file, 'utf8');
+    const json = JSON.parse(text);
+    fs.mkdirSync(backupsDir(stRoot), { recursive: true });
+    const copy = path.join(backupsDir(stRoot), `settings-${user}-${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)}.json`);
+    fs.writeFileSync(copy, text);
+    json.firstRun = !!on;
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify(json, null, 4));
+    fs.renameSync(`${file}.tmp`, file);
+    log(`SillyTavern's welcome tour is ${on ? 'on' : 'off'} for ${user} (the old settings.json is kept as ${path.basename(copy)}).`);
+    return true;
 }

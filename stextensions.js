@@ -10,6 +10,7 @@ import { net } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { git } from './maintenance.js';
+import { t } from './i18n.js';
 
 const CATALOG_URL = 'https://tavernary.org/catalog/tavernary-catalog-v8.json';
 const CATALOG_HOURS = 24;
@@ -196,12 +197,12 @@ export function extensionsDir(stRoot, scope) {
     return scope === 'all users' ? path.join(stRoot, ...THIRD_PARTY) : path.join(stRoot, 'data', scope || 'default-user', 'extensions');
 }
 export async function install(stRoot, { url, scope = 'default-user', commit = '', branch = null, name = '' }) {
-    if (!SAFE_URL.test(url)) return { error: `Not an https Git address: ${url}` };
+    if (!SAFE_URL.test(url)) return { error: t('Not an https Git address: {url}', { url }) };
     const folder = folderFor(url);
-    if (!folder) return { error: `No folder name in ${url}` };
+    if (!folder) return { error: t('No folder name in {url}', { url }) };
     const base = extensionsDir(stRoot, scope);
     const dest = path.join(base, folder);
-    if (fs.existsSync(dest)) return { error: `${folder} is already installed.` };
+    if (fs.existsSync(dest)) return { error: t('{name} is already installed.', { name: folder }) };
     fs.mkdirSync(base, { recursive: true });
     const label = name || folder;
     log(`Installing ${label} from ${url} ...`);
@@ -218,7 +219,7 @@ export async function install(stRoot, { url, scope = 'default-user', commit = ''
     }
     if (!fs.existsSync(path.join(dest, 'manifest.json'))) {
         await fs.promises.rm(dest, { recursive: true, force: true }).catch(() => {});
-        return { error: `${label} is not a SillyTavern extension (no manifest.json).` };
+        return { error: t('{name} is not a SillyTavern extension (no manifest.json).', { name: label }) };
     }
     log(`Installed ${label}.`);
     return { ok: true, folder, path: dest };
@@ -230,14 +231,14 @@ export async function install(stRoot, { url, scope = 'default-user', commit = ''
 const kitsDir = () => path.join(userData, 'kits');
 const KIT_ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
 function cleanKit(raw) {
-    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.extensions)) throw new Error('Not a Kit file.');
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.extensions)) throw new Error(t('Not a Kit file.'));
     const name = String(raw.name || '').trim().slice(0, 60);
-    if (!name) throw new Error('The Kit has no name.');
+    if (!name) throw new Error(t('The Kit has no name.'));
     const extensions = raw.extensions.slice(0, 300).map(e => ({
         name: String(e.name || '').slice(0, 80), url: String(e.url || ''),
         scope: e.scope === 'all users' ? 'all users' : 'user', commit: /^[0-9a-f]{7,40}$/i.test(e.commit || '') ? e.commit : '',
     })).filter(e => SAFE_URL.test(e.url));
-    if (!extensions.length) throw new Error('The Kit lists no extensions with an https address.');
+    if (!extensions.length) throw new Error(t('The Kit lists no extensions with an https address.'));
     return { format: 1, name, description: String(raw.description || '').slice(0, 300), created: Number(raw.created) || Date.now(), extensions };
 }
 export function kits() {

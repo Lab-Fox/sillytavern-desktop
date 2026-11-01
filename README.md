@@ -60,9 +60,18 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 - Safe one-click updates for SillyTavern and all its extensions, and switching between the **release** and **staging** versions.
 - **Extension safety:** each extension's security rating, a review before updating, **Undo** for extension updates, **Kits** (saved sets of extensions), and finding new extensions, all in the launcher.
 - Backups that handle any filename (emoji included), **scheduled backups** (on start, daily or weekly, only when something changed, to a folder of your choice such as a second drive or OneDrive). Restoring never deletes anything.
-- A health check and repair tools for the most common problems.
+- A health check and repair tools for the most common problems, plus **troubleshooting**: which program holds SillyTavern's port (and a free one to use instead), repairing an update that stopped halfway (your changes kept on a backup branch), clearing npm's cache, SillyTavern's welcome tour again, and a privacy-safe **system report** for bug reports.
+- **What can my PC run?** Finds your graphics card and its memory and tells you which local model sizes fit (or that an online service is the better choice).
+
+**Everything the classic Launcher.bat does, without a command window**
+- **Remote link:** a temporary `https://….trycloudflare.com` address (Cloudflare's free tunnel) to reach your SillyTavern from anywhere, with a QR code; only with a password, and it stops with the server.
+- **Tailscale:** shows your Tailscale addresses on Home and lets them in, or installs Tailscale for you.
+- **HTTPS** with the app's own certificate, and **SillyTavern server options** (lazy-loading characters, user accounts, server plugins, a proxy for AI services…) set without editing `config.yaml`.
+- **Start with SillyTavern:** start programs or scripts (KoboldCpp, a voice app…) with the server, and stop them with it.
+- **Remove a SillyTavern** you no longer need (to the Recycle Bin, with a backup of its data first if you want).
 
 **Comfort**
+- **In your language:** English, Bahasa Indonesia, 日本語, 한국어, 简体中文 and 繁體中文. Click the globe in the top right to switch at once; SillyTavern's own language can follow along. [Add your language](locales/README.md): it's one file.
 - Use SillyTavern from your **phone or tablet** on the same Wi-Fi: scan a QR code, with an optional password.
 - Keeps running in the tray if you want, and can update SillyTavern by itself when it starts.
 - Updates itself when a new version is out, always after you click.
@@ -209,6 +218,34 @@ Each tab shows which one it is (`:8000`, `read-only :8000`, `1.13.2 :8002`…). 
 
 Only devices on your own home network can connect. Your `config.yaml` is never changed: the app passes these settings to SillyTavern only while the switch is on, and turning it off closes the door again.
 
+### Away from home
+
+**Settings → Away from home** has two ways to reach SillyTavern from outside your home network:
+
+- **Remote link:** click **Start remote link** and Home shows a temporary `https://….trycloudflare.com` address with a QR code, made by Cloudflare's free "quick tunnel" (the app downloads `cloudflared` from Cloudflare's GitHub release and checks it against the published SHA256). It works over mobile data or from another house. It only starts with the phone-access password set, since anyone who gets the address reaches the login; the address changes every time, and the link stops with the server or with **Stop**.
+- **Tailscale:** a private network between your own devices. With Tailscale on this PC and your phone (same account) and phone access on, Home also lists the Tailscale addresses and the app lets them through SillyTavern's whitelist. **Install Tailscale** installs it with winget.
+
+### SillyTavern server options
+
+**Settings → SillyTavern server options** sets a few things SillyTavern normally reads from `config.yaml`: loading characters lazily (faster with many characters), user accounts, the discreet login page, server plugins, SillyTavern's own extension auto-update, thumbnails, and a proxy for AI services. Each stays **As in config.yaml** (the current value is shown) until you pick **On** or **Off**; the app passes the choice to the server as an environment variable when it starts and never edits `config.yaml`. The **config.yaml** button opens the file for anything else.
+
+**HTTPS** serves SillyTavern with a certificate the app makes for this PC's addresses (in the app's data folder, renewed before it runs out). This app's window trusts it; phones and other browsers warn once that they don't know it, which is normal for a self-made certificate.
+
+### Start with SillyTavern
+
+**Settings → Start with SillyTavern → Add program…** picks an `.exe`, `.bat`, `.cmd`, `.ps1` or shortcut to start whenever the server starts, with optional arguments. Ticked **Stop it with SillyTavern**, it is closed (with everything it started) when the server stops or the app quits.
+
+### What can my PC run? and troubleshooting
+
+**Maintenance → What can my PC run?** lists your graphics cards and their own memory, and for model sizes from 3B to 70B (GGUF, about 8K of context) whether they fit on the card, run slowly partly on the processor, or are too large. Below 4 GB it suggests an online service instead.
+
+**Maintenance → Troubleshooting:**
+- **Port:** which program uses SillyTavern's port, and **Use port … instead** with a free one. The health check also warns about a taken port, a VPN that may block connections, and an update that stopped halfway.
+- **Repair SillyTavern's files:** for "local changes" or a merge that stopped halfway. Changed files and own commits are kept on a `desktop-backup-…` branch, then the files are reset to the official version of the branch. The data folder is never touched.
+- **Clear npm's cache**, **SillyTavern's welcome tour** (show it again, per user, with the server stopped and a copy of the old settings kept), **Copy system report** (versions, settings and this PC's details; no passwords, your user folder as `%USERPROFILE%`), and links to report a problem.
+
+To remove a SillyTavern you no longer need, open its profile's edit form (Profiles → pencil) and click **Remove this SillyTavern from the PC…**: the folder goes to the Recycle Bin, optionally after a backup zip of its data to a folder you choose. The SillyTavern in use can't be removed.
+
 ### Add-ons
 
 | Kind | Where it goes |
@@ -271,6 +308,14 @@ Supported: `@match`, `@include`, `@exclude`, `@run-at`, `@noframes`, `@connect` 
 The ratings and catalog come from Tavernary's catalog database, available under the [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). This app is not affiliated with or endorsed by Tavernary.
 
 Want to make a desktop extension? See **[EXTENSIONS.md](EXTENSIONS.md)** and the [example](examples/break-reminder).
+
+### Language
+
+The app follows Windows' language the first time it starts (English when Windows uses a language the app doesn't have yet). To change it, click the **globe** in the top right of the launcher (also on the welcome screen), the **Language** entry in the SillyTavern window's ☰ menu or the tray menu, or **Settings → Appearance → Language**. The launcher and the SillyTavern window's top bar switch at once; menus and dialogs use the new language from then on.
+
+**Also switch SillyTavern's own language** (on by default) sets SillyTavern's language too, where SillyTavern has it (Chinese, Japanese and Korean do; Indonesian doesn't yet). It is set once for each SillyTavern after a change, so you can still pick another language inside SillyTavern afterwards. Open SillyTavern pages switch when they reload: the launcher offers **Reload SillyTavern now**.
+
+The translations were made with the help of AI and are waiting for native speakers to polish them. The Console keeps its log lines in English (they're meant for bug reports), and add-ons such as the Writing helper have their own text. To translate the app into another language or fix a translation, see [locales/README.md](locales/README.md).
 
 ### Themes
 
@@ -427,6 +472,11 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `shell.js` | The SillyTavern window: frameless window, tabs, top bar, full screen, shortcuts |
 | `stbar.html`, `bar-preload.js` | The top bar's page and its bridge to `shell.js` |
 | `launcher.html`, `preload.js` | The launcher UI (one file, no external dependencies) and its bridge (`window.desktop.*`) |
+| `i18n.js`, `i18n-dom.js`, `locales/` | Languages: `t()` for the main process, the page translator and `T()` for the launcher and top bar, one JSON file per language (English text is the key; see `locales/README.md`) |
+| `serveropts.js` | SillyTavern options passed as `SILLYTAVERN_*` variables (reads `config.yaml` without writing it) and the HTTPS certificate (made with Node's crypto) |
+| `tunnel.js` | Remote link (downloads and runs `cloudflared`, reads its address) and Tailscale (status, addresses) |
+| `pccheck.js` | Graphics cards and memory, model-size advice, which program holds a port, VPN adapters, the system report |
+| `tools/i18n-check.mjs` | `npm run i18n`: finds every translatable string and checks each language file (missing, broken placeholders or markup, plural forms); `--new` and `--fill` for translators |
 | `setup.js` | Finding SillyTavern, installing Node.js and Git, moving an install |
 | `runtime.js` | The app's own Node.js and Git: download from nodejs.org / Git for Windows, SHA256 check, unpack, put in front of `PATH` |
 | `importer.js` | Import: telling cards, lorebooks and presets apart, and sending them to SillyTavern's own import endpoints |
@@ -500,12 +550,15 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] Right-click menu, dragging tabs (also into their own window), installing desktop extensions from a list
 - [x] Chrome extensions from the Chrome Web Store
 - [x] Writing helper add-on: dictionary, suggestions, autocorrect; built-in English spellchecker
+- [x] Languages: English, Indonesian, Japanese, Korean, Chinese (Simplified and Traditional); more from contributors
+- [x] Launcher.bat's SillyTavern tools: remote link, Tailscale, HTTPS, server options, start with SillyTavern, PC check, troubleshooting
+- [ ] Installing and running AI apps (KoboldCpp, llama.cpp, ComfyUI, voice apps…) from the launcher
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)
 
 ### Contributing
 
-Pull requests are welcome. One rule: **wrap, never fork.** No SillyTavern files in this repo and no edits to the user's SillyTavern files (changing its pages at runtime is fine). Keep changes small and focused, and keep `launcher.html` free of external dependencies.
+Pull requests are welcome, translations too ([how](locales/README.md)). One rule: **wrap, never fork.** No SillyTavern files in this repo and no edits to the user's SillyTavern files (changing its pages at runtime is fine). Keep changes small and focused, and keep `launcher.html` free of external dependencies.
 
 ## Credits
 

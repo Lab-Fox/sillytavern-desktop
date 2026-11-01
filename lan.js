@@ -60,8 +60,8 @@ export function serverEnv({ lanAccess, lanUser, lanPassword }) {
 // SillyTavern's old whitelist.txt replaces the whitelist completely.
 export const hasWhitelistTxt = stRoot => !!stRoot && fs.existsSync(path.join(stRoot, 'whitelist.txt'));
 
-export function phoneAddresses(port) {
-    return localNetworks().map(n => ({ name: n.name, url: `http://${n.address}:${port}/`, virtual: n.virtual }));
+export function phoneAddresses(port, scheme = 'http') {
+    return localNetworks().map(n => ({ name: n.name, url: `${scheme}://${n.address}:${port}/`, virtual: n.virtual }));
 }
 
 export function qrSvg(text) {

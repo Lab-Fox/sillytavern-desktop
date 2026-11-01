@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('bar', {
     action: (name, data) => ipcRenderer.send('bar:action', name, data),
     onState: cb => ipcRenderer.on('bar:state', (_e, s) => cb(s)),
+    i18n: () => ipcRenderer.sendSync('i18n-dict'),
 });
 
 // <browser-action-list>: the buttons of Chrome extensions (chromeext.js).

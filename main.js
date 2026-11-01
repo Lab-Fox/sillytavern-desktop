@@ -2,7 +2,7 @@
 // Wraps the SillyTavern server as a hidden child process and
 // renders it in a dedicated Chromium window. No cmd, ever.
 import { app, BrowserWindow, Menu, Tray, ipcMain, shell, dialog, clipboard, session, screen } from 'electron';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -30,6 +30,12 @@ import * as remote from './remote.js';
 import * as cm from './contextmenu.js';
 import * as addons from './addons.js';
 import * as crx from './chromeext.js';
+import * as i18n from './i18n.js';
+import { t } from './i18n.js';
+import https from 'https';
+import * as so from './serveropts.js';
+import * as tunnel from './tunnel.js';
+import * as pc from './pccheck.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -95,6 +101,12 @@ const DEFAULT_SETTINGS = {
     chromeExtDisabled: [],      // Chrome extension ids turned off (installed but not loaded; chromeext.js)
     spellcheckEngine: 'windows', // red underlines: 'windows' (Windows' spellchecker) or 'builtin' (Chromium's Hunspell, English); needs a restart
     theme: 'sillytavern',       // launcher theme id (see themes.js)
+    language: '',               // the app's language (i18n.js); '' = Windows' language
+    syncStLanguage: true,       // a language change also sets SillyTavern's own language (where it has it)
+    stLanguage: null,           // { code, done: [partitions] } after a change: each session gets it once
+    serverOverrides: {},        // SillyTavern options the app sets as SILLYTAVERN_* variables (serveropts.js); config.yaml is never written
+    https: false,               // serve SillyTavern over https with the app's own certificate (serveropts.certificate)
+    companions: [],             // [{ id, name, path, args, stop }] programs started with SillyTavern ("Start with SillyTavern")
 };
 function loadSettings() {
     try {
@@ -115,6 +127,8 @@ if (prof.normalize(settings)) saveSettings(settings);
 // remote logins (the launcher asks for remote.list() instead).
 const publicSettings = () => ({ ...settings, remotes: undefined, lanPassword: settings.lanPassword ? '********' : '' });
 let userscriptsDir = path.join(USER_DATA, 'userscripts');
+const systemLanguage = () => { try { return i18n.detect(app.getPreferredSystemLanguages()); } catch { return 'en'; } };
+i18n.setLanguage(settings.language || systemLanguage());
 
 // Chromium's native occlusion stays on: together with backgroundThrottling
 // (see stWebPreferences) a SillyTavern window hidden behind other windows
@@ -138,7 +152,7 @@ function useSpellLanguage(ses) {
     try { ses.setSpellCheckerLanguages(['en-US']); } catch (e) { logLine(`Spellchecker: ${e.message}`); }
 }
 function setSpellEngine(engine) {
-    if (!SPELL_ENGINES.includes(engine)) return { error: 'unknown spellchecker' };
+    if (!SPELL_ENGINES.includes(engine)) return { error: t('Unknown spellchecker.') };
     settings.spellcheckEngine = engine;
     saveSettings(settings);
     broadcast('settings', publicSettings());
@@ -228,15 +242,89 @@ function logLine(line) {
     pendingLog.push(entry);
 }
 
+// The main server's address: https when it runs with the app's certificate.
+const scheme = () => (settings.https ? 'https' : 'http');
+const mainUrl = () => `${scheme()}://${settings.host}:${settings.port}/`;
+// A request to this PC's own SillyTavern (its certificate is our own, so no CA check).
+function probeLocal(url, timeout, onRes, onFail) {
+    const mod = url.startsWith('https:') ? https : http;
+    const req = mod.get(url, { timeout, rejectUnauthorized: false }, onRes);
+    req.on('timeout', () => { req.destroy(); onFail(); });
+    req.on('error', onFail);
+}
 function checkPortOpen() {
     return new Promise(resolve => {
-        const req = http.get(`http://${settings.host}:${settings.port}/`, { timeout: 2500 }, res => {
-            res.resume();
-            resolve(res.statusCode < 500);
-        });
-        req.on('timeout', () => { req.destroy(); resolve(false); });
-        req.on('error', () => resolve(false));
+        // Either scheme: a server started elsewhere may use the other one.
+        let left = 2, done = false;
+        const answer = ok => { if (done) return; if (ok) { done = true; resolve(true); } else if (--left === 0) resolve(false); };
+        for (const s of ['http', 'https']) {
+            probeLocal(`${s}://${settings.host}:${settings.port}/`, 2500, res => { res.resume(); answer(res.statusCode < 500); }, () => answer(false));
+        }
     });
+}
+
+// Everything the main server gets on top of the usual variables: phone access,
+// the remote link, HTTPS and the SillyTavern options chosen in Settings.
+let tunnelWanted = false; // the remote link is on (never remembered across launches)
+let tailscaleOn = false;  // Tailscale's addresses may connect (phone access on)
+let httpsCert = null;
+function mainServerEnv() {
+    const env = { ...so.env(settings.serverOverrides), ...lan.serverEnv(settings) };
+    if (settings.lanAccess && tailscaleOn && env.SILLYTAVERN_WHITELIST) {
+        env.SILLYTAVERN_WHITELIST = JSON.stringify([...JSON.parse(env.SILLYTAVERN_WHITELIST), tunnel.TAILSCALE_RANGE]);
+    }
+    if (tunnelWanted && settings.lanPassword) {
+        // Tunnel visitors come through cloudflared; the password is the gate.
+        Object.assign(env, {
+            SILLYTAVERN_WHITELISTMODE: 'false',
+            SILLYTAVERN_BASICAUTHMODE: 'true',
+            SILLYTAVERN_BASICAUTHUSER_USERNAME: settings.lanUser || 'user',
+            SILLYTAVERN_BASICAUTHUSER_PASSWORD: settings.lanPassword,
+        });
+    }
+    if (settings.https) {
+        try {
+            httpsCert = so.certificate(path.join(USER_DATA, 'certs'), ['127.0.0.1', ...lan.localNetworks().map(n => n.address)]);
+            Object.assign(env, so.httpsEnv(httpsCert));
+        } catch (e) { logLine(`ERROR: could not make the HTTPS certificate: ${e.message}`); }
+    }
+    return env;
+}
+// The login the running server asks for (phone access or the remote link), else null.
+const serverLogin = () => (serverState.running && serverState.env?.SILLYTAVERN_BASICAUTHMODE === 'true'
+    ? { user: serverState.env.SILLYTAVERN_BASICAUTHUSER_USERNAME, password: serverState.env.SILLYTAVERN_BASICAUTHUSER_PASSWORD } : null);
+const envKey = env => JSON.stringify(Object.entries(env).filter(([k]) => k !== 'SILLYTAVERN_SSL_CERTPATH' && k !== 'SILLYTAVERN_SSL_KEYPATH').sort());
+
+// ---------- start with SillyTavern ----------
+// Programs or scripts started with the server; those marked `stop` end with it.
+const companionKids = new Map(); // id → child process
+function startCompanion(c) {
+    if (companionKids.has(c.id)) return true;
+    const file = String(c.path || '');
+    if (!fs.existsSync(file)) { logLine(`Start with SillyTavern: "${c.name}" is not at ${file} anymore.`); return false; }
+    const ext = path.extname(file).toLowerCase();
+    const args = String(c.args || '').match(/"[^"]*"|\S+/g)?.map(a => a.replace(/^"|"$/g, '')) || [];
+    if (['.lnk', '.url'].includes(ext)) { shell.openPath(file); logLine(`Started "${c.name}".`); return true; }
+    const [cmd, cmdArgs] = ext === '.ps1' ? ['powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', file, ...args]]
+        : ['.bat', '.cmd'].includes(ext) ? ['cmd.exe', ['/c', file, ...args]] : [file, args];
+    try {
+        const kid = spawn(cmd, cmdArgs, { cwd: path.dirname(file), detached: !c.stop, stdio: 'ignore', windowsHide: false });
+        kid.on('error', e => { companionKids.delete(c.id); logLine(`Could not start "${c.name}": ${e.message}`); });
+        kid.on('exit', () => companionKids.delete(c.id));
+        if (c.stop) companionKids.set(c.id, kid);
+        else kid.unref();
+        logLine(`Started "${c.name}".`);
+        return true;
+    } catch (e) { logLine(`Could not start "${c.name}": ${e.message}`); return false; }
+}
+// When the app quits, wait for taskkill: an async one never ran before the app was gone.
+function stopCompanions({ wait = false } = {}) {
+    for (const [id, kid] of companionKids) {
+        const args = ['/PID', String(kid.pid), '/T', '/F'];
+        if (wait) { try { execFileSync('taskkill', args, { windowsHide: true, stdio: 'ignore', timeout: 5000 }); } catch { /* already gone */ } }
+        else spawn('taskkill', args, { windowsHide: true });
+        companionKids.delete(id);
+    }
 }
 
 async function startServer() {
@@ -259,7 +347,8 @@ async function startServer() {
     }
     warnMisplacedUserscripts(stRoot);
     logLine(`Starting SillyTavern server from ${stRoot} ...`);
-    const lanEnv = lan.serverEnv(settings);
+    if (settings.lanAccess) tailscaleOn = (await tunnel.tailscale()).running;
+    const extraEnv = mainServerEnv();
     if (settings.lanAccess) {
         const where = lan.phoneAddresses(settings.port).map(a => a.url).join(' or ');
         logLine(where ? `Phone access is on: open ${where} on a device on the same network.` : 'Phone access is on, but this PC is not on a home network right now.');
@@ -267,18 +356,23 @@ async function startServer() {
         if (older) logLine(`WARNING: phone access is on with SillyTavern ${instances.describe(stRoot).version}, which is ${older.newer} release${older.newer === 1 ? '' : 's'} behind ${older.latest}${older.fixes.length ? ', and newer releases fixed security problems' : ''}. Other devices on your network can reach it; update it or turn phone access off.`);
         if (lan.hasWhitelistTxt(stRoot)) logLine('WARNING: SillyTavern\'s whitelist.txt decides who may connect, not this app. Add your network there, or remove the file.');
     }
+    const opts = Object.keys(so.clean(settings.serverOverrides));
+    if (opts.length) logLine(`SillyTavern options set by this app: ${opts.join(', ')}.`);
+    if (settings.https) logLine('HTTPS is on (this app\'s own certificate).');
     // Pass the port explicitly so the Settings value is what the server binds to.
     const child = spawn('node', ['server.js', '--port', String(settings.port)], {
         cwd: stRoot,
         windowsHide: true,
-        env: instances.serverEnv(lanEnv),
+        env: instances.serverEnv(extraEnv),
         shell: false,
     });
     serverState.child = child;
-    serverState.lanEnv = JSON.stringify(lanEnv); // to tell when a settings change needs a restart
+    serverState.env = extraEnv;
+    serverState.envKey = envKey(extraEnv); // to tell when a settings change needs a restart
     serverState.running = true;
     serverState.startedAt = Date.now();
     broadcast('server-started');
+    for (const c of settings.companions) startCompanion(c);
 
     // If node can't even be spawned (ENOENT etc.) we get 'error', not 'exit'.
     child.on('error', err => {
@@ -293,9 +387,15 @@ async function startServer() {
         serverState.running = false;
         serverState.child = null;
         logLine(`Server exited with code ${code}.`);
+        stopCompanions();
+        // The link points at this server; a restart for new settings brings it back.
+        if (tunnel.running() && !restartingForSettings) tunnel.stop();
         broadcast('server-stopped');
     });
 }
+let restartingForSettings = false;
+// The server runs with other variables than the settings now ask for.
+const needsRestart = () => serverState.running && !serverState.attached && serverState.envKey !== envKey(mainServerEnv());
 
 // Browser userscripts dropped into plugins/ make SillyTavern try (and fail)
 // to load them as server plugins. Point the user at the right place.
@@ -347,7 +447,7 @@ function waitForServerThenOpen({ reload = false } = {}) {
     const started = Date.now();
     const timeout = 120000; // transformers.js can take a while on first run
     const tryFetch = () => {
-        const req = http.get(`http://${settings.host}:${settings.port}/`, { timeout: 3000 }, res => {
+        probeLocal(mainUrl(), 3000, res => {
             res.resume();
             if (res.statusCode && res.statusCode < 500) {
                 waitingForServer = false;
@@ -355,9 +455,7 @@ function waitForServerThenOpen({ reload = false } = {}) {
                 openSillyTavernWindow();
             }
             else retry();
-        });
-        req.on('timeout', () => { req.destroy(); retry(); });
-        req.on('error', retry);
+        }, retry);
     };
     const retry = () => {
         if (!serverState.running) { waitingForServer = false; logLine('Server process died during startup — giving up on opening the window.'); return; }
@@ -417,7 +515,7 @@ async function confirm(message, detail, okLabel) {
     // From the tray or the SillyTavern window the launcher may be hidden: no owner then.
     const owner = launcherWin && !launcherWin.isDestroyed() && launcherWin.isVisible() ? [launcherWin] : [];
     const { response } = await dialog.showMessageBox(...owner, {
-        type: 'question', buttons: [okLabel, 'Cancel'], defaultId: 0, cancelId: 1, message, detail,
+        type: 'question', buttons: [okLabel, t('Cancel')], defaultId: 0, cancelId: 1, message, detail,
     });
     return response === 0;
 }
@@ -472,7 +570,7 @@ function createLauncherWindow() {
         launcherWin.hide();
         if (!trayHintShown) {
             trayHintShown = true;
-            tray.displayBalloon({ iconType: 'info', title: 'SillyTavern Desktop is still running', content: serverState.running ? 'The server keeps running. Click the tray icon to open the launcher.' : 'Click the tray icon to open the launcher.' });
+            tray.displayBalloon({ iconType: 'info', title: t('SillyTavern Desktop is still running'), content: serverState.running ? t('The server keeps running. Click the tray icon to open the launcher.') : t('Click the tray icon to open the launcher.') });
         }
     });
     // Windows shutting down or signing out must not be held up by the tray.
@@ -480,6 +578,66 @@ function createLauncherWindow() {
     launcherWin.on('session-end', () => { isQuitting = true; });
     launcherWin.on('closed', () => { launcherWin = null; });
 }
+
+// ---------- language ----------
+// The app's language changes at once: the launcher and the top bars reload,
+// menus and dialogs use it from then on. SillyTavern's own language is a
+// localStorage value per session; after a change every session gets it once
+// (so choosing another one in SillyTavern later sticks).
+let stLangReload = false; // open SillyTavern pages still show the old language
+// SillyTavern keeps the language per session and address (another port is another value).
+const partKey = (instance, wc) => {
+    let host = '';
+    try { host = new URL(wc.getURL()).host; } catch { /* not loaded yet */ }
+    return `${instance.webPreferences?.partition || 'default'}|${host}`;
+};
+function stLanguageTo(wc, instance, reload) {
+    const s = settings.stLanguage;
+    if (!/^https?:/.test(wc.getURL())) return false; // a status page, not SillyTavern yet
+    const key = partKey(instance, wc);
+    if (!s || s.code !== i18n.current().st || s.done.includes(key)) return false;
+    s.done.push(key);
+    saveSettings(settings);
+    const code = JSON.stringify(s.code);
+    wc.executeJavaScript(`try { if (localStorage.getItem('language') !== ${code}) { localStorage.setItem('language', ${code}); ${reload ? 'location.reload();' : ''} } } catch {}`).catch(() => {});
+    return true;
+}
+function setAppLanguage(id) {
+    if (id && !i18n.byId(id)) return false;
+    settings.language = id;
+    i18n.setLanguage(id || systemLanguage());
+    const code = i18n.current().st;
+    settings.stLanguage = settings.syncStLanguage && code ? { code, done: [] } : null;
+    let open = 0;
+    for (const w of stWins) for (const tab of w.tabs) if (!tab.instance.anyWeb && stLanguageTo(tab.view.webContents, tab.instance, false)) open++;
+    stLangReload = open > 0;
+    saveSettings(settings);
+    logLine(`Language: ${i18n.current().english}.`);
+    if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.reload();
+    mainInstance();
+    if (readOnlyInst) readOnlyInstance();
+    for (const w of stWins) w.reloadBar();
+    updateTray();
+    return true;
+}
+const languageMenu = () => i18n.LANGUAGES.map(l => ({
+    label: l.id === 'en' ? l.name : `${l.name} — ${l.english}`, type: 'radio', checked: i18n.current().id === l.id, click: () => setAppLanguage(l.id),
+}));
+ipcMain.on('i18n-dict', e => {
+    e.returnValue = { ...i18n.forPage(), chosen: settings.language, system: systemLanguage(), stSync: settings.syncStLanguage, stReload: stLangReload && stWins.size > 0 };
+});
+ipcMain.handle('set-language', (_e, id) => setAppLanguage(String(id || '')));
+ipcMain.handle('set-st-language-sync', (_e, on) => {
+    settings.syncStLanguage = !!on;
+    saveSettings(settings);
+    broadcast('settings', publicSettings());
+    return true;
+});
+ipcMain.handle('st-language-reload', async () => {
+    stLangReload = false;
+    for (const w of stWins) w.reloadAll(inst => !inst.anyWeb);
+    return true;
+});
 
 // ---------- tray ----------
 // Only there while the closeToTray setting is on.
@@ -489,22 +647,23 @@ let trayHintShown = false;
 function trayMenu() {
     const w = stWindowState();
     return [
-        { label: !w.open ? 'Open SillyTavern' : w.minimized ? 'Restore SillyTavern' : 'Show SillyTavern', click: () => (serverState.running ? openSillyTavernWindow() : startAndOpen()) },
-        ...(w.open && !w.minimized ? [{ label: 'Minimize SillyTavern', click: minimizeStWindows }] : []),
-        { label: 'Show launcher', click: showLauncher },
-        ...(settings.profiles.length > 1 ? [{ label: 'Profile', submenu: profileMenu() }] : []),
-        ...(settings.remotes.length ? [{ label: 'Open on another computer', submenu: remoteMenuItems(null) }] : []),
+        { label: !w.open ? t('Open SillyTavern') : w.minimized ? t('Restore SillyTavern') : t('Show SillyTavern'), click: () => (serverState.running ? openSillyTavernWindow() : startAndOpen()) },
+        ...(w.open && !w.minimized ? [{ label: t('Minimize SillyTavern'), click: minimizeStWindows }] : []),
+        { label: t('Show launcher'), click: showLauncher },
+        ...(settings.profiles.length > 1 ? [{ label: t('Profile'), submenu: profileMenu() }] : []),
+        ...(settings.remotes.length ? [{ label: t('Open on another computer'), submenu: remoteMenuItems(null) }] : []),
+        { label: `${t('Language')} (Language)`, submenu: languageMenu() },
         { type: 'separator' },
         serverState.running
-            ? { label: 'Stop server', enabled: !busyTask, click: stopServer }
-            : { label: 'Start server', enabled: !busyTask, click: () => startServer() },
+            ? { label: t('Stop server'), enabled: !busyTask, click: stopServer }
+            : { label: t('Start server'), enabled: !busyTask, click: () => startServer() },
         { type: 'separator' },
-        { label: 'Quit', click: () => app.quit() },
+        { label: t('Quit'), click: () => app.quit() },
     ];
 }
 
 function updateTray() {
-    if (tray) tray.setToolTip(`SillyTavern Desktop — server ${serverState.running ? 'running' : 'stopped'}`);
+    if (tray) tray.setToolTip(`SillyTavern Desktop — ${serverState.running ? t('server running') : t('server stopped')}`);
 }
 
 function syncTray() {
@@ -573,6 +732,7 @@ function lockToServer(wc, host, instance) {
     }
     attachPageMenu(wc, host, instance);
     useSpellLanguage(wc.session);
+    if (!instance.anyWeb) wc.on('did-finish-load', () => stLanguageTo(wc, instance, true));
     const inside = insideOf(instance);
     wc.on('will-navigate', (e, url) => { if (!inside(url)) { e.preventDefault(); openExternalSafe(url); } });
     wc.setWindowOpenHandler(({ url, disposition }) => {
@@ -622,7 +782,7 @@ function webInstance(partition = '') {
     if (!webInsts.has(partition)) {
         webInsts.set(partition, {
             kind: 'web', anyWeb: true, url: crx.STORE_URL, chip: 'web',
-            tip: 'A website (the Chrome Web Store or a page a Chrome extension opened)', info: 'Website',
+            tip: t('A website (the Chrome Web Store or a page a Chrome extension opened)'), info: t('Website'),
             webPreferences: { ...(partition ? { partition } : {}), contextIsolation: true, nodeIntegration: false },
         });
     }
@@ -663,15 +823,15 @@ function initChrome() {
 async function confirmChromeInstall({ name, manifest, icon }) {
     const d = crx.describe(manifest);
     const lines = [
-        d.everySite ? 'It can read and change every page you open in SillyTavern, including what you type in chats.' : 'It can read and change the pages it was made for.',
-        'Chrome extensions only partly work in apps like this one: some features may be missing.',
+        d.everySite ? t('It can read and change every page you open in SillyTavern, including what you type in chats.') : t('It can read and change the pages it was made for.'),
+        t('Chrome extensions only partly work in apps like this one: some features may be missing.'),
     ];
-    if (d.missing.length) lines.push(`Not available here: ${d.missing.join(', ')}.`);
+    if (d.missing.length) lines.push(t('Not available here: {list}.', { list: d.missing.join(', ') }));
     // No parent window: with the SillyTavern window as parent the box
     // sometimes never appeared (and the store's install waited forever).
     const opts = {
-        type: 'question', buttons: ['Add extension', 'Cancel'], defaultId: 0, cancelId: 1, noLink: true,
-        title: 'Add Chrome extension', message: `Add "${name}"?`, detail: lines.join('\n\n'),
+        type: 'question', buttons: [t('Add extension'), t('Cancel')], defaultId: 0, cancelId: 1, noLink: true,
+        title: t('Add Chrome extension'), message: t('Add "{name}"?', { name }), detail: lines.join('\n\n'),
         ...(icon && !icon.isEmpty() ? { icon: icon.resize({ width: 48, height: 48 }) } : {}),
     };
     try {
@@ -687,8 +847,8 @@ async function confirmChromeInstall({ name, manifest, icon }) {
 function attachLauncherMenu(wc) {
     wc.on('context-menu', (_e, p) => {
         if (!p.isEditable && !p.selectionText?.trim()) return;
-        const t = cm.build(wc, { ...p, linkURL: '', mediaType: 'none' }, { openExternal: openExternalSafe, inspect: () => settings.inspectMenu });
-        if (t.length) Menu.buildFromTemplate(t).popup({ window: launcherWin });
+        const items = cm.build(wc, { ...p, linkURL: '', mediaType: 'none' }, { openExternal: openExternalSafe, inspect: () => settings.inspectMenu });
+        if (items.length) Menu.buildFromTemplate(items).popup({ window: launcherWin });
     });
 }
 
@@ -702,13 +862,13 @@ let mainInst = null;
 let readOnlyInst = null;
 
 function mainInstance() {
-    const url = `http://${settings.host}:${settings.port}/`;
+    const url = mainUrl();
     if (!mainInst || mainInst.url !== url) mainInst = { kind: 'main', url, webPreferences: stWebPreferences() };
     const d = instances.describe(stRoot());
     const name = prof.active(settings)?.name;
     return Object.assign(mainInst, {
         chip: `:${settings.port}`,
-        tip: `${name ? `${name}: ` : ''}SillyTavern ${versionText(d)} on port ${settings.port}`,
+        tip: `${name ? `${name}: ` : ''}${t('SillyTavern {version} on port {port}', { version: versionText(d), port: String(settings.port) })}`,
         info: `${name ? `${name} · ` : ''}${versionText(d)} · :${settings.port}`,
     });
 }
@@ -720,9 +880,9 @@ function readOnlyInstance() {
     readOnlyInst ||= { kind: 'readonly', readOnly: true, webPreferences: { ...stWebPreferences(), partition: instances.READ_ONLY_PARTITION } };
     return Object.assign(readOnlyInst, {
         url: mainInstance().url,
-        chip: `read-only :${settings.port}`,
-        tip: `Read-only SillyTavern ${d.version} on port ${settings.port} (nothing is saved or sent)`,
-        info: `READ-ONLY · ${d.version} · :${settings.port}`,
+        chip: `${t('read-only')} :${settings.port}`,
+        tip: t('Read-only SillyTavern {version} on port {port} (nothing is saved or sent)', { version: d.version, port: String(settings.port) }),
+        info: `${t('READ-ONLY')} · ${d.version} · :${settings.port}`,
     });
 }
 
@@ -738,9 +898,9 @@ async function extraInstance(dir, kind) {
         kind, server: srv,
         url: `http://${settings.host}:${port}/`,
         webPreferences: { ...stWebPreferences(), partition: instances.partitionFor(dir) },
-        chip: second ? `:${port} · 2nd` : `${d.version} :${port}`,
-        tip: second ? `SillyTavern ${versionText(d)} on port ${port} (second server, same folder)` : `${name ? `${name}: ` : ''}SillyTavern ${versionText(d)} on port ${port} (${dir})`,
-        info: second ? `${versionText(d)} · :${port} · 2nd server` : `${name ? `${name} · ` : ''}${versionText(d)} · :${port} · ${dir}`,
+        chip: second ? `:${port} · ${t('2nd')}` : `${d.version} :${port}`,
+        tip: second ? t('SillyTavern {version} on port {port} (second server, same folder)', { version: versionText(d), port: String(port) }) : `${name ? `${name}: ` : ''}${t('SillyTavern {version} on port {port}', { version: versionText(d), port: String(port) })} (${dir})`,
+        info: second ? `${versionText(d)} · :${port} · ${t('2nd server')}` : `${name ? `${name} · ` : ''}${versionText(d)} · :${port} · ${dir}`,
         onUnused: () => instances.stopServer(srv),
     };
     // Tabs of a server that stopped (or crashed) would only show an error.
@@ -759,7 +919,7 @@ function remoteInstance(r) {
         url: r.url, origin: u.origin,
         // The chip stays short (tab titles need the room); the bar's info has the address.
         chip: r.name.length > 14 ? `${r.name.slice(0, 13)}…` : r.name,
-        tip: `${r.name}: SillyTavern at ${u.host}`, info: `${r.name} · ${u.host}`,
+        tip: `${r.name}: ${t('SillyTavern at {host}', { host: u.host })}`, info: `${r.name} · ${u.host}`,
     });
 }
 
@@ -768,10 +928,10 @@ async function openRemote(id, from) {
     if (!r) return false;
     if (remote.insecure(r.url) && !r.httpOk) {
         const { response, checkboxChecked } = await dialog.showMessageBox({
-            type: 'warning', buttons: ['Open anyway', 'Cancel'], defaultId: 1, cancelId: 1,
-            message: `"${r.name}" uses plain http outside your home network.`,
-            detail: `${r.url}\n\nYour password and everything you write travel unencrypted, so others on the way could read them. Use an https address, or a private network such as Tailscale, if you can.`,
-            checkboxLabel: 'Don\'t warn again for this one',
+            type: 'warning', buttons: [t('Open anyway'), t('Cancel')], defaultId: 1, cancelId: 1,
+            message: t('"{name}" uses plain http outside your home network.', { name: r.name }),
+            detail: `${r.url}\n\n${t('Your password and everything you write travel unencrypted, so others on the way could read them. Use an https address, or a private network such as Tailscale, if you can.')}`,
+            checkboxLabel: t('Don\'t warn again for this one'),
         });
         if (response !== 0) return false;
         if (checkboxChecked) { r.httpOk = true; saveSettings(settings); }
@@ -792,10 +952,10 @@ function openInstance(inst, from) {
 async function openSecondServer(from) {
     if (settings.warnSecondServer) {
         const { response, checkboxChecked } = await dialog.showMessageBox({
-            type: 'warning', buttons: ['Start second server', 'Cancel'], defaultId: 0, cancelId: 1,
-            message: 'Run a second server on the same SillyTavern folder?',
-            detail: 'Both servers use the same chats, characters, presets and settings. If you change the same thing in both, the one that saves last wins. To only look at presets or chats, a read-only copy is safer.',
-            checkboxLabel: "Don't show this again",
+            type: 'warning', buttons: [t('Start second server'), t('Cancel')], defaultId: 0, cancelId: 1,
+            message: t('Run a second server on the same SillyTavern folder?'),
+            detail: t('Both servers use the same chats, characters, presets and settings. If you change the same thing in both, the one that saves last wins. To only look at presets or chats, a read-only copy is safer.'),
+            checkboxLabel: t("Don't show this again"),
         });
         if (response !== 0) return;
         if (checkboxChecked) { settings.warnSecondServer = false; saveSettings(settings); }
@@ -819,16 +979,16 @@ function newSillyTavernMenu(w) {
     refreshInstalls();
     const others = otherFolders();
     return [
-        { label: `Another ${where} of this SillyTavern`, accelerator: settings.tabs ? 'Ctrl+T' : undefined, registerAccelerator: false, click: () => openInstance(mainInstance(), w) },
-        { label: 'Read-only copy (browse without saving or sending)', click: () => openInstance(readOnlyInstance(), w) },
-        { label: 'This SillyTavern on another port', click: () => openSecondServer(w) },
+        { label: settings.tabs ? t('Another tab of this SillyTavern') : t('Another window of this SillyTavern'), accelerator: settings.tabs ? 'Ctrl+T' : undefined, registerAccelerator: false, click: () => openInstance(mainInstance(), w) },
+        { label: t('Read-only copy (browse without saving or sending)'), click: () => openInstance(readOnlyInstance(), w) },
+        { label: t('This SillyTavern on another port'), click: () => openSecondServer(w) },
         { type: 'separator' },
         ...(others.length
             ? others.map(o => ({ label: menuText(o.label), click: () => openExtra(o.path, 'other', w) }))
-            : [{ label: 'No other SillyTavern installs found', enabled: false }]),
-        ...(settings.remotes.length ? [{ type: 'separator' }, { label: 'On other computers', enabled: false }, ...remoteMenuItems(w)] : []),
+            : [{ label: t('No other SillyTavern installs found'), enabled: false }]),
+        ...(settings.remotes.length ? [{ type: 'separator' }, { label: t('On other computers'), enabled: false }, ...remoteMenuItems(w)] : []),
         { type: 'separator' },
-        { label: 'Chrome Web Store (add Chrome extensions)', click: openChromeStore },
+        { label: t('Chrome Web Store (add Chrome extensions)'), click: openChromeStore },
     ];
 }
 
@@ -950,19 +1110,20 @@ function stWindowMenu(w) {
         label, type: 'radio', checked: w.layer === mode, layerItem: true, click: () => setLayer(mode),
     });
     return [
-        layerItem('normal', 'Normal window (default)'),
-        layerItem('top', 'Always on top'),
-        layerItem('bottom', 'Stay in background'),
+        layerItem('normal', t('Normal window (default)')),
+        layerItem('top', t('Always on top')),
+        layerItem('bottom', t('Stay in background')),
         { type: 'separator' },
-        { label: 'Full screen', type: 'checkbox', checked: w.fullScreen, accelerator: 'F11', registerAccelerator: false, click: () => w.toggleFullScreen() },
-        { label: 'Reload', accelerator: 'F5', registerAccelerator: false, click: () => w.reload() },
+        { label: t('Full screen'), type: 'checkbox', checked: w.fullScreen, accelerator: 'F11', registerAccelerator: false, click: () => w.toggleFullScreen() },
+        { label: t('Reload'), accelerator: 'F5', registerAccelerator: false, click: () => w.reload() },
         { type: 'separator' },
-        { label: 'New SillyTavern', submenu: newSillyTavernMenu(w) },
-        ...(settings.profiles.length > 1 ? [{ label: 'Switch profile', submenu: profileMenu() }] : []),
-        ...(ext.menuItems().length ? [{ label: 'Extensions', submenu: ext.menuItems() }] : []),
-        { label: 'Open new pages as tabs', type: 'checkbox', checked: settings.tabs, click: () => setTabs(!settings.tabs) },
+        { label: t('New SillyTavern'), submenu: newSillyTavernMenu(w) },
+        ...(settings.profiles.length > 1 ? [{ label: t('Switch profile'), submenu: profileMenu() }] : []),
+        ...(ext.menuItems().length ? [{ label: t('Extensions'), submenu: ext.menuItems() }] : []),
+        { label: t('Open new pages as tabs'), type: 'checkbox', checked: settings.tabs, click: () => setTabs(!settings.tabs) },
+        { label: `${t('Language')} (Language)`, submenu: languageMenu() },
         { type: 'separator' },
-        { label: 'Show launcher', click: showLauncher },
+        { label: t('Show launcher'), click: showLauncher },
     ];
 }
 
@@ -1015,6 +1176,11 @@ const LINKS = {
     desktopReleases: () => appUpdate.releasePage(),
     extensionDocs: 'https://github.com/Lab-Fox/sillytavern-desktop/blob/main/EXTENSIONS.md',
     addonRepo: 'https://github.com/Lab-Fox/sillytavern-desktop-extensions',
+    translate: 'https://github.com/Lab-Fox/sillytavern-desktop/blob/main/locales/README.md',
+    issues: 'https://github.com/Lab-Fox/sillytavern-desktop/issues',
+    stIssues: 'https://github.com/SillyTavern/SillyTavern/issues',
+    remoteDocs: 'https://docs.sillytavern.app/usage/remoteconnections/',
+    tailscale: 'https://tailscale.com/download/windows',
 };
 
 ipcMain.handle('get-state', () => ({
@@ -1022,7 +1188,7 @@ ipcMain.handle('get-state', () => ({
     attached: serverState.attached,
     startedAt: serverState.startedAt,
     busy: busyTask,
-    url: `http://${settings.host}:${settings.port}/`,
+    url: mainUrl(),
     settings: publicSettings(),
     logs: serverState.logs,
     appVersion: app.getVersion(),
@@ -1059,9 +1225,9 @@ ipcMain.handle('start-classic', async () => {
     if (!setup.isStRoot(root)) return false;
     if (busyTask) { logLine(`Busy with "${busyTask}" — wait for it to finish.`); return false; }
     const bat = fs.existsSync(path.join(root, 'Start.bat'));
-    if (!(await confirm('Start SillyTavern the classic way?',
-        `${bat ? 'SillyTavern\'s own Start.bat' : 'node server.js'} runs in a command window of its own, without this app.${serverState.running ? ' This app\'s server stops first.' : ''}\n\nOpen SillyTavern in your browser once it says it is listening (or use "Open in browser" here). Close the command window to stop it.`,
-        'Start'))) return false;
+    if (!(await confirm(t('Start SillyTavern the classic way?'),
+        `${t('{what} runs in a command window of its own, without this app.', { what: bat ? 'Start.bat' : 'node server.js' })}${serverState.running ? ` ${t('This app\'s server stops first.')}` : ''}\n\n${t('Open SillyTavern in your browser once it says it is listening (or use "Open in browser" here). Close the command window to stop it.')}`,
+        t('Start')))) return false;
     await instances.stopAll(root);
     if (serverState.running && !(await stopServerAndWait())) return false;
     const env = { ...process.env };
@@ -1119,24 +1285,24 @@ ipcMain.handle('st-incoming', async () => {
     try { version = JSON.parse(pkg.out).version || ''; } catch { /* no upstream */ }
     return { from: instances.describe(dir).version, to: version, commits };
 });
-ipcMain.handle('update', () => runTask('Updating SillyTavern', () => tracked('update', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() }))));
+ipcMain.handle('update', () => runTask(t('Updating SillyTavern'), () => tracked('update', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() }))));
 ipcMain.handle('repair', async (_e, kind) => {
-    const labels = { deps: 'Installing dependencies', 'clean-deps': 'Reinstalling dependencies', 'reset-lock': 'Resetting package-lock.json' };
+    const labels = { deps: t('Installing dependencies'), 'clean-deps': t('Reinstalling dependencies'), 'reset-lock': t('Resetting package-lock.json') };
     if (!labels[kind]) return false;
-    if (kind === 'clean-deps' && !(await confirm('Reinstall all dependencies?', 'Deletes SillyTavern\'s node_modules folder and downloads everything again. Your chats and characters are not touched. Takes a few minutes.', 'Reinstall'))) return false;
+    if (kind === 'clean-deps' && !(await confirm(t('Reinstall all dependencies?'), t('Deletes SillyTavern\'s node_modules folder and downloads everything again. Your chats and characters are not touched. Takes a few minutes.'), t('Reinstall')))) return false;
     return runTask(labels[kind], () => mx.repair(stRoot(), kind));
 });
 ipcMain.handle('switch-branch', async (_e, branch) => {
     const about = branch === 'staging'
-        ? 'Staging gets new features first but can be unstable.'
-        : 'Release is the stable version most people use.';
+        ? t('Staging gets new features first but can be unstable.')
+        : t('Release is the stable version most people use.');
     const backup = settings.backupBeforeUpdate
-        ? 'Your data is backed up before switching.'
-        : 'No backup is made first ("Back up before updating" is off in Settings).';
-    if (!(await confirm(`Switch SillyTavern to ${branch}?`, `${about} ${backup}`, 'Switch'))) return false;
-    return runTask(`Switching to ${branch}`, () => tracked('branch', () => mx.switchBranch(stRoot(), branch, { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
+        ? t('Your data is backed up before switching.')
+        : t('No backup is made first ("Back up before updating" is off in Settings).');
+    if (!(await confirm(t('Switch SillyTavern to {branch}?', { branch }), `${about} ${backup}`, t('Switch')))) return false;
+    return runTask(t('Switching to {branch}', { branch }), () => tracked('branch', () => mx.switchBranch(stRoot(), branch, { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
 });
-ipcMain.handle('backup', () => runTask('Backing up', async () => !!(await mx.createBackup(stRoot(), 'manual', keep())), { needsStopped: false }));
+ipcMain.handle('backup', () => runTask(t('Backing up'), async () => !!(await mx.createBackup(stRoot(), 'manual', keep())), { needsStopped: false }));
 // Backups live in backups/desktop, and scheduled ones maybe in the folder chosen for them.
 const activeProfile = () => prof.list(settings).find(p => p.active) || { name: path.basename(stRoot() || 'SillyTavern'), path: stRoot() };
 function backupDirs() {
@@ -1156,13 +1322,13 @@ ipcMain.handle('list-backups', () => {
 ipcMain.handle('restore-backup', async (_e, name, where = 'local') => {
     const dir = backupDirs()[where];
     if (!dir) return false;
-    if (!(await confirm('Restore this backup?', `${name}\n\nYour current data folder is moved to backups/desktop first, so nothing is lost. The server restarts afterwards.`, 'Restore'))) return false;
-    return runTask('Restoring backup', () => mx.restoreBackup(stRoot(), name, dir));
+    if (!(await confirm(t('Restore this backup?'), `${name}\n\n${t('Your current data folder is moved to backups/desktop first, so nothing is lost. The server restarts afterwards.')}`, t('Restore')))) return false;
+    return runTask(t('Restoring backup'), () => mx.restoreBackup(stRoot(), name, dir));
 });
 ipcMain.handle('delete-backup', async (_e, name, where = 'local') => {
     const dir = backupDirs()[where];
     if (!dir) return false;
-    if (!(await confirm('Delete this backup permanently?', name, 'Delete'))) return false;
+    if (!(await confirm(t('Delete this backup permanently?'), name, t('Delete')))) return false;
     const ok = mx.deleteBackup(stRoot(), name, dir);
     broadcast('refresh');
     return ok;
@@ -1184,7 +1350,7 @@ ipcMain.handle('backup-schedule-pick', async () => {
     if (!dir) return bs.status();
     // Inside a SillyTavern folder they'd be zipped into each other (data/) or moved along with it.
     if (prof.list(settings).some(p => p.ok && (path.resolve(dir).toLowerCase() + path.sep).startsWith(path.resolve(p.path).toLowerCase() + path.sep))) {
-        return { ...bs.status(), error: 'Pick a folder outside your SillyTavern folders, for example on another drive.' };
+        return { ...bs.status(), error: t('Pick a folder outside your SillyTavern folders, for example on another drive.') };
     }
     settings.backupScheduleDir = dir;
     saveSettings(settings);
@@ -1210,13 +1376,13 @@ ipcMain.handle('ext-catalog', async (_e, fresh) => {
     return { ok: r.ok, error: r.error || '', stale: r.stale || '', info: sx.catalogInfo() };
 });
 // paths: the extensions the user kept ticked in the review.
-ipcMain.handle('update-extensions', (_e, paths) => runTask('Updating extensions', async () => {
+ipcMain.handle('update-extensions', (_e, paths) => runTask(t('Updating extensions'), async () => {
     let snap = null;
     const n = await mx.updateExtensions(stRoot(), { only: Array.isArray(paths) ? paths.map(String) : null, before: async exts => { snap = await sx.snapshotBefore(stRoot(), exts); } });
     if (snap && await sx.snapshotAfter(snap)) logLine('The versions from before this update were remembered: Extensions → Undo last update puts them back.');
     return n;
 }, { needsStopped: false }));
-ipcMain.handle('ext-undo', (_e, onlyPath) => runTask('Undoing extension updates', () => sx.undo(stRoot(), onlyPath ? String(onlyPath) : null), { needsStopped: false }));
+ipcMain.handle('ext-undo', (_e, onlyPath) => runTask(t('Undoing extension updates'), () => sx.undo(stRoot(), onlyPath ? String(onlyPath) : null), { needsStopped: false }));
 // After installing, updating or going back: open SillyTavern pages load the new code.
 ipcMain.handle('reload-st', () => { stWins.forEach(w => w.reloadAll(onThisPc)); return stWins.size; });
 // Project pages and scan reports from the catalog: web links only.
@@ -1226,10 +1392,10 @@ ipcMain.handle('open-url', (_e, url) => { if (/^https:\/\//i.test(String(url))) 
 async function installNotice() {
     if (settings.extInstallNoticeSeen) return true;
     const { response, checkboxChecked } = await dialog.showMessageBox(launcherWin, {
-        type: 'warning', buttons: ['I understand, continue', 'Cancel'], defaultId: 0, cancelId: 1,
-        message: 'Extensions run code inside SillyTavern',
-        detail: 'An extension can read your chats, characters and settings, and talk to other websites. A safety rating is information about one version, not a guarantee. Install only extensions you trust, and read their page first.',
-        checkboxLabel: "Don't show this again",
+        type: 'warning', buttons: [t('I understand, continue'), t('Cancel')], defaultId: 0, cancelId: 1,
+        message: t('Extensions run code inside SillyTavern'),
+        detail: t('An extension can read your chats, characters and settings, and talk to other websites. A safety rating is information about one version, not a guarantee. Install only extensions you trust, and read their page first.'),
+        checkboxLabel: t("Don't show this again"),
     });
     if (response !== 0) return false;
     if (checkboxChecked) { settings.extInstallNoticeSeen = true; saveSettings(settings); }
@@ -1238,8 +1404,8 @@ async function installNotice() {
 const installedSet = () => new Set(mx.installedRemotes(stRoot()).map(i => sx.normUrl(i.remote)).filter(Boolean));
 // Several at once (a Kit) or one (from the catalog). items: [{ url, scope, commit, name, branch }]
 async function installMany(label, items) {
-    if (busyTask) return { error: `Busy with "${busyTask}" — wait for it to finish.` };
-    if (!setup.isStRoot(stRoot())) return { error: 'Choose your SillyTavern first.' };
+    if (busyTask) return { error: t('Busy with "{task}" — wait for it to finish.', { task: busyTask }) };
+    if (!setup.isStRoot(stRoot())) return { error: t('Choose your SillyTavern first.') };
     if (!(await installNotice())) return { canceled: true };
     const results = [];
     await runTask(label, async () => {
@@ -1260,8 +1426,8 @@ ipcMain.handle('ext-search', (_e, q) => {
 });
 ipcMain.handle('ext-install', (_e, id) => {
     const e = sx.catalogEntry(String(id));
-    if (!e) return { error: 'That extension is not in the catalog anymore.' };
-    if (installedSet().has(sx.normUrl(e.url))) return { error: `${e.name} is already installed.` };
+    if (!e) return { error: t('That extension is not in the catalog anymore.') };
+    if (installedSet().has(sx.normUrl(e.url))) return { error: t('{name} is already installed.', { name: e.name }) };
     return installMany(`Installing ${e.name}`, [{ url: e.repo.replace(/\.git$/, ''), branch: e.branch, name: e.name }]);
 });
 
@@ -1272,7 +1438,7 @@ ipcMain.handle('kits', () => {
 });
 ipcMain.handle('kit-save', async (_e, name, description) => {
     const exts = (await mx.listExtensions(stRoot())).filter(x => x.isGit && x.remote);
-    if (!exts.length) return { error: 'No extensions installed with Git, so there is nothing to save.' };
+    if (!exts.length) return { error: t('No extensions installed with Git, so there is nothing to save.') };
     try {
         const kit = sx.saveKit({ name, description, created: Date.now(), extensions: exts.map(x => ({ name: x.name, url: x.remote, scope: x.scope === 'all users' ? 'all users' : 'user', commit: x.head })) });
         logLine(`Saved the Kit "${kit.name}" (${kit.extensions.length} extensions).`);
@@ -1280,7 +1446,7 @@ ipcMain.handle('kit-save', async (_e, name, description) => {
     } catch (e) { return { error: e.message }; }
 });
 ipcMain.handle('kit-import', async () => {
-    const r = await dialog.showOpenDialog(launcherWin, { title: 'Import a Kit', filters: [{ name: 'Kit', extensions: ['json'] }], properties: ['openFile'] });
+    const r = await dialog.showOpenDialog(launcherWin, { title: t('Import a Kit'), filters: [{ name: 'Kit', extensions: ['json'] }], properties: ['openFile'] });
     if (r.canceled) return { canceled: true };
     try {
         if (fs.statSync(r.filePaths[0]).size > 1024 * 1024) throw new Error('That file is too large to be a Kit.');
@@ -1292,7 +1458,7 @@ ipcMain.handle('kit-import', async () => {
 ipcMain.handle('kit-export', async (_e, id) => {
     const json = sx.kitJson(String(id));
     if (!json) return false;
-    const r = await dialog.showSaveDialog(launcherWin, { title: 'Export Kit', defaultPath: `${String(id)}.kit.json`, filters: [{ name: 'Kit', extensions: ['json'] }] });
+    const r = await dialog.showSaveDialog(launcherWin, { title: t('Export Kit'), defaultPath: `${String(id)}.kit.json`, filters: [{ name: 'Kit', extensions: ['json'] }] });
     if (r.canceled) return false;
     fs.writeFileSync(r.filePath, json);
     logLine(`Exported the Kit to ${r.filePath}.`);
@@ -1300,21 +1466,28 @@ ipcMain.handle('kit-export', async (_e, id) => {
 });
 ipcMain.handle('kit-delete', async (_e, id) => {
     const kit = sx.kits().find(k => k.id === id);
-    if (!kit || !(await confirm(`Delete the Kit "${kit.name}"?`, 'Only the saved list is deleted. Installed extensions stay.', 'Delete'))) return false;
+    if (!kit || !(await confirm(t('Delete the Kit "{name}"?', { name: kit.name }), t('Only the saved list is deleted. Installed extensions stay.'), t('Delete')))) return false;
     return sx.deleteKit(String(id));
 });
 // urls: the missing extensions the user kept ticked; exact: the Kit's versions instead of the newest.
 ipcMain.handle('kit-install', (_e, id, urls, exact) => {
     const kit = sx.kits().find(k => k.id === id);
-    if (!kit) return { error: 'That Kit no longer exists.' };
+    if (!kit) return { error: t('That Kit no longer exists.') };
     const have = installedSet();
     const want = new Set((Array.isArray(urls) ? urls : []).map(u => sx.normUrl(u)));
     const items = kit.extensions.filter(x => !have.has(sx.normUrl(x.url)) && want.has(sx.normUrl(x.url))).map(x => ({ ...x, commit: exact ? x.commit : '' }));
-    if (!items.length) return { error: 'Nothing to install: those extensions are already there.' };
+    if (!items.length) return { error: t('Nothing to install: those extensions are already there.') };
     return installMany(`Installing from the Kit "${kit.name}"`, items);
 });
 
-ipcMain.handle('health-check', () => mx.healthCheck(stRoot(), { running: serverState.running }));
+ipcMain.handle('health-check', async () => {
+    const [checks, used, tr] = await Promise.all([mx.healthCheck(stRoot(), { running: serverState.running }), serverState.running ? null : pc.portUser(settings.port), mx.gitTrouble(stRoot())]);
+    if (used) checks.push({ label: t('Port {port}', { port: String(settings.port) }), status: 'bad', detail: t('Used by {name} (PID {pid})', { name: used.name || '?', pid: String(used.pid) }), fix: t('SillyTavern can\'t start on it. Close that program, or pick another port under Troubleshooting.') });
+    if (tr.stuck) checks.push({ label: t('Update stopped halfway'), status: 'bad', detail: tr.conflicts.length ? t('{n} file with conflicts|{n} files with conflicts', { n: tr.conflicts.length }) : t('A git merge or rebase is not finished'), fix: t('Troubleshooting → Repair SillyTavern\'s files.') });
+    const vpn = pc.vpns();
+    if (vpn.length) checks.push({ label: 'VPN', status: 'warn', detail: t('On: {list}', { list: vpn.join(', ') }), fix: t('A VPN can block phone access, the remote link or some AI services. If something can\'t connect, try with the VPN off.') });
+    return checks;
+});
 ipcMain.handle('open-place', (_e, key) => {
     const p = PLACES[key]?.();
     if (!p) return;
@@ -1337,14 +1510,24 @@ function lanInfo() {
         hasPassword: !!settings.lanPassword,
         running: serverState.running,
         attached: serverState.attached,
-        // Started with different phone settings than the current ones.
-        needsRestart: ours && serverState.lanEnv !== JSON.stringify(lan.serverEnv(settings)),
+        // Started with different settings than the current ones.
+        needsRestart: ours && needsRestart(),
         whitelistTxt: lan.hasWhitelistTxt(stRoot()),
         older: dl.olderStatus(instances.describe(stRoot()).version),
-        addresses: lan.phoneAddresses(settings.port).map(a => ({ ...a, qr: lan.qrSvg(a.url) })),
+        https: settings.https,
+        addresses: [
+            ...lan.phoneAddresses(settings.port, scheme()),
+            ...(tailscaleInfo?.running ? tailscaleInfo.ips.map(ip => ({ name: 'Tailscale', url: `${scheme()}://${ip}:${settings.port}/`, tailscale: true }))
+                .concat(tailscaleInfo.dns ? [{ name: 'Tailscale', url: `${scheme()}://${tailscaleInfo.dns}:${settings.port}/`, tailscale: true }] : []) : []),
+        ].map(a => ({ ...a, qr: lan.qrSvg(a.url) })),
+        tailscale: tailscaleInfo,
     };
 }
-ipcMain.handle('lan-info', () => lanInfo());
+let tailscaleInfo = null;
+ipcMain.handle('lan-info', async () => {
+    if (settings.lanAccess) { tailscaleInfo = await tunnel.tailscale(); tailscaleOn = !!tailscaleInfo.running; }
+    return lanInfo();
+});
 ipcMain.handle('lan-save', async (_e, { on, user, password }) => {
     settings.lanAccess = !!on;
     settings.lanUser = String(user || 'user').trim().slice(0, 64) || 'user';
@@ -1355,7 +1538,7 @@ ipcMain.handle('lan-save', async (_e, { on, user, password }) => {
     broadcast('settings', publicSettings());
     const info = lanInfo();
     // Restarting closes extra servers on this folder and reloads the tabs.
-    if (info.needsRestart) await runTask('Restarting the server for phone access', async () => true);
+    if (info.needsRestart) await runTask(t('Restarting the server for phone access'), async () => true);
     return lanInfo();
 });
 
@@ -1380,13 +1563,201 @@ app.on('login', (e, _wc, details, authInfo, callback) => {
         callback(r.user, r.password);
         return;
     }
-    if (authInfo.isProxy || !settings.lanAccess || !settings.lanPassword || !isLocal(details.url) || Number(authInfo.port) !== settings.port) return;
+    // The main server's login: what it was started with (phone access or the remote link).
+    const login = serverLogin() || (settings.lanAccess && settings.lanPassword ? { user: settings.lanUser || 'user', password: settings.lanPassword } : null);
+    if (authInfo.isProxy || !login || !isLocal(details.url) || Number(authInfo.port) !== settings.port) return;
     const now = Date.now();
     const recent = (loginTries.get(authInfo.port) || []).filter(t => now - t < 10000);
     if (recent.length >= 2) return;
     loginTries.set(authInfo.port, [...recent, now]);
     e.preventDefault();
-    callback(settings.lanUser || 'user', settings.lanPassword);
+    callback(login.user, login.password);
+});
+
+// The main server's own certificate (HTTPS on): trusted for this PC's addresses only.
+app.on('certificate-error', (e, _wc, url, _error, cert, callback) => {
+    let u;
+    try { u = new URL(url); } catch { return; }
+    if (settings.https && httpsCert && cert.fingerprint === httpsCert.fingerprint && Number(u.port) === settings.port) {
+        e.preventDefault();
+        callback(true);
+    }
+});
+
+// ---------- server options, HTTPS, remote link (Launcher.bat's tools) ----------
+// A settings change that needs the server started with other variables:
+// restart it (if it runs) like any task, keeping the remote link up.
+async function applyServerSettings(label) {
+    if (!needsRestart()) return true;
+    restartingForSettings = true;
+    try { return await runTask(label, async () => true); } finally { restartingForSettings = false; }
+}
+function serverOptionsInfo() {
+    if (settings.https && !httpsCert) mainServerEnv(); // makes (or reads) the certificate
+    return {
+        options: so.describe(stRoot(), settings.serverOverrides),
+        https: settings.https,
+        cert: settings.https && httpsCert ? { validTo: httpsCert.validTo, names: httpsCert.names } : null,
+        needsRestart: needsRestart(),
+        running: serverState.running,
+    };
+}
+ipcMain.handle('server-options', () => serverOptionsInfo());
+ipcMain.handle('server-options-save', (_e, { overrides, https: on } = {}) => {
+    if (overrides) settings.serverOverrides = so.clean(overrides);
+    if (typeof on === 'boolean') settings.https = on;
+    saveSettings(settings);
+    mainInstance(); // its address changes with https
+    if (settings.https) mainServerEnv(); // makes the certificate now, so the launcher can show it
+    broadcast('settings', publicSettings());
+    return serverOptionsInfo();
+});
+ipcMain.handle('server-restart', async () => { await applyServerSettings(t('Restarting the server')); lanInfo(); return serverOptionsInfo(); });
+
+const tunnelView = s => ({ ...s, qr: s.url ? lan.qrSvg(s.url) : '', hasPassword: !!settings.lanPassword, user: settings.lanUser });
+ipcMain.handle('tunnel-status', () => tunnelView(tunnel.status()));
+ipcMain.handle('tunnel-start', async () => {
+    if (!settings.lanPassword) return { error: t('Set a password first (Settings → Phone & tablet). Anyone with the link reaches the login.') };
+    if (serverState.attached) return { error: t('SillyTavern was started outside this app. Stop it there and start it from here.') };
+    if (busyTask) return { error: t('Busy with "{task}" — wait for it to finish.', { task: busyTask }) };
+    tunnelWanted = true;
+    if (!serverState.running) await startServer();
+    else await applyServerSettings(t('Turning on the remote link'));
+    if (!(await serverUp())) { tunnelWanted = false; return { error: t('SillyTavern did not start (see the Console).') }; }
+    return tunnel.start(`${scheme()}://127.0.0.1:${settings.port}`);
+});
+ipcMain.handle('tunnel-stop', async () => {
+    tunnel.stop();
+    tunnelWanted = false;
+    if (serverState.running) await applyServerSettings(t('Turning off the remote link'));
+    return tunnel.status();
+});
+ipcMain.handle('tailscale-info', async () => { tailscaleInfo = await tunnel.tailscale(); return tailscaleInfo; });
+ipcMain.handle('tailscale-install', async () => {
+    if (!(await confirm(t('Install Tailscale?'), t('Installs Tailscale from Windows\' package manager (winget). Windows may ask for permission. Afterwards, sign in to Tailscale with the same account on this PC and your phone.'), t('Install')))) return false;
+    return runTask(t('Installing Tailscale'), async () => {
+        const r = await mx.run('winget', ['install', '--id', 'Tailscale.Tailscale', '-e', '--accept-package-agreements', '--accept-source-agreements'], process.cwd());
+        logLine(r.code === 0 ? 'Tailscale is installed. Open it from the Start menu and sign in.' : 'ERROR: winget could not install Tailscale.');
+        return r.code === 0;
+    }, { needsStopped: false });
+});
+
+// ---------- start with SillyTavern ----------
+const companionView = () => settings.companions.map(c => ({ ...c, missing: !fs.existsSync(c.path), running: companionKids.has(c.id) }));
+ipcMain.handle('companions', () => companionView());
+ipcMain.handle('companion-add', async () => {
+    const r = await dialog.showOpenDialog(launcherWin, {
+        title: t('Choose a program or script to start with SillyTavern'), properties: ['openFile'],
+        filters: [{ name: t('Programs and scripts'), extensions: ['exe', 'bat', 'cmd', 'ps1', 'lnk', 'url'] }],
+    });
+    if (r.canceled || !r.filePaths[0]) return companionView();
+    const file = r.filePaths[0];
+    settings.companions = [...settings.companions, { id: Date.now().toString(36), name: path.basename(file).replace(/\.[^.]+$/, ''), path: file, args: '', stop: true }].slice(0, 20);
+    saveSettings(settings);
+    return companionView();
+});
+ipcMain.handle('companion-save', (_e, id, patch = {}) => {
+    const c = settings.companions.find(x => x.id === id);
+    if (c) {
+        if (typeof patch.stop === 'boolean') c.stop = patch.stop;
+        if (typeof patch.args === 'string') c.args = patch.args.slice(0, 500);
+        if (typeof patch.name === 'string' && patch.name.trim()) c.name = patch.name.trim().slice(0, 60);
+        saveSettings(settings);
+    }
+    return companionView();
+});
+ipcMain.handle('companion-remove', (_e, id) => {
+    settings.companions = settings.companions.filter(x => x.id !== id);
+    saveSettings(settings);
+    return companionView();
+});
+ipcMain.handle('companion-start', (_e, id) => { const c = settings.companions.find(x => x.id === id); if (c) startCompanion(c); return companionView(); });
+
+// ---------- what can this PC run, troubleshooting ----------
+ipcMain.handle('pc-check', async (_e, fresh) => {
+    const cards = await pc.gpus({ fresh: !!fresh });
+    const ramGB = Math.round(os.totalmem() / 1024 ** 3);
+    const main = [...cards].sort((a, b) => (a.integrated - b.integrated) || b.vramGB - a.vramGB)[0];
+    const vram = main && !main.integrated ? main.vramGB : 0;
+    return { cards, ramGB, main: main || null, ...pc.advice(vram, ramGB) };
+});
+ipcMain.handle('port-user', async () => {
+    const user = await pc.portUser(settings.port);
+    // This app's own server holds it: that's fine.
+    const ours = user && serverState.child && user.pid === serverState.child.pid;
+    return { port: settings.port, user, ours: !!ours || (user && serverState.running && !serverState.attached && /node/i.test(user.name)), free: await instances.freePort(settings.port + 1, [settings.port]) };
+});
+ipcMain.handle('use-port', (_e, port) => {
+    port = Number(port);
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) return false;
+    settings.port = port;
+    saveSettings(settings);
+    mainInstance();
+    broadcast('settings', publicSettings());
+    logLine(`SillyTavern now uses port ${port} (starts there next time).`);
+    return true;
+});
+ipcMain.handle('system-report', async () => {
+    const info = await mx.getInfo(stRoot()).catch(() => ({}));
+    const health = await mx.healthCheck(stRoot()).catch(() => []);
+    const cards = await pc.gpus();
+    const ts = await tunnel.tailscale();
+    const text = pc.report([
+        ['SillyTavern Desktop', [['Version', app.getVersion()], ['Installed', app.isPackaged ? (process.env.PORTABLE_EXECUTABLE_DIR ? 'portable' : 'installer') : 'source'], ['Language', i18n.current().id]]],
+        ['SillyTavern', [['Folder', stRoot()], ['Version', info.version], ['Branch', info.branch || info.pinned || ''], ['Commit', info.commit], ['Server', serverState.running ? (serverState.attached ? 'running (started elsewhere)' : 'running') : 'stopped'], ['Port', settings.port]]],
+        ['Settings', [['Phone access', settings.lanAccess ? `on${settings.lanPassword ? ', with password' : ', no password'}` : 'off'], ['HTTPS', settings.https ? 'on' : 'off'], ['Remote link', tunnel.running() ? 'on' : 'off'], ['Own Node.js/Git', settings.ownRuntime ? 'on' : 'off'], ['Options set by the app', Object.keys(so.clean(settings.serverOverrides)).join(', ') || 'none'], ['Profiles', settings.profiles.length], ['Desktop extensions on', Object.values(settings.desktopExtensions || {}).filter(Boolean).length]]],
+        ['PC', [['Windows', `${os.release()} (${os.arch()})`], ['Memory', `${Math.round(os.totalmem() / 1024 ** 3)} GB`], ['Graphics', cards.map(c => `${c.name}${c.vramGB ? ` ${c.vramGB} GB` : ''}`).join('; ')], ['VPN adapters', pc.vpns().join(', ') || 'none'], ['Tailscale', ts.installed ? (ts.running ? 'running' : 'installed') : 'no']]],
+        ['Health check', health.map(h => [h.label, `${h.status}: ${h.detail}`])],
+    ]);
+    clipboard.writeText(text);
+    logLine('Copied the system report (no passwords, your user folder shown as %USERPROFILE%).');
+    return text;
+});
+ipcMain.handle('npm-cache', () => runTask(t('Clearing npm\'s cache'), () => mx.clearNpmCache(stRoot()), { needsStopped: false }));
+ipcMain.handle('git-trouble', () => mx.gitTrouble(stRoot()));
+ipcMain.handle('git-fix', async () => {
+    const tr = await mx.gitTrouble(stRoot());
+    const what = [tr.stuck && t('an update that stopped halfway'), tr.changed?.length && t('{n} changed program file|{n} changed program files', { n: tr.changed.length }), tr.ahead && t('{n} commit of its own|{n} commits of its own', { n: tr.ahead })].filter(Boolean).join(', ');
+    if (!(await confirm(t('Put SillyTavern\'s program files back to the official version?'),
+        `${what ? `${t('Found: {what}.', { what })}\n\n` : ''}${t('Everything changed is kept on a backup branch first, and your data folder (characters, chats, settings) is not touched. Then updating works again.')}`, t('Repair')))) return false;
+    return runTask(t('Repairing SillyTavern\'s files'), () => mx.fixGit(stRoot()));
+});
+ipcMain.handle('onboarding', () => mx.users(stRoot()).map(u => ({ user: u, on: mx.onboarding(stRoot(), u) })));
+ipcMain.handle('onboarding-set', (_e, user, on) => {
+    if (!mx.users(stRoot()).includes(user)) return false;
+    return runTask(t('Changing SillyTavern\'s welcome tour'), async () => mx.setOnboarding(stRoot(), user, !!on));
+});
+// The whole SillyTavern of a profile to the Recycle Bin (never the one in use).
+ipcMain.handle('profile-trash', async (_e, id) => {
+    const p = settings.profiles.find(x => x.id === id);
+    if (!p) return false;
+    if (prof.sameDir(p.path, stRoot())) return { error: t('This profile is in use. Switch to another profile first.') };
+    if (!setup.isStRoot(p.path) || path.parse(p.path).root === path.resolve(p.path) || exeBases().some(b => prof.sameDir(b, p.path))) return { error: t('This folder can\'t be removed from here.') };
+    if (instances.find(p.path)) return { error: t('It is running next to this one. Close its tabs first.') };
+    const owner = launcherWin && !launcherWin.isDestroyed() ? [launcherWin] : [];
+    const { response } = await dialog.showMessageBox(...owner, {
+        type: 'warning', buttons: [t('Back up its data first…'), t('Move to Recycle Bin'), t('Cancel')], defaultId: 0, cancelId: 2, noLink: true,
+        message: t('Remove SillyTavern "{name}" from this PC?', { name: p.name }),
+        detail: `${p.path}\n\n${t('The whole folder goes to the Recycle Bin: the program, and its characters, chats and settings. Back up its data first if you may want them again.')}`,
+    });
+    if (response === 2) return false;
+    if (response === 0) {
+        const r = await dialog.showOpenDialog(launcherWin, { title: t('Choose a folder for the backup of its data'), defaultPath: app.getPath('documents'), properties: ['openDirectory', 'createDirectory'] });
+        if (r.canceled || !r.filePaths[0]) return false;
+        if (r.filePaths[0].toLowerCase().startsWith(path.resolve(p.path).toLowerCase())) return { error: t('Pick a folder outside the SillyTavern you are removing.') };
+        const zip = await runTask(t('Backing up'), async () => mx.createBackup(p.path, 'before-removal', 0, { dir: r.filePaths[0] }), { needsStopped: false });
+        if (!zip) return { error: t('The backup failed, so nothing was removed (see the Console).') };
+        if (!(await confirm(t('Move "{name}" to the Recycle Bin now?', { name: p.name }), t('The backup is saved. Move the folder to the Recycle Bin?'), t('Move to Recycle Bin')))) return false;
+    }
+    try {
+        await shell.trashItem(path.resolve(p.path)); // backslashes: Windows refuses "C:/…"
+    } catch (e) {
+        return { error: t('Windows could not move it to the Recycle Bin ({reason}). Delete the folder yourself if you want it gone.', { reason: e.message }) };
+    }
+    prof.remove(settings, id);
+    profilesChanged();
+    logLine(`Moved SillyTavern "${p.name}" (${p.path}) to the Recycle Bin.`);
+    return true;
 });
 
 // ---------- app updates ----------
@@ -1413,7 +1784,7 @@ ipcMain.handle('ext:set-enabled', async (_e, id, on) => {
     if (!ext.isValidId(id)) return false;
     if (on) {
         const e = ext.list().find(x => x.id === id);
-        if (!(await confirm(`Turn on "${e.name}"?`, `${e.description ? `${e.description}\n\n` : ''}Desktop extensions run with full access to your PC, like any program you install. Only turn on extensions you trust.`, 'Turn on'))) return false;
+        if (!(await confirm(t('Turn on "{name}"?', { name: e.name }), `${e.description ? `${e.description}\n\n` : ''}${t('Desktop extensions run with full access to your PC, like any program you install. Only turn on extensions you trust.')}`, t('Turn on')))) return false;
     }
     settings.desktopExtensions = { ...settings.desktopExtensions, [id]: !!on };
     if (!on) delete settings.desktopExtensions[id];
@@ -1427,7 +1798,7 @@ ipcMain.handle('addons', async (_e, fresh) => {
     const cat = await addons.catalog({ fresh: !!fresh });
     const installed = new Map(ext.list().map(e => [e.id, e]));
     return {
-        error: cat.error || '', uses: addons.USES,
+        error: cat.error || '', uses: Object.fromEntries(Object.entries(addons.USES).map(([k, v]) => [k, t(v)])),
         addons: cat.addons.map(a => {
             const have = installed.get(a.id);
             const tooOld = !!a.minAppVersion && addons.isNewer(a.minAppVersion, app.getVersion());
@@ -1438,8 +1809,8 @@ ipcMain.handle('addons', async (_e, fresh) => {
 const addonBusy = new Set();
 ipcMain.handle('addon-install', async (_e, id) => {
     const entry = (await addons.catalog()).addons.find(a => a.id === id);
-    if (!entry) return { error: 'This add-on is not in the list (any more).' };
-    if (addonBusy.has(id)) return { error: 'Already installing.' };
+    if (!entry) return { error: t('This add-on is not in the list (any more).') };
+    if (addonBusy.has(id)) return { error: t('Already installing.') };
     addonBusy.add(id);
     const wasOn = !!settings.desktopExtensions[id];
     try {
@@ -1448,7 +1819,7 @@ ipcMain.handle('addon-install', async (_e, id) => {
         return { id, wasOn };
     } catch (e) {
         logLine(`ERROR: could not install the add-on "${entry.name}": ${e.message}`);
-        return { error: `Could not install it: ${e.message}` };
+        return { error: t('Could not install it: {reason}', { reason: e.message }) };
     } finally {
         if (wasOn) await ext.activate(id);
         addonBusy.delete(id);
@@ -1457,7 +1828,7 @@ ipcMain.handle('addon-install', async (_e, id) => {
 ipcMain.handle('ext:remove', async (_e, id) => {
     if (!ext.isValidId(id)) return false;
     const e = ext.list().find(x => x.id === id);
-    if (!(await confirm(`Remove "${e.name}"?`, 'Its folder is deleted, including the settings and files it saved. You can install it again later.', 'Remove'))) return false;
+    if (!(await confirm(t('Remove "{name}"?', { name: e.name }), t('Its folder is deleted, including the settings and files it saved. You can install it again later.'), t('Remove')))) return false;
     await ext.deactivate(id);
     delete settings.desktopExtensions[id];
     saveSettings(settings);
@@ -1468,7 +1839,7 @@ ipcMain.handle('ext:remove', async (_e, id) => {
 ipcMain.handle('spell-engine', () => ({ engine: spellEngineAtStart, chosen: settings.spellcheckEngine || 'windows' }));
 ipcMain.handle('set-spell-engine', (_e, engine) => setSpellEngine(String(engine)));
 ipcMain.handle('relaunch', async () => {
-    if (!(await confirm('Restart SillyTavern Desktop now?', 'The SillyTavern server stops and starts again with the app. Unsaved text in SillyTavern pages is lost.', 'Restart'))) return false;
+    if (!(await confirm(t('Restart SillyTavern Desktop now?'), t('The SillyTavern server stops and starts again with the app. Unsaved text in SillyTavern pages is lost.'), t('Restart')))) return false;
     app.relaunch();
     isQuitting = true;
     app.quit();
@@ -1478,7 +1849,7 @@ ipcMain.handle('chrome-ext-list', () => crx.list());
 ipcMain.handle('chrome-ext-set-enabled', (_e, id, on) => crx.setEnabled(String(id), !!on));
 ipcMain.handle('chrome-ext-remove', async (_e, id) => {
     const e = (await crx.list()).find(x => x.id === id);
-    if (!e || !(await confirm(`Remove "${e.name}"?`, 'The Chrome extension is removed from this app. You can add it again from the Chrome Web Store.', 'Remove'))) return false;
+    if (!e || !(await confirm(t('Remove "{name}"?', { name: e.name }), t('The Chrome extension is removed from this app. You can add it again from the Chrome Web Store.'), t('Remove')))) return false;
     return crx.remove(e.id);
 });
 ipcMain.handle('chrome-ext-store', () => openChromeStore());
@@ -1535,8 +1906,8 @@ async function useProfile(id, { ask = true } = {}) {
     if (!setup.isStRoot(p.path)) { logLine(`ERROR: the profile "${p.name}" points to ${p.path}, where there is no SillyTavern anymore. Edit the profile.`); return false; }
     if (busyTask) { logLine(`Busy with "${busyTask}" — switch profiles when it has finished.`); return false; }
     if (ask && serverState.running && !serverState.attached && stWindowState().open
-        && !(await confirm(`Switch to "${p.name}"?`, `The server restarts with the SillyTavern in ${p.path}, and open SillyTavern tabs reload. Text you haven't sent yet is lost.`, 'Switch'))) return false;
-    return runTask(`Switching to profile "${p.name}"`, () => switchTo(p.path));
+        && !(await confirm(t('Switch to "{name}"?', { name: p.name }), t('The server restarts with the SillyTavern in {path}, and open SillyTavern tabs reload. Text you haven\'t sent yet is lost.', { path: p.path }), t('Switch')))) return false;
+    return runTask(t('Switching to profile "{name}"', { name: p.name }), () => switchTo(p.path));
 }
 
 async function pickFolder(title, defaultPath) {
@@ -1558,7 +1929,7 @@ ipcMain.handle('setup-state', async () => ({
 // Switching installs restarts the server (if running) on the new one.
 ipcMain.handle('use-install', (_e, dir) => {
     if (!setup.isStRoot(dir)) return false;
-    return runTask('Switching SillyTavern install', () => switchTo(dir));
+    return runTask(t('Switching SillyTavern install'), () => switchTo(dir));
 });
 // Accept the SillyTavern folder itself or a folder that contains it.
 ipcMain.handle('browse-install', async () => {
@@ -1566,13 +1937,13 @@ ipcMain.handle('browse-install', async () => {
     if (!dir) return { canceled: true };
     for (const cand of [dir, path.join(dir, 'SillyTavern')]) {
         if (setup.isStRoot(cand)) {
-            await runTask('Switching SillyTavern install', () => switchTo(cand));
+            await runTask(t('Switching SillyTavern install'), () => switchTo(cand));
             return { ok: true, path: cand };
         }
     }
-    return { error: `No SillyTavern found in ${dir}. Pick the folder that contains server.js.` };
+    return { error: t('No SillyTavern found in {dir}. Pick the folder that contains server.js.', { dir }) };
 });
-ipcMain.handle('install-requirements', () => runTask('Installing Node.js and Git', () => setup.installRequirements(), { needsStopped: false }));
+ipcMain.handle('install-requirements', () => runTask(t('Installing Node.js and Git'), () => setup.installRequirements(), { needsStopped: false }));
 // ---------- the app's own Node.js and Git ----------
 ipcMain.handle('runtime-latest', () => rt.latest());
 // Download (or update) both and use them. Replacing a copy in use needs the
@@ -1598,7 +1969,7 @@ ipcMain.handle('runtime-install', async () => {
         return true;
     }
     const replacing = have.active && which.some(w => have[w]);
-    return runTask('Getting Node.js and Git', async () => {
+    return runTask(t('Getting Node.js and Git'), async () => {
         // Servers of other profiles ("Open next to it") run on the same node.exe.
         if (replacing) await instances.stopAll();
         const ok = await rt.install(which, text => broadcast('runtime-progress', text));
@@ -1617,8 +1988,8 @@ ipcMain.handle('runtime-use', (_e, on) => {
     return true;
 });
 ipcMain.handle('runtime-remove', async () => {
-    if (!(await confirm('Remove this app\'s own Node.js and Git?', 'The app goes back to the Node.js and Git installed on this PC. If they aren\'t installed, SillyTavern can\'t start until you install them or download the app\'s own copy again.', 'Remove'))) return false;
-    return runTask('Removing Node.js and Git', async () => {
+    if (!(await confirm(t('Remove this app\'s own Node.js and Git?'), t('The app goes back to the Node.js and Git installed on this PC. If they aren\'t installed, SillyTavern can\'t start until you install them or download the app\'s own copy again.'), t('Remove')))) return false;
+    return runTask(t('Removing Node.js and Git'), async () => {
         if (rt.info().active) await instances.stopAll(); // other profiles' servers use it too
         rt.apply(false);
         settings.ownRuntime = false;
@@ -1654,18 +2025,18 @@ async function serverUp(ms = 120000) {
 }
 ipcMain.handle('import-run', (_e, { paths, profileId } = {}) => {
     const target = prof.list(settings).find(p => p.id === profileId && p.ok);
-    if (!target) return { error: 'That profile is not available.' };
+    if (!target) return { error: t('That profile is not available.') };
     // Sorted again here: the launcher only says which files.
     const items = (Array.isArray(paths) ? paths : []).slice(0, 200).map(p => imp.classify(String(p))).filter(i => i.kind);
-    if (!items.length) return { error: 'None of these files can be imported.' };
+    if (!items.length) return { error: t('None of these files can be imported.') };
     let res = null;
-    return runTask('Importing', async () => {
+    return runTask(t('Importing'), async () => {
         let base, srv = null, auth;
         if (target.active) {
             if (!serverState.running) { logLine('Starting the server to import …'); await startServer(); }
-            if (!(await serverUp())) { res = { error: 'SillyTavern did not start (see the Console).' }; return false; }
+            if (!(await serverUp())) { res = { error: t('SillyTavern did not start (see the Console).') }; return false; }
             base = mainInstance().url;
-            if (settings.lanAccess && settings.lanPassword) auth = { user: settings.lanUser, password: settings.lanPassword };
+            auth = serverLogin() || undefined;
         } else {
             // Another profile: its server just for the import, unless one already runs.
             srv = instances.find(target.path);
@@ -1673,11 +2044,11 @@ ipcMain.handle('import-run', (_e, { paths, profileId } = {}) => {
                 srv = instances.startServer(target.path, await instances.freePort(settings.port + 1, [settings.port]), `import into ${target.name}`);
                 srv.temporary = true;
             }
-            if (!(await srv.ready)) { res = { error: `SillyTavern in "${target.name}" did not start (see the Console).` }; return false; }
+            if (!(await srv.ready)) { res = { error: t('SillyTavern in "{name}" did not start (see the Console).', { name: target.name }) }; return false; }
             base = `http://${settings.host}:${srv.port}/`;
         }
         try {
-            const results = await imp.importAll(base, target.path, items);
+            const results = await imp.importAll(base, target.path, items, { auth });
             results.forEach(r => logLine(r.ok ? `Imported ${r.file} as ${r.as} into "${target.name}".` : `Could not import ${r.file}: ${r.error}`));
             res = { results, profile: target.name, reloadable: target.active && stWins.size > 0 };
         } catch (e) {
@@ -1686,7 +2057,7 @@ ipcMain.handle('import-run', (_e, { paths, profileId } = {}) => {
             if (srv?.temporary) await instances.stopServer(srv);
         }
         return true;
-    }, { needsStopped: false }).then(() => res || { error: 'Busy with another task. Try again when it has finished.' });
+    }, { needsStopped: false }).then(() => res || { error: t('Busy with another task. Try again when it has finished.') });
 });
 // ---------- profiles ----------
 const profilesChanged = () => { saveSettings(settings); broadcast('profiles'); };
@@ -1698,12 +2069,12 @@ ipcMain.handle('profile-save', async (_e, data) => {
     const before = settings.profiles.find(p => p.id === data?.id);
     const oldPath = before?.path;
     const wasActive = !!before && prof.sameDir(oldPath, stRoot());
-    if (wasActive && busyTask && !prof.sameDir(oldPath, data?.path)) return { error: `Busy with "${busyTask}" — try again when it has finished.` };
+    if (wasActive && busyTask && !prof.sameDir(oldPath, data?.path)) return { error: t('Busy with "{task}" — wait for it to finish.', { task: busyTask }) };
     const r = prof.save(settings, { id: data?.id, name: data?.name, path: String(data?.path || '') });
     if (r.error) return r;
     if (wasActive && !prof.sameDir(oldPath, r.profile.path)) {
-        const ok = await runTask(`Switching to profile "${r.profile.name}"`, () => switchTo(r.profile.path));
-        if (!ok) { r.profile.path = oldPath; profilesChanged(); return { error: 'The folder could not be changed now (see the Console).' }; }
+        const ok = await runTask(t('Switching to profile "{name}"', { name: r.profile.name }), () => switchTo(r.profile.path));
+        if (!ok) { r.profile.path = oldPath; profilesChanged(); return { error: t('The folder could not be changed now (see the Console).') }; }
     }
     profilesChanged();
     mainInstance();
@@ -1714,8 +2085,8 @@ ipcMain.handle('profile-save', async (_e, data) => {
 ipcMain.handle('profile-delete', async (_e, id) => {
     const p = settings.profiles.find(x => x.id === id);
     if (!p) return false;
-    if (prof.sameDir(p.path, stRoot())) return { error: 'This profile is in use. Switch to another profile first.' };
-    if (!(await confirm(`Remove the profile "${p.name}"?`, `Only the profile is removed. The SillyTavern folder stays where it is:\n${p.path}`, 'Remove'))) return false;
+    if (prof.sameDir(p.path, stRoot())) return { error: t('This profile is in use. Switch to another profile first.') };
+    if (!(await confirm(t('Remove the profile "{name}"?', { name: p.name }), `${t('Only the profile is removed. The SillyTavern folder stays where it is:')}\n${p.path}`, t('Remove')))) return false;
     prof.remove(settings, id);
     profilesChanged();
     logLine(`Removed profile "${p.name}" (the folder ${p.path} was not touched).`);
@@ -1726,7 +2097,7 @@ ipcMain.handle('profile-browse', async (_e, from) => {
     const dir = await pickFolder('Select a SillyTavern folder', from && fs.existsSync(from) ? from : os.homedir());
     if (!dir) return { canceled: true };
     const found = [dir, path.join(dir, 'SillyTavern')].find(setup.isStRoot);
-    if (!found) return { error: `No SillyTavern found in ${dir}. Pick the folder that contains server.js.` };
+    if (!found) return { error: t('No SillyTavern found in {dir}. Pick the folder that contains server.js.', { dir }) };
     return { path: found, name: prof.suggestName(settings, found), version: instances.describe(found).version };
 });
 ipcMain.handle('profiles-add-found', () => {
@@ -1771,7 +2142,7 @@ ipcMain.handle('remote-save', (_e, data = {}) => {
 ipcMain.handle('remote-delete', async (_e, id) => {
     const r = remote.get(settings, id);
     if (!r) return false;
-    if (!(await confirm(`Remove "${r.name}"?`, `Only this entry and its saved login are removed. Nothing changes on the other computer.\n${r.url}`, 'Remove'))) return false;
+    if (!(await confirm(t('Remove "{name}"?', { name: r.name }), `${t('Only this entry and its saved login are removed. Nothing changes on the other computer.')}\n${r.url}`, t('Remove')))) return false;
     remote.remove(settings, id);
     remoteInsts.delete(id);
     remotesChanged();
@@ -1794,21 +2165,21 @@ ipcMain.handle('download-target', (_e, parent, folder) => dl.targetInfo(String(p
 ipcMain.handle('download-defaults', () => ({ parent: setup.isStRoot(stRoot()) ? path.dirname(stRoot()) : os.homedir() }));
 ipcMain.handle('pick-parent', (_e, from) => pickFolder('Where should the new SillyTavern go? (its folder is created inside)', from && fs.existsSync(from) ? from : os.homedir()));
 ipcMain.handle('st-download', async (_e, o = {}) => {
-    if (busyTask) return { error: `Busy with "${busyTask}" — wait for it to finish.` };
+    if (busyTask) return { error: t('Busy with "{task}" — wait for it to finish.', { task: busyTask }) };
     const req = await setup.checkRequirements();
-    if (!req.node.ok || !req.git.ok) return { error: 'Node.js and Git are needed first (Maintenance → Back end, or the welcome screen installs them).' };
+    if (!req.node.ok || !req.git.ok) return { error: t('Node.js and Git are needed first (Maintenance → Back end, or the welcome screen installs them).') };
     const name = String(o.name || '').trim();
-    if (name && settings.profiles.some(p => p.name.toLowerCase() === name.toLowerCase())) return { error: `There is already a profile called "${name}".` };
+    if (name && settings.profiles.some(p => p.name.toLowerCase() === name.toLowerCase())) return { error: t('There is already a profile called "{name}".', { name }) };
     const target = dl.targetInfo(String(o.parent || ''), String(o.folder || ''));
     if (!target.ok) return { error: target.problem };
     const ref = String(o.ref || '');
     let res = null;
     const progress = p => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('st-download', p); };
-    await runTask(`Downloading SillyTavern ${ref}`, async () => {
+    await runTask(t('Downloading SillyTavern {version}', { version: ref }), async () => {
         res = await dl.download({ ref, parent: o.parent, folder: o.folder }, progress);
         return !!res.path;
     }, { needsStopped: false });
-    if (!res) return { error: 'The download could not start (see the Console).' };
+    if (!res) return { error: t('The download could not start (see the Console).') };
     if (!res.path) return res;
     const dir = res.path;
     const r = prof.save(settings, { name: name || prof.suggestName(settings, dir), path: dir });
@@ -1831,40 +2202,40 @@ ipcMain.handle('mig-browse', async () => {
     const dir = await pickFolder('Select a SillyTavern folder to copy data from', os.homedir());
     if (!dir) return { canceled: true };
     const found = [dir, path.join(dir, 'SillyTavern')].find(setup.isStRoot);
-    if (!found) return { error: `No SillyTavern found in ${dir}. Pick the folder that contains server.js.` };
+    if (!found) return { error: t('No SillyTavern found in {dir}. Pick the folder that contains server.js.', { dir }) };
     migFolders.add(found);
     return { path: found, name: found, version: instances.describe(found).version, users: mig.users(found) };
 });
 ipcMain.handle('mig-scan', async (_e, o = {}) => {
-    if (!migOk(o.src) || !migOk(o.dst)) return { error: 'Pick two SillyTavern folders.' };
+    if (!migOk(o.src) || !migOk(o.dst)) return { error: t('Pick two SillyTavern folders.') };
     const srcUser = migUser(o.srcUser), dstUser = migUser(o.dstUser);
-    if (prof.sameDir(o.src, o.dst) && srcUser === dstUser) return { error: 'The source and the target are the same. Pick another folder or another user.' };
-    if (!fs.existsSync(path.join(o.src, 'data', srcUser))) return { error: `There is no data for the user "${srcUser}" in ${o.src} (it may never have been started).` };
+    if (prof.sameDir(o.src, o.dst) && srcUser === dstUser) return { error: t('The source and the target are the same. Pick another folder or another user.') };
+    if (!fs.existsSync(path.join(o.src, 'data', srcUser))) return { error: t('There is no data for the user "{user}" in {dir} (it may never have been started).', { user: srcUser, dir: o.src }) };
     try {
         const r = await mig.scan({ src: o.src, srcUser, dst: o.dst, dstUser });
         return { ...r, srcVersion: instances.describe(o.src).version, dstVersion: instances.describe(o.dst).version };
-    } catch (e) { return { error: `Could not read the folders: ${e.message}` }; }
+    } catch (e) { return { error: t('Could not read the folders: {reason}', { reason: e.message }) }; }
 });
 ipcMain.handle('mig-preview', (_e, id, keys, policy) => mig.preview(String(id), Array.isArray(keys) ? keys.map(String) : [], String(policy)));
 ipcMain.handle('mig-run', async (_e, o = {}) => {
-    if (busyTask) return { error: `Busy with "${busyTask}" — wait for it to finish.` };
-    if (!migOk(o.dst)) return { error: 'Pick the target folder again.' };
+    if (busyTask) return { error: t('Busy with "{task}" — wait for it to finish.', { task: busyTask }) };
+    if (!migOk(o.dst)) return { error: t('Pick the target folder again.') };
     const keys = Array.isArray(o.keys) ? o.keys.map(String) : [];
     const policy = ['skip', 'newer', 'replace'].includes(o.policy) ? o.policy : 'skip';
     const toActive = prof.sameDir(o.dst, stRoot());
     let res = null;
     const progress = p => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('mig-progress', p); };
     // The target must not be running: its server would overwrite what's copied.
-    await runTask('Migrating data', async () => {
+    await runTask(t('Migrating data'), async () => {
         await instances.stopAll(o.dst);
         if (o.backupFirst) {
             const b = await mx.createBackup(o.dst, 'auto-before-migration', keep());
-            if (!b) { res = { error: 'The backup failed, so nothing was copied (see the Console).' }; return false; }
+            if (!b) { res = { error: t('The backup failed, so nothing was copied (see the Console).') }; return false; }
         }
         res = await mig.run(String(o.id), keys, policy, progress);
         return !res.error;
     }, { needsStopped: toActive });
-    return res || { error: 'The migration could not start (see the Console).' };
+    return res || { error: t('The migration could not start (see the Console).') };
 });
 ipcMain.handle('mig-cancel', () => mig.cancel());
 ipcMain.handle('mig-journals', (_e, dir) => (migOk(dir) ? mig.journals(dir) : []));
@@ -1872,29 +2243,29 @@ ipcMain.handle('mig-undo', async (_e, dir, id) => {
     if (!migOk(dir)) return false;
     const j = mig.journals(dir).find(x => x.id === id);
     if (!j) return false;
-    if (!(await confirm('Undo this migration?', `From ${j.from}, ${new Date(j.at).toLocaleString()}.\n\nRemoves the ${j.added} files it added and puts back the ${j.replaced} files it replaced. Changes you made to those files since then are lost.`, 'Undo'))) return false;
-    return runTask('Undoing a migration', async () => { await instances.stopAll(dir); return mig.undo(dir, String(id)); }, { needsStopped: prof.sameDir(dir, stRoot()) });
+    if (!(await confirm(t('Undo this migration?'), `${t('From {from}, {when}.', { from: j.from, when: new Date(j.at).toLocaleString(i18n.current().id) })}\n\n${t('Removes the {added} files it added and puts back the {replaced} files it replaced. Changes you made to those files since then are lost.', { added: j.added, replaced: j.replaced })}`, t('Undo')))) return false;
+    return runTask(t('Undoing a migration'), async () => { await instances.stopAll(dir); return mig.undo(dir, String(id)); }, { needsStopped: prof.sameDir(dir, stRoot()) });
 });
 
 ipcMain.handle('open-st-release', (_e, v) => {
     if (/^\d+\.\d+\.\d+$/.test(String(v))) shell.openExternal(`https://github.com/SillyTavern/SillyTavern/releases/tag/${v}`);
 });
 ipcMain.handle('update-backend', async () => {
-    if (!(await confirm('Update Node.js and Git?', 'Installs the latest Node.js (LTS) and Git with winget, then reinstalls SillyTavern\'s dependencies to match. Windows may ask for permission. The server restarts afterwards.', 'Update'))) return false;
-    return runTask('Updating Node.js and Git', () => setup.updateBackend(stRoot()));
+    if (!(await confirm(t('Update Node.js and Git?'), t('Installs the latest Node.js (LTS) and Git with winget, then reinstalls SillyTavern\'s dependencies to match. Windows may ask for permission. The server restarts afterwards.'), t('Update')))) return false;
+    return runTask(t('Updating Node.js and Git'), () => setup.updateBackend(stRoot()));
 });
 ipcMain.handle('move-st', async () => {
     const from = stRoot();
     if (!setup.isStRoot(from)) return false;
     const parent = await pickFolder(`Move SillyTavern — choose the new parent folder (a "${path.basename(from)}" folder is created inside)`, path.dirname(from));
     if (!parent) return false;
-    return runTask('Moving SillyTavern', async () => {
+    return runTask(t('Moving SillyTavern'), async () => {
         const r = await setup.moveInstall(from, parent);
         if (!r) return false;
         prof.moved(settings, from, r.to);
         hist.moved(from, r.to);
         useInstall(r.to);
-        if (r.copied && await confirm('Delete the old copy?', `SillyTavern now runs from:\n${r.to}\n\nThe old copy is still at:\n${from}`, 'Delete old copy')) {
+        if (r.copied && await confirm(t('Delete the old copy?'), `${t('SillyTavern now runs from:')}\n${r.to}\n\n${t('The old copy is still at:')}\n${from}`, t('Delete old copy'))) {
             setup.removeOldInstall(from);
         }
         return true;
@@ -1909,7 +2280,7 @@ function setTheme(id) {
     stWins.forEach(w => w.setColors(themes.get(settings.theme).colors));
 }
 // The app's font and size: the launcher applies them itself, the top bars get the font.
-ipcMain.handle('ui-fonts', () => ({ fonts: themes.UI_FONTS.map(([id, label]) => ({ id, label })), zooms: themes.ZOOMS }));
+ipcMain.handle('ui-fonts', () => ({ fonts: themes.UI_FONTS.map(([id, label]) => ({ id, label: t(label) })), zooms: themes.ZOOMS }));
 ipcMain.handle('set-ui-font', (_e, { font, zoom } = {}) => {
     if (typeof font === 'string' && font.length <= 80) settings.uiFont = font;
     if (themes.ZOOMS.includes(zoom)) settings.uiZoom = zoom;
@@ -1929,21 +2300,21 @@ ipcMain.handle('save-theme', (_e, raw, id) => {
     } catch (e) { return { error: e.message }; }
 });
 ipcMain.handle('delete-theme', async (_e, id) => {
-    const t = themes.get(id);
-    if (t.builtin || !(await confirm(`Delete the theme "${t.name}"?`, 'This removes it from this app. Export it first if you want to keep a copy.', 'Delete'))) return false;
+    const theme = themes.get(id);
+    if (theme.builtin || !(await confirm(t('Delete the theme "{name}"?', { name: theme.name }), t('This removes it from this app. Export it first if you want to keep a copy.'), t('Delete')))) return false;
     themes.remove(id);
     if (settings.theme === id) setTheme('sillytavern');
     else broadcast('theme');
     return true;
 });
 ipcMain.handle('import-theme', async () => {
-    const r = await dialog.showOpenDialog(launcherWin, { title: 'Import a theme', filters: [{ name: 'SillyTavern Desktop theme', extensions: ['json'] }], properties: ['openFile'] });
+    const r = await dialog.showOpenDialog(launcherWin, { title: t('Import a theme'), filters: [{ name: 'SillyTavern Desktop theme', extensions: ['json'] }], properties: ['openFile'] });
     if (r.canceled) return { canceled: true };
     try {
         const file = r.filePaths[0];
-        if (fs.statSync(file).size > 1024 * 1024) throw new Error('That file is too large to be a theme.');
+        if (fs.statSync(file).size > 1024 * 1024) throw new Error(t('That file is too large to be a theme.'));
         let raw;
-        try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { throw new Error('That file is not valid theme JSON.'); }
+        try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { throw new Error(t('That file is not valid theme JSON.')); }
         const id = themes.save(raw);
         setTheme(id);
         logLine(`Imported theme "${themes.get(id).name}".`);
@@ -1951,11 +2322,11 @@ ipcMain.handle('import-theme', async () => {
     } catch (e) { return { error: e.message }; }
 });
 ipcMain.handle('export-theme', async (_e, id) => {
-    const t = themes.get(id);
-    const r = await dialog.showSaveDialog(launcherWin, { title: 'Export theme', defaultPath: `${t.name.replace(/[^\w -]/g, '')}.json`, filters: [{ name: 'Theme', extensions: ['json'] }] });
+    const theme = themes.get(id);
+    const r = await dialog.showSaveDialog(launcherWin, { title: t('Export theme'), defaultPath: `${theme.name.replace(/[^\w -]/g, '')}.json`, filters: [{ name: 'Theme', extensions: ['json'] }] });
     if (r.canceled) return false;
     fs.writeFileSync(r.filePath, themes.exportJson(id));
-    logLine(`Exported theme "${t.name}" to ${r.filePath}.`);
+    logLine(`Exported theme "${theme.name}" to ${r.filePath}.`);
     return true;
 });
 // SillyTavern's own icon, read from the user's install (not bundled).
@@ -1996,6 +2367,7 @@ if (gotLock) {
         mx.initMaintenance({ logLine });
         // Before anything starts node or git.
         rt.initRuntime({ logLine, userData: USER_DATA });
+        tunnel.initTunnel({ userData: USER_DATA, logLine, changed: s => broadcast('tunnel', tunnelView(s)) });
         if (settings.ownRuntime && !rt.apply(true)) logLine('WARNING: "use this app\'s own Node.js and Git" is on, but they are missing. Download them again under Maintenance → Back end.');
         setup.initSetup({ logLine, onPathRefresh: () => rt.reapply() });
         dl.initDownloader({ logLine, userData: USER_DATA });
@@ -2081,6 +2453,8 @@ if (gotLock) {
     // No server outlives the app, however it quits (also Windows shutting
     // down, or quitting without the confirmation).
     app.on('will-quit', () => {
+        tunnel.stop({ wait: true });
+        stopCompanions({ wait: true });
         if (serverState.child) stopServer();
         instances.stopAll();
         flushLog({ sync: true });
@@ -2092,10 +2466,10 @@ if (gotLock) {
             e.preventDefault();
             const choice = dialog.showMessageBoxSync({
                 type: 'question',
-                buttons: ['Quit', 'Cancel'],
+                buttons: [t('Quit'), t('Cancel')],
                 defaultId: 0,
-                message: 'The SillyTavern server is still running.',
-                detail: 'Quitting stops the server. Unsaved chats in other tabs will be lost.',
+                message: t('The SillyTavern server is still running.'),
+                detail: t('Quitting stops the server. Unsaved chats in other tabs will be lost.'),
             });
             if (choice === 0) {
                 isQuitting = true;

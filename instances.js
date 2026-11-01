@@ -12,6 +12,7 @@ import http from 'http';
 import net from 'net';
 import path from 'path';
 import { onLines } from './maintenance.js';
+import { t } from './i18n.js';
 
 let log = () => {};
 let host = '127.0.0.1';
@@ -73,7 +74,7 @@ export function readOnlyAllows(method, url) {
 // so SillyTavern doesn't warn about a lost connection on every change, and
 // generating gets a clear error. The network filter below is what actually
 // stops the requests; this only keeps the page calm.
-const READ_ONLY_MESSAGE = 'This is a read-only copy of SillyTavern: sending is turned off here. Use your normal SillyTavern tab to chat.';
+const readOnlyMessage = () => t('This is a read-only copy of SillyTavern: sending is turned off here. Use your normal SillyTavern tab to chat.');
 function readOnlyShim() {
     const shim = (sources, message) => {
         const reads = sources.map(s => new RegExp(s));
@@ -89,7 +90,7 @@ function readOnlyShim() {
         const realBeacon = navigator.sendBeacon?.bind(navigator);
         if (realBeacon) navigator.sendBeacon = (url, data) => (blocked('POST', new URL(url, location.href)) ? true : realBeacon(url, data));
     };
-    return `(${shim})(${JSON.stringify(READ_POSTS.map(r => r.source))}, ${JSON.stringify(READ_ONLY_MESSAGE)});`;
+    return `(${shim})(${JSON.stringify(READ_POSTS.map(r => r.source))}, ${JSON.stringify(readOnlyMessage())});`;
 }
 
 let readOnlyReady = false;

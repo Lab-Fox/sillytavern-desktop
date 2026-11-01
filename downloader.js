@@ -13,6 +13,7 @@ import os from 'os';
 import path from 'path';
 import { git, npm, NPM_INSTALL } from './maintenance.js';
 import { isStRoot } from './setup.js';
+import { t } from './i18n.js';
 
 const REPO = 'SillyTavern/SillyTavern';
 const GIT_URL = `https://github.com/${REPO}.git`;
@@ -108,20 +109,21 @@ export function cleanFolderName(name) {
 export function targetInfo(parent, folder) {
     const name = cleanFolderName(folder);
     const info = { path: '', ok: false, problem: '', free: null };
-    if (!parent || !path.isAbsolute(parent)) { info.problem = 'Choose where to put it.'; return info; }
-    if (!name) { info.problem = 'Give the folder a name.'; return info; }
+    if (!parent || !path.isAbsolute(parent)) { info.problem = t('Choose where to put it.'); return info; }
+    if (!name) { info.problem = t('Give the folder a name.'); return info; }
     info.path = path.join(parent, name);
     // The nearest folder that exists decides the drive and free space.
     let probe = parent;
     while (!fs.existsSync(probe) && path.dirname(probe) !== probe) probe = path.dirname(probe);
     try { const s = fs.statfsSync(probe); info.free = s.bavail * s.bsize; } catch { /* unknown */ }
     if (fs.existsSync(info.path)) {
+        info.taken = true; // the launcher then suggests "<name>-2"
         let entries = [];
         try { entries = fs.readdirSync(info.path); } catch { /* a file, or no access */ }
-        if (isStRoot(info.path)) info.problem = 'SillyTavern is already in this folder. Add it as a profile instead, or pick another name.';
-        else if (!fs.statSync(info.path).isDirectory() || entries.length) info.problem = 'This folder already exists and is not empty. Pick another name.';
+        if (isStRoot(info.path)) info.problem = t('SillyTavern is already in this folder. Add it as a profile instead, or pick another name.');
+        else if (!fs.statSync(info.path).isDirectory() || entries.length) info.problem = t('This folder already exists and is not empty. Pick another name.');
     }
-    if (!info.problem && info.free != null && info.free < NEEDED_BYTES) info.problem = `Not enough free space there (${formatGB(info.free)} free, about 1.5 GB needed).`;
+    if (!info.problem && info.free != null && info.free < NEEDED_BYTES) info.problem = t('Not enough free space there ({free} free, about 1.5 GB needed).', { free: formatGB(info.free) });
     info.ok = !info.problem;
     return info;
 }
@@ -138,7 +140,7 @@ let current = null; // { child, cancelled }
 export async function download({ ref, parent, folder }, onProgress = () => {}) {
     const info = targetInfo(parent, folder);
     if (!info.ok) return { error: info.problem };
-    if (!/^(release|staging|\d+\.\d+\.\d+)$/.test(ref)) return { error: `Unknown SillyTavern version "${ref}".` };
+    if (!/^(release|staging|\d+\.\d+\.\d+)$/.test(ref)) return { error: t('Unknown SillyTavern version "{version}".', { version: ref }) };
     const target = info.path;
     const what = ref === 'release' ? 'the latest release' : ref === 'staging' ? 'staging' : `version ${ref}`;
     current = { child: null, cancelled: false, killed: Promise.resolve() };
@@ -159,7 +161,7 @@ export async function download({ ref, parent, folder }, onProgress = () => {}) {
     try {
         fs.mkdirSync(parent, { recursive: true });
         log(`Downloading SillyTavern (${what}) into ${target} ...`);
-        onProgress({ step: 'download', text: 'Connecting to GitHub…', percent: null });
+        onProgress({ step: 'download', text: t('Connecting to GitHub…'), percent: null });
         // git shows progress with \r on one line; turn the latest of it into a phase and a percent.
         let lastSent = 0;
         const clone = await git(parent, ['clone', '--progress', '--filter=blob:none', '--branch', ref, GIT_URL, path.basename(target)], {
@@ -169,7 +171,7 @@ export async function download({ ref, parent, folder }, onProgress = () => {}) {
                 const m = [...String(chunk).matchAll(/(Receiving objects|Resolving deltas|Updating files):\s+(\d+)%/g)].pop();
                 if (!m || Date.now() - lastSent < 150) return;
                 lastSent = Date.now();
-                const phase = { 'Receiving objects': 'Downloading', 'Resolving deltas': 'Unpacking', 'Updating files': 'Writing files' }[m[1]];
+                const phase = { 'Receiving objects': t('Downloading'), 'Resolving deltas': t('Unpacking'), 'Updating files': t('Writing files') }[m[1]];
                 onProgress({ step: 'download', text: `${phase}… ${m[2]}%`, percent: Number(m[2]) });
             },
         });
@@ -178,10 +180,10 @@ export async function download({ ref, parent, folder }, onProgress = () => {}) {
             const why = clone.out.split(/[\r\n]+/).map(l => l.trim()).filter(l => /fatal|error/i.test(l)).pop() || 'git clone failed';
             log(`ERROR: download failed: ${why}`);
             await cleanUp();
-            return { error: `The download failed: ${why.replace(/^(fatal|error):\s*/i, '')}` };
+            return { error: t('The download failed: {reason}', { reason: why.replace(/^(fatal|error):\s*/i, '') }) };
         }
         log('Download complete. Installing dependencies (npm install) — this takes a minute or two ...');
-        onProgress({ step: 'deps', text: 'Installing dependencies (npm install)…', percent: null });
+        onProgress({ step: 'deps', text: t('Installing dependencies (npm install)…'), percent: null });
         const inst = await npm(target, NPM_INSTALL, { onChild: c => { job.child = c; } });
         if (job.cancelled) return cancelled();
         if (inst.code !== 0) {

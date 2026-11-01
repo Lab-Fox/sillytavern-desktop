@@ -5,6 +5,38 @@ const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 const on = channel => cb => ipcRenderer.on(channel, (_e, ...args) => cb(...args));
 
 contextBridge.exposeInMainWorld('desktop', {
+    // language (i18n.js): the page's text, read once when it loads
+    i18n: () => ipcRenderer.sendSync('i18n-dict'),
+    setLanguage: id => invoke('set-language', id),
+    setStLanguageSync: on => invoke('set-st-language-sync', on),
+    stLanguageReload: () => invoke('st-language-reload'),
+    // server options, HTTPS, remote link, Tailscale
+    serverOptions: () => invoke('server-options'),
+    serverOptionsSave: o => invoke('server-options-save', o),
+    serverRestart: () => invoke('server-restart'),
+    tunnelStatus: () => invoke('tunnel-status'),
+    tunnelStart: () => invoke('tunnel-start'),
+    tunnelStop: () => invoke('tunnel-stop'),
+    onTunnel: on('tunnel'),
+    tailscaleInfo: () => invoke('tailscale-info'),
+    tailscaleInstall: () => invoke('tailscale-install'),
+    // start with SillyTavern
+    companions: () => invoke('companions'),
+    companionAdd: () => invoke('companion-add'),
+    companionSave: (id, patch) => invoke('companion-save', id, patch),
+    companionRemove: id => invoke('companion-remove', id),
+    companionStart: id => invoke('companion-start', id),
+    // this PC, troubleshooting
+    pcCheck: fresh => invoke('pc-check', fresh),
+    portUser: () => invoke('port-user'),
+    usePort: port => invoke('use-port', port),
+    systemReport: () => invoke('system-report'),
+    npmCache: () => invoke('npm-cache'),
+    gitTrouble: () => invoke('git-trouble'),
+    gitFix: () => invoke('git-fix'),
+    onboarding: () => invoke('onboarding'),
+    onboardingSet: (user, on) => invoke('onboarding-set', user, on),
+    profileTrash: id => invoke('profile-trash', id),
     // server
     getState: () => invoke('get-state'),
     startServer: () => invoke('start-server'),

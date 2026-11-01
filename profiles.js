@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import path from 'path';
 import { isStRoot } from './setup.js';
 import { describe } from './instances.js';
+import { t } from './i18n.js';
 
 export const sameDir = (a, b) => !!a && !!b && path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 const clean = name => String(name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
@@ -61,13 +62,13 @@ export function list(settings) {
 // Add (no id) or edit a profile. Returns { profile } or { error } for the user.
 export function save(settings, { id, name, path: dir }) {
     const n = clean(name);
-    if (!n) return { error: 'Give the profile a name.' };
+    if (!n) return { error: t('Give the profile a name.') };
     const existing = id ? settings.profiles.find(p => p.id === id) : null;
-    if (id && !existing) return { error: 'That profile no longer exists.' };
-    if (settings.profiles.some(p => p.id !== id && p.name.toLowerCase() === n.toLowerCase())) return { error: `There is already a profile called "${n}".` };
-    if (!isStRoot(dir)) return { error: 'There is no SillyTavern in that folder. Pick the folder that contains server.js.' };
+    if (id && !existing) return { error: t('That profile no longer exists.') };
+    if (settings.profiles.some(p => p.id !== id && p.name.toLowerCase() === n.toLowerCase())) return { error: t('There is already a profile called "{name}".', { name: n }) };
+    if (!isStRoot(dir)) return { error: t('There is no SillyTavern in that folder. Pick the folder that contains server.js.') };
     const twin = settings.profiles.find(p => p.id !== id && sameDir(p.path, dir));
-    if (twin) return { error: `The profile "${twin.name}" already uses that folder.` };
+    if (twin) return { error: t('The profile "{name}" already uses that folder.', { name: twin.name }) };
     if (existing) {
         Object.assign(existing, { name: n, path: dir });
         return { profile: existing };

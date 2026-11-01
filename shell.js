@@ -6,6 +6,7 @@ import { BaseWindow, WebContentsView, Menu, ipcMain, screen } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as layer from './winlayer.js';
+import { t } from './i18n.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BAR_H = 34;
@@ -99,6 +100,12 @@ export class StWindow {
         this.win.focus();
     }
     reload() { if (this.active) reloadTab(this.active); }
+    // After a language change: the bar loads its text again.
+    reloadBar() {
+        if (this.bar.webContents.isDestroyed()) return;
+        this.bar.webContents.once('did-finish-load', () => this.push());
+        this.bar.webContents.reload();
+    }
     // After a server restart every SillyTavern tab is a dead page.
     // which(instance): the tabs to reload (default all).
     reloadAll(which = () => true) { this.tabs.filter(t => which(t.instance)).forEach(reloadTab); }
@@ -125,10 +132,10 @@ export class StWindow {
         const tab = this.addTab(view, true, instance);
         const wc = view.webContents;
         if (!instance.server) { wc.loadURL(instance.url); return tab; }
-        wc.loadURL(statusPage(this.opts.colors, `Starting ${instance.tip}…`));
+        wc.loadURL(statusPage(this.opts.colors, t('Starting {what}…', { what: instance.tip })));
         instance.server.ready.then(ok => {
             if (wc.isDestroyed()) return;
-            wc.loadURL(ok ? instance.url : statusPage(this.opts.colors, `${instance.tip} could not start. The launcher's Console says why.`));
+            wc.loadURL(ok ? instance.url : statusPage(this.opts.colors, t('{what} could not start. The launcher\'s Console says why.', { what: instance.tip })));
         });
         return tab;
     }
@@ -149,7 +156,7 @@ export class StWindow {
     }
     addTab(view, activate, instance) {
         const wc = view.webContents;
-        const tab = { view, id: wc.id, instance, title: 'Loading…', favicon: '', loading: true, lastCrash: 0 };
+        const tab = { view, id: wc.id, instance, title: t('Loading…'), favicon: '', loading: true, lastCrash: 0 };
         instance.refs = (instance.refs || 0) + 1;
         this.opts.setupPage(wc, this, instance);
         this.insertTab(tab, this.active ? this.tabs.indexOf(this.active) + 1 : this.tabs.length, activate);
@@ -182,7 +189,7 @@ export class StWindow {
         });
         on('page-favicon-updated', (_e, icons) => { tab.favicon = icons[0] || ''; this.push(); });
         on('did-start-loading', () => { tab.loading = true; this.push(); });
-        on('did-stop-loading', () => { tab.loading = false; if (!tab.title || tab.title === 'Loading…') tab.title = wc.getTitle() || wc.getURL(); this.push(); });
+        on('did-stop-loading', () => { tab.loading = false; if (!tab.title || tab.title === t('Loading…')) tab.title = wc.getTitle() || wc.getURL(); this.push(); });
         on('before-input-event', (e, input) => this.onKey(e, input));
         // A crashed page (e.g. out of memory on a huge chat) would stay blank:
         // reload it once, and only show a message if it crashes again soon.
@@ -190,7 +197,7 @@ export class StWindow {
             if (d.reason === 'clean-exit' || wc.isDestroyed()) return;
             const again = Date.now() - tab.lastCrash < 30000;
             tab.lastCrash = Date.now();
-            if (again) wc.loadURL(statusPage(this.opts.colors, `This page crashed twice (${d.reason}). Press F5 to try again.`));
+            if (again) wc.loadURL(statusPage(this.opts.colors, t('This page crashed twice ({reason}). Press F5 to try again.', { reason: d.reason })));
             else wc.reload();
         });
         // Closed by us, by the page (window.close()) or by its opener.
@@ -330,10 +337,10 @@ export class StWindow {
     tabMenu(tab, at) {
         const others = this.tabs.filter(t => t !== tab);
         this.popupMenu([
-            { label: 'Reload tab', click: () => reloadTab(tab) },
-            { label: 'Close tab', accelerator: 'Ctrl+W', registerAccelerator: false, enabled: this.tabs.length > 1, click: () => this.closeTab(tab) },
-            { label: 'Close other tabs', enabled: others.length > 0, click: () => others.forEach(t => this.closeTab(t)) },
-            { label: 'Move to new window', enabled: others.length > 0, click: () => this.opts.detach?.(this, tab, null) },
+            { label: t('Reload tab'), click: () => reloadTab(tab) },
+            { label: t('Close tab'), accelerator: 'Ctrl+W', registerAccelerator: false, enabled: this.tabs.length > 1, click: () => this.closeTab(tab) },
+            { label: t('Close other tabs'), enabled: others.length > 0, click: () => others.forEach(o => this.closeTab(o)) },
+            { label: t('Move to new window'), enabled: others.length > 0, click: () => this.opts.detach?.(this, tab, null) },
             { type: 'separator' },
             ...this.opts.menu(this),
         ], at);

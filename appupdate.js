@@ -8,6 +8,7 @@ import { pipeline } from 'stream/promises';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { t } from './i18n.js';
 
 const REPO = 'Lab-Fox/sillytavern-desktop';
 // For testing only: point the checks at a local copy of the releases API.
@@ -112,7 +113,7 @@ async function latestRelease(fresh) {
         if (Array.isArray(r)) {
             const tag = x => String(x.tag_name || '').replace(/^v/, '');
             r = r.filter(x => !x.draft && VERSION.test(tag(x))).reduce((best, x) => (!best || isNewer(tag(x), tag(best)) ? x : best), null);
-            if (!r) throw new Error('GitHub lists no releases');
+            if (!r) throw new Error(t('GitHub lists no releases'));
         }
         writeCache(r);
         return r;
@@ -122,7 +123,7 @@ async function latestRelease(fresh) {
         retryAt(resetAt + 60e3);
         if (cached) return cached.release;
         const at = new Date(resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        throw new Error(`GitHub only allows a few checks per hour; the app tries again at ${at}`);
+        throw new Error(t('GitHub only allows a few checks per hour; the app tries again at {time}', { time: at }));
     }
     throw new Error(`GitHub answered ${res.status}`);
 }
@@ -188,7 +189,7 @@ export async function download() {
         if (asset.size && got !== asset.size) throw new Error(`incomplete (${got} of ${asset.size} bytes)`);
         const sha = hash.digest('hex');
         // GitHub publishes a SHA256 for every release file.
-        if (asset.digest && asset.digest.toLowerCase() !== `sha256:${sha}`) throw new Error('the file does not match the SHA256 GitHub published for it');
+        if (asset.digest && asset.digest.toLowerCase() !== `sha256:${sha}`) throw new Error(t('the file does not match the SHA256 GitHub published for it'));
         file = dest;
         logLine(`Downloaded SillyTavern Desktop ${version} (SHA256 ${sha.toUpperCase()}).`);
         return set({ ...base, status: 'ready', percent: 100 });

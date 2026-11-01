@@ -29,7 +29,8 @@
     --tint: color-mix(in srgb, var(--accent) 14%, transparent);
     --well: color-mix(in srgb, var(--bg) 80%, #000);
     --px: 2px;            /* pixel unit: borders, shadows, offsets */
-    --pixel-font: "Departure Mono", "Segoe UI", system-ui, sans-serif;   /* Settings → App font */
+    --pixel-font: "Departure Mono", var(--lang-fonts, "Segoe UI"), system-ui, sans-serif;   /* Settings → App font */
+    --lang-fonts: "Segoe UI";   /* letters the pixel fonts lack (Chinese, Japanese, Korean, Thai…): i18n-dom.js */
     --mono: "Departure Mono", "Cascadia Code", Consolas, monospace;   /* paths, file names */
     --console-pixel: "VT323", "Cascadia Code", Consolas, monospace;   /* the console's "Pixel (default)" */
     --log-font: var(--console-pixel);   /* Settings → Console font */
@@ -85,7 +86,7 @@
     display: flex; align-items: center; gap: 12px; padding: 14px 26px;
     border-bottom: var(--px) solid var(--border); background: var(--surface);
   }
-  header h1 { font-size: 22px; font-weight: 700; color: var(--title); letter-spacing: .5px; }
+  header h1 { font-size: 22px; font-weight: 700; color: var(--title); letter-spacing: .5px; min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pill {
     margin-left: auto; display: flex; align-items: center; gap: 8px;
     background: var(--panel); padding: 4px 12px; font-size: 14px; color: var(--muted);
@@ -270,6 +271,40 @@
   .hdr-profile select { min-width: 0; padding: 3px 8px; font-size: 14px; text-overflow: ellipsis; }
   header .pill, header .btn { flex-shrink: 0; white-space: nowrap; }
   .hdr-profile + .pill { margin-left: 0; }
+
+  /* ---------- what can this PC run ---------- */
+  .pc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .pc-table th { text-align: left; color: var(--muted); font-weight: 400; padding: 4px 8px; border-bottom: var(--px) solid var(--border); }
+  .pc-table td { padding: 5px 8px; border-bottom: 1px dashed var(--border); }
+  .pc-table td:first-child { color: var(--title); width: 90px; }
+  #soList .item select, #soList .item input { flex-shrink: 0; }
+  #onbList input, #compList input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+  @media (max-width: 960px) { #soList .item { flex-wrap: wrap; } }
+
+  /* ---------- language ---------- */
+  .lang-btn { gap: 6px; }
+  .lang-btn svg.i { width: 16px; height: 16px; }
+  @media (max-width: 960px) { header .lang-btn span, header #btnPower span { display: none; } }
+  #langPop {
+    position: fixed; z-index: 90; display: none; width: min(460px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto;
+    background: var(--panel); border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); padding: 12px 14px;
+  }
+  #langPop.show { display: block; }
+  #langPop h3 { font-size: 15px; color: var(--title); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .lang-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .lang-grid button {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; padding: 6px 10px; line-height: 1.25;
+    background: none; border: var(--px) solid transparent; color: var(--text); cursor: pointer; font: inherit; font-size: 15px;
+  }
+  .lang-grid button small { color: var(--muted); font-size: 12px; }
+  .lang-grid button:hover { background: var(--tint); }
+  .lang-grid button.on { border-color: var(--accent); background: var(--tint); color: var(--title); }
+  #langPop .switch { border-top: var(--px) dashed var(--border); margin-top: 10px; padding: 10px 0 0; }
+  #langPop .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  #langToast {
+    position: fixed; right: 18px; bottom: 18px; z-index: 80; max-width: 420px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    background: var(--panel); border: var(--px) solid var(--accent); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); padding: 10px 12px; font-size: 14px;
+  }
   .item.current { background: var(--tint); }
   .item .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
   #profList .item { flex-wrap: wrap; }
@@ -345,7 +380,7 @@
   <aside>
     <div class="brand">
       <img class="logo" data-logo alt="">
-      <div><b>SillyTavern</b><span>Desktop <span id="appVer"></span></span></div>
+      <div translate="no"><b>SillyTavern</b><span>Desktop <span id="appVer"></span></span></div>
     </div>
     <nav id="nav">
       <button data-page="home" class="active"><svg class="i"><use href="#i-home"/></svg>Home<span class="badge" id="navUpdate" hidden>1</span></button>
@@ -360,8 +395,8 @@
     <div class="side-foot">
       <div class="lbl">Community</div>
       <button data-link="docs"><svg class="i"><use href="#i-book"/></svg>Documentation</button>
-      <button data-link="discord"><svg class="i"><use href="#i-chat"/></svg>Discord</button>
-      <button data-link="reddit"><svg class="i"><use href="#i-users"/></svg>r/SillyTavernAI</button>
+      <button data-link="discord" translate="no"><svg class="i"><use href="#i-chat"/></svg>Discord</button>
+      <button data-link="reddit" translate="no"><svg class="i"><use href="#i-users"/></svg>r/SillyTavernAI</button>
       <button data-link="desktop"><svg class="i"><use href="#i-external"/></svg>About this app</button>
     </div>
   </aside>
@@ -372,6 +407,7 @@
       <label class="hdr-profile" title="Profile: which SillyTavern folder the app runs"><svg class="i"><use href="#i-layers"/></svg><select id="hdrProfile" data-task></select></label>
       <div class="pill"><span class="dot" id="dot"></span><span id="statusText">Server stopped</span></div>
       <button class="btn sm" id="btnPower"><svg class="i"><use href="#i-play"/></svg><span>Start</span></button>
+      <button class="btn sm ghost lang-btn" data-lang-open title="Language"><svg class="i"><use href="#i-globe"/></svg><span data-lang-name translate="no"></span></button>
     </header>
     <div class="busy" id="busy"><div class="spin"></div><span id="busyText"></span></div>
 
@@ -416,6 +452,18 @@
           </div>
         </div>
 
+        <div class="card" id="tunCard" hidden>
+          <h2>Remote link<span class="act row" style="gap:8px"><button class="btn sm danger" id="btnTunStopHome"><svg class="i"><use href="#i-stop"/></svg>Stop</button></span></h2>
+          <div class="row" style="align-items:flex-start;gap:18px">
+            <div class="qr" id="tunQr"></div>
+            <div class="stack" style="flex:1;gap:8px">
+              <div class="lan-urls mono" id="tunUrl"></div>
+              <div><button class="btn sm" id="btnTunCopy"><svg class="i"><use href="#i-copy"/></svg>Copy link</button></div>
+              <p class="muted small" id="tunHint"></p>
+            </div>
+          </div>
+        </div>
+
         <div class="card" id="lanCard" hidden>
           <h2>On your phone<button class="link act" data-goto="settings">Phone settings</button></h2>
           <div class="row" style="align-items:flex-start;gap:18px">
@@ -451,7 +499,7 @@
               <button class="btn" data-place="chats"><svg class="i"><use href="#i-chat"/></svg>Chats</button>
               <button class="btn" data-place="data"><svg class="i"><use href="#i-folder"/></svg>Data folder</button>
               <button class="btn" data-place="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions</button>
-              <button class="btn" data-place="config"><svg class="i"><use href="#i-sliders"/></svg>config.yaml</button>
+              <button class="btn" data-place="config" translate="no"><svg class="i"><use href="#i-sliders"/></svg>config.yaml</button>
             </div>
           </div>
         </div>
@@ -486,6 +534,7 @@
               <button class="btn primary" id="btnProfSave"><svg class="i"><use href="#i-check"/></svg>Save profile</button>
               <button class="btn ghost" id="btnProfCancel">Cancel</button>
               <span class="err" id="profError"></span>
+              <button class="btn sm ghost danger" id="btnProfTrash" hidden style="margin-left:auto" title="The whole SillyTavern folder goes to the Recycle Bin (you can back up its data first)"><svg class="i"><use href="#i-trash"/></svg>Remove this SillyTavern from the PC…</button>
             </div>
           </div>
         </div>
@@ -498,7 +547,7 @@
           <div class="form" id="remForm" hidden>
             <div class="row" style="align-items:flex-end">
               <div class="field" style="flex:1;min-width:180px;max-width:260px"><label>Name</label><input type="text" id="remName" maxlength="40" placeholder="Living room PC"></div>
-              <div class="field" style="flex:2;min-width:240px"><label>Address</label><input type="text" id="remUrl" maxlength="300" placeholder="http://192.168.1.25:8000" spellcheck="false"></div>
+              <div class="field" style="flex:2;min-width:240px"><label>Address</label><input type="text" id="remUrl" maxlength="300" placeholder="http://192.168.1.25:8000" spellcheck="false" translate="no"></div>
               <button class="btn sm" id="btnRemTest"><svg class="i"><use href="#i-pulse"/></svg>Test</button>
             </div>
             <div class="warnbox" id="remWarn" hidden style="margin-top:10px"><b>Not encrypted:</b> this is a plain <span class="mono">http://</span> address outside your home network, so your password and chats would travel readable. Use <span class="mono">https://</span> or a private network such as Tailscale if you can.</div>
@@ -635,9 +684,9 @@
     <!-- ===== Extensions ===== -->
     <section class="page" id="page-extensions">
       <div class="seg" id="extTabs" style="width:max-content;margin-bottom:14px">
-        <button data-ext-tab="st" class="on">SillyTavern</button>
+        <button data-ext-tab="st" class="on" translate="no">SillyTavern</button>
         <button data-ext-tab="desktop">Desktop app</button>
-        <button data-ext-tab="chrome">Chrome</button>
+        <button data-ext-tab="chrome" translate="no">Chrome</button>
       </div>
       <div id="extChrome" class="stack" hidden>
         <p class="lead">Extensions from the Chrome Web Store, such as spelling and grammar checkers, inside SillyTavern. Open the store, click <b style="color:var(--title)">Add to Chrome</b> on an extension, and it works in your SillyTavern pages. Their buttons appear in the SillyTavern window's top bar.</p>
@@ -743,6 +792,11 @@
           <h2>Health check<button class="link act" id="btnHealth">Run again</button></h2>
           <div class="list" id="healthList"></div>
         </div>
+        <div class="card stack">
+          <h2>What can my PC run?<button class="link act" id="btnPcCheck">Check again</button></h2>
+          <div id="pcBox"><div class="empty">Checking…</div></div>
+          <p class="muted small">For running an AI model on this PC (KoboldCpp, llama.cpp, Oobabooga…) instead of an online service. Sizes are for GGUF models with about 8K of context; a model that doesn't fit the graphics card still runs partly on the processor, much slower.</p>
+        </div>
         <div class="card">
           <h2>Repair tools</h2>
           <div class="grid g3">
@@ -760,6 +814,41 @@
               <b>Reinstall dependencies</b>
               <p>Deletes <span class="mono">node_modules</span> and downloads everything again. For stubborn errors. Takes a few minutes.</p>
               <button class="btn sm danger" data-task data-repair="clean-deps">Reinstall</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Troubleshooting</h2>
+          <div class="grid g2">
+            <div class="tool">
+              <b>Port</b>
+              <p id="portText">Which program uses SillyTavern's port.</p>
+              <div class="row" style="gap:6px"><button class="btn sm" id="btnPortCheck">Check port</button><button class="btn sm ghost" id="btnPortFree" hidden></button></div>
+            </div>
+            <div class="tool">
+              <b>Repair SillyTavern's files</b>
+              <p id="gitText">For an update that stopped halfway, or "local changes" that block updating. Changed files are kept on a backup branch; your data is not touched.</p>
+              <button class="btn sm" data-task id="btnGitFix">Repair files</button>
+            </div>
+            <div class="tool">
+              <b>Clear npm's cache</b>
+              <p>When installing dependencies keeps failing with download or "integrity" errors.</p>
+              <button class="btn sm" data-task id="btnNpmCache">Clear cache</button>
+            </div>
+            <div class="tool">
+              <b>SillyTavern's welcome tour</b>
+              <p>Shows SillyTavern's first-start tour (name, persona, basics) again the next time it opens. The server restarts.</p>
+              <div class="stack" id="onbList" style="gap:4px"></div>
+            </div>
+            <div class="tool">
+              <b>System report</b>
+              <p>Versions, settings and this PC's details for a bug report, copied to the clipboard. No passwords; your user folder shows as %USERPROFILE%.</p>
+              <button class="btn sm" id="btnReport"><svg class="i"><use href="#i-copy"/></svg>Copy system report</button>
+            </div>
+            <div class="tool">
+              <b>Ask for help</b>
+              <p>Report a problem with this app, or with SillyTavern itself. Paste the system report into it.</p>
+              <div class="row" style="gap:6px"><button class="btn sm ghost" data-link="issues">This app</button><button class="btn sm ghost" data-link="stIssues" translate="no">SillyTavern</button><button class="btn sm ghost" data-link="docs">Documentation</button><button class="btn sm ghost" data-link="discord" translate="no">Discord</button></div>
             </div>
           </div>
         </div>
@@ -814,6 +903,10 @@
             <button class="btn sm" id="btnNewTheme"><svg class="i"><use href="#i-sliders"/></svg>New theme</button>
           </span>
         </h2>
+        <div class="row" style="align-items:flex-end;margin-bottom:14px;padding-bottom:14px;border-bottom:var(--px) dashed var(--border)">
+          <div class="field" style="flex:1 1 320px;max-width:420px"><label>Language</label><select id="setLang"></select></div>
+          <label class="switch" style="border:0;padding:0;flex:2;min-width:260px"><input type="checkbox" id="setStLang"><div><b>Also switch SillyTavern's own language</b><span>SillyTavern has its own language setting. With this on, changing the app's language changes SillyTavern's too (when SillyTavern has that language), once per SillyTavern. You can still change it in SillyTavern afterwards.</span></div></label>
+        </div>
         <div class="themes" id="themeList"></div>
         <div class="row" style="align-items:flex-end;margin-top:14px;padding-top:14px;border-top:var(--px) dashed var(--border)">
           <div class="field" style="flex:1;min-width:300px;max-width:420px"><label>App font</label><select id="setUiFont"></select></div>
@@ -829,8 +922,8 @@
                 <span class="muted small">Logo (shown pixelated)</span>
                 <div class="row">
                   <button class="btn sm" id="btnThemeLogo">Upload image…</button>
-                  <button class="btn sm ghost" data-logo-preset="st">ST</button>
-                  <button class="btn sm ghost" data-logo-preset="fox">Fox</button>
+                  <button class="btn sm ghost" data-logo-preset="st" translate="no">ST</button>
+                  <button class="btn sm ghost" data-logo-preset="fox" translate="no">Fox</button>
                 </div>
               </div>
               <input type="file" id="themeLogoFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
@@ -919,7 +1012,7 @@
             <div class="field"><label>Size</label><input type="number" id="setLogSize" min="10" max="32" style="width:80px"></div>
             <button class="btn sm ghost" id="btnLogFontReset">Reset</button>
           </div>
-          <div class="log-preview"><span class="l-ok">[12:00:01] SillyTavern is listening on IPv4: 127.0.0.1:8000</span>
+          <div class="log-preview" translate="no"><span class="l-ok">[12:00:01] SillyTavern is listening on IPv4: 127.0.0.1:8000</span>
 <span class="l-warn">[12:00:02] WARNING: an extension is out of date</span>
 [12:00:03] 0123456789 — The quick brown fox jumps over the lazy dog</div>
           <p class="muted small">Used by the Console page and the activity logs. Applies right away.</p>
@@ -939,6 +1032,32 @@
           <span class="muted small" id="lanStatus"></span>
         </div>
       </div>
+      <div class="card stack" style="margin-top:16px">
+        <h2>Away from home</h2>
+        <div class="tool" style="border:0;padding:0;background:none">
+          <b>Remote link</b>
+          <p>A temporary https address from Cloudflare that reaches your SillyTavern from anywhere (mobile data, another house) while it runs. It needs the password above: anyone who gets the link sees the login. A new address every time; it stops with the server.</p>
+          <div class="row" style="gap:8px"><button class="btn sm primary" id="btnTunStart"><svg class="i"><use href="#i-play"/></svg>Start remote link</button><button class="btn sm danger" id="btnTunStop" hidden><svg class="i"><use href="#i-stop"/></svg>Stop</button><span class="muted small" id="tunState" style="flex:1;min-width:200px"></span><button class="link" data-link="remoteDocs">About remote connections</button></div>
+        </div>
+        <div class="tool" style="border:0;padding:12px 0 0;background:none;border-top:var(--px) dashed var(--border)">
+          <b translate="no">Tailscale</b>
+          <p>A private network between your own devices, free for personal use. With Tailscale on this PC and your phone (same account) and phone access on, your phone reaches SillyTavern from anywhere, without a public address.</p>
+          <div class="row" style="gap:8px"><span class="muted small" id="tsState" style="flex:1;min-width:200px">Checking…</span><button class="btn sm" data-task id="btnTsInstall" hidden><svg class="i"><use href="#i-download"/></svg>Install Tailscale</button><button class="btn sm ghost" data-link="tailscale" translate="no">tailscale.com</button></div>
+        </div>
+      </div>
+      <div class="card stack" style="margin-top:16px">
+        <h2>SillyTavern server options<span class="act row" style="gap:8px"><button class="btn sm ghost" data-place="config" translate="no"><svg class="i"><use href="#i-external"/></svg>config.yaml</button></span></h2>
+        <p class="muted small">Options SillyTavern usually takes from its config.yaml. This app passes your choice to the server when it starts and never edits config.yaml; "As in config.yaml" leaves it to the file.</p>
+        <label class="switch" style="border-top:0"><input type="checkbox" id="setHttps"><div><b>HTTPS (encrypted connection)</b><span>Serves SillyTavern with this app's own certificate. Phones and browsers warn once that they don't know the certificate; that's expected for a self-made one. Useful for phone access, where some browser features need https.</span></div></label>
+        <p class="muted small" id="httpsInfo" hidden></p>
+        <div class="list" id="soList"></div>
+        <div class="row"><button class="btn sm primary" id="btnSoRestart" hidden><svg class="i"><use href="#i-refresh"/></svg>Restart server to apply</button><span class="muted small" id="soNote"></span></div>
+      </div>
+      <div class="card stack" style="margin-top:16px">
+        <h2>Start with SillyTavern<span class="act row"><button class="btn sm" id="btnCompAdd"><svg class="i"><use href="#i-plus"/></svg>Add program…</button></span></h2>
+        <p class="muted small">Programs or scripts that start when the server starts, such as KoboldCpp or a voice app. Stopped together with the server when you tick it.</p>
+        <div class="list" id="compList"></div>
+      </div>
       <div style="margin-top:16px"><button class="btn primary" id="btnSave"><svg class="i"><use href="#i-check"/></svg>Save settings</button></div>
     </section>
   </main>
@@ -952,6 +1071,7 @@
           <h1 id="setupTitle">Welcome to SillyTavern Desktop</h1>
           <p id="setupLead">Let's get SillyTavern running. Two quick steps — everything happens right here.</p>
         </div>
+        <button class="btn sm ghost lang-btn" data-lang-open title="Language" style="margin-left:auto"><svg class="i"><use href="#i-globe"/></svg><span data-lang-name translate="no"></span></button>
         <button class="btn sm ghost" id="btnSetupClose" hidden>Back</button>
       </div>
 
@@ -1069,6 +1189,19 @@
     </div>
   </div>
 
+  <!-- ===== language picker (header, welcome screen) ===== -->
+  <div id="langPop" role="dialog">
+    <h3><svg class="i"><use href="#i-globe"/></svg>Language</h3>
+    <div class="lang-grid" id="langGrid"></div>
+    <label class="switch"><input type="checkbox" id="langStSync"><div><b>Also switch SillyTavern's own language</b><span>Where SillyTavern has the language. Its pages switch when they reload.</span></div></label>
+    <p class="note">Translations other than English were made with the help of AI and may sound off in places. <button class="link" data-link="translate">Help improve them</button></p>
+  </div>
+  <div id="langToast" hidden>
+    <span style="flex:1;min-width:200px">Open SillyTavern pages switch language when they reload.</span>
+    <button class="btn sm primary" id="btnLangReload"><svg class="i"><use href="#i-refresh"/></svg>Reload SillyTavern now</button>
+    <button class="btn sm ghost" id="btnLangLater">Later</button>
+  </div>
+
   <!-- ===== icons ===== -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
@@ -1108,11 +1241,17 @@
       <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
       <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16zM14 6l4 4"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
     </defs>
   </svg>
 
+<script src="i18n-dom.js"></script>
 <script>
+  // Static text is translated here, before the page shows; script-built text uses T().
+  I18N.apply();
+  const T = I18N.t;
+  const LOC = I18N.lang;
   const $ = id => document.getElementById(id);
   const D = window.desktop;
   const icon = name => `<svg class="i"><use href="#i-${name}"/></svg>`;
@@ -1120,9 +1259,13 @@
   const state = { running: false, startedAt: 0, busy: '', url: '', windows: { open: 0, minimized: false }, page: 'home', logs: [], filter: 'all', search: '', extTab: 'st' };
 
   // ---------- navigation ----------
-  const TITLES = { home: 'Home', profiles: 'Profiles', migrate: 'Migrate data', backups: 'Backups', extensions: 'Extensions', maintenance: 'Maintenance', console: 'Console', settings: 'Settings' };
+  const TITLES = { home: T('Home'), profiles: T('Profiles'), migrate: T('Migrate data'), backups: T('Backups'), extensions: T('Extensions'), maintenance: T('Maintenance'), console: T('Console'), settings: T('Settings') };
+  // The page stays open across a language change (which reloads the launcher).
+  const remember = (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* not available */ } };
+  const recall = k => { try { return sessionStorage.getItem(k); } catch { return null; } };
   function go(page) {
     state.page = page;
+    remember('page', page);
     document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('show', p.id === `page-${page}`));
     $('pageTitle').textContent = TITLES[page];
@@ -1137,39 +1280,40 @@
   });
 
   function loadPage(page) {
-    if (page === 'home') { loadInfo(); loadLan(); }
+    if (page === 'home') { loadInfo(); loadLan(); loadTunnel(); }
     if (page === 'profiles') loadProfiles();
     if (page === 'migrate') loadMigrate();
     if (page === 'backups') loadBackups();
     if (page === 'extensions') { loadExtensions(false); loadKits(); if (state.extTab === 'desktop') loadDesktopExtensions(); }
-    if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); }
+    if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); loadPc(); loadTrouble(); }
     if (page === 'console') renderConsole();
-    if (page === 'settings') loadSettingsForm({ fresh: true });
+    if (page === 'settings') { loadSettingsForm({ fresh: true }); loadServerOptions(); loadCompanions(); loadTunnel(); loadTailscale(); }
   }
 
   // ---------- server status ----------
   function uptime() {
     if (!state.startedAt) return '';
     const m = Math.floor((Date.now() - state.startedAt) / 60000);
-    return m < 1 ? 'just now' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+    return m < 1 ? T('just now') : m < 60 ? T('{m} min', { m }) : T('{h} h {m} min', { h: Math.floor(m / 60), m: m % 60 });
   }
   function renderStatus() {
     $('dot').classList.toggle('on', state.running);
-    $('statusText').textContent = state.running ? `Running · ${uptime()}` : 'Server stopped';
-    $('btnPower').innerHTML = state.running ? `${icon('stop')}<span>Stop</span>` : `${icon('play')}<span>Start</span>`;
-    $('heroTitle').textContent = state.running ? 'SillyTavern is running' : 'Ready when you are';
+    $('statusText').textContent = state.running ? `${T('Running')} · ${uptime()}` : T('Server stopped');
+    $('btnPower').innerHTML = state.running ? `${icon('stop')}<span>${T('Stop')}</span>` : `${icon('play')}<span>${T('Start')}</span>`;
+    $('btnPower').title = state.running ? T('Stop server') : T('Start server');
+    $('heroTitle').textContent = state.running ? T('SillyTavern is running') : T('Ready when you are');
     $('heroSub').textContent = state.running
-      ? 'Your server is up. Open the window any time — closing it keeps the server running.'
-      : 'Start the server and open SillyTavern in its own window.';
+      ? T('Your server is up. Open the window any time — closing it keeps the server running.')
+      : T('Start the server and open SillyTavern in its own window.');
     $('heroUrl').textContent = state.running ? state.url : '';
     const w = state.windows;
-    $('btnOpen').lastElementChild.textContent = !w.open ? 'Open SillyTavern' : w.minimized ? 'Restore SillyTavern' : 'Show SillyTavern';
+    $('btnOpen').lastElementChild.textContent = !w.open ? T('Open SillyTavern') : w.minimized ? T('Restore SillyTavern') : T('Show SillyTavern');
     $('btnMinST').hidden = !w.open || w.minimized;
   }
   function setBusy(label) {
     state.busy = label;
     $('busy').classList.toggle('show', !!label);
-    $('busyText').textContent = label ? `${label}… you can watch progress in the Console.` : '';
+    $('busyText').textContent = label ? T('{task}… you can watch progress in the Console.', { task: label }) : '';
     document.querySelectorAll('[data-task]').forEach(b => b.disabled = !!label);
     if (!label && $('setup').classList.contains('show')) loadSetup();
     if ($('dlModal').classList.contains('show') && !dl.running) checkTarget();
@@ -1182,34 +1326,34 @@
   // ---------- version info ----------
   async function loadInfo(info) {
     info = info || await D.stInfo();
-    $('infoVersion').textContent = info.version ? `SillyTavern ${info.version}` : 'Not found';
-    $('infoBranch').innerHTML = info.branch ? `<span class="tag fox">${esc(info.branch)}</span>` : info.pinned ? `<span class="tag">fixed at ${esc(info.pinned)}</span>` : '—';
-    $('branchTag').textContent = info.branch || (info.pinned ? `version ${info.pinned} (fixed)` : 'unknown');
+    $('infoVersion').textContent = info.version ? `SillyTavern ${info.version}` : T('Not found');
+    $('infoBranch').innerHTML = info.branch ? `<span class="tag fox">${esc(info.branch)}</span>` : info.pinned ? `<span class="tag">${T('fixed at {version}', { version: esc(info.pinned) })}</span>` : '—';
+    $('branchTag').textContent = info.branch || (info.pinned ? T('version {version} (fixed)', { version: info.pinned }) : T('unknown'));
     $('infoCommit').textContent = info.commit ? `${info.commitDate} · ${info.commit}` : '—';
     const tag = $('updateTag');
     const upd = $('btnUpdate');
     $('btnIncoming').hidden = true;
     if (!info.isGit) {
-      tag.className = 'tag warn'; tag.textContent = 'Not a git install';
-      $('updateHint').textContent = 'Updates need a SillyTavern installed with git.';
+      tag.className = 'tag warn'; tag.textContent = T('Not a git install');
+      $('updateHint').textContent = T('Updates need a SillyTavern installed with git.');
       upd.hidden = true;
     } else if (info.pinned) {
       // Downloaded as a specific version: on no branch, so never "behind".
-      tag.className = 'tag'; tag.textContent = 'Fixed version';
-      $('updateHint').textContent = 'Not updated. For updates, choose release or staging in Maintenance.';
+      tag.className = 'tag'; tag.textContent = T('Fixed version');
+      $('updateHint').textContent = T('Not updated. For updates, choose release or staging in Maintenance.');
       upd.hidden = true;
     } else if (info.behind > 0) {
-      tag.className = 'tag fox'; tag.textContent = `Update available`;
+      tag.className = 'tag fox'; tag.textContent = T('Update available');
       $('btnIncoming').hidden = false;
-      $('updateHint').textContent = `${info.behind} new change${info.behind === 1 ? '' : 's'} on ${info.branch}`;
+      $('updateHint').textContent = T('{n} new change on {branch}|{n} new changes on {branch}', { n: info.behind, branch: info.branch });
       upd.hidden = false;
     } else if (info.behind === 0) {
-      tag.className = 'tag good'; tag.textContent = 'Up to date';
+      tag.className = 'tag good'; tag.textContent = T('Up to date');
       $('updateHint').textContent = '';
       upd.hidden = true;
     } else {
-      tag.className = 'tag'; tag.textContent = 'Unknown';
-      $('updateHint').textContent = 'Click "Check for updates".';
+      tag.className = 'tag'; tag.textContent = T('Unknown');
+      $('updateHint').textContent = T('Click "Check for updates".');
       upd.hidden = true;
     }
     const nb = $('navUpdate');
@@ -1217,7 +1361,7 @@
     nb.textContent = '1';
   }
   $('btnCheck').onclick = async () => {
-    $('updateTag').className = 'tag'; $('updateTag').textContent = 'Checking…';
+    $('updateTag').className = 'tag'; $('updateTag').textContent = T('Checking…');
     loadInfo(await D.checkUpdates());
   };
   $('btnUpdate').onclick = () => D.update();
@@ -1229,33 +1373,33 @@
     state.appUpdate = u;
     const pct = u.percent || 0;
     const line = {
-      checking: 'checking for updates…',
-      current: 'up to date',
-      error: `could not check for updates (${u.error})`,
-      available: `version ${u.version} is available (see Home)`,
-      downloading: `downloading ${u.version}… ${pct}%`,
-      ready: `version ${u.version} is ready to install (see Home)`,
+      checking: T('checking for updates…'),
+      current: T('up to date'),
+      error: T('could not check for updates ({reason})', { reason: u.error }),
+      available: T('version {version} is available (see Home)', { version: u.version }),
+      downloading: T('downloading {version}… {pct}%', { version: u.version, pct: String(pct) }),
+      ready: T('version {version} is ready to install (see Home)', { version: u.version }),
     }[u.status];
-    $('appUpdStatus').textContent = `This app: v${state.appVersion}${line ? ` · ${line}` : ''}`;
+    $('appUpdStatus').textContent = `${T('This app: v{version}', { version: state.appVersion })}${line ? ` · ${line}` : ''}`;
     $('btnAppCheck').disabled = ['checking', 'downloading', 'ready'].includes(u.status);
     const show = ['available', 'downloading', 'ready'].includes(u.status);
     $('appUpdCard').hidden = !show;
     if (!show) return;
-    $('appUpdVer').innerHTML = `${esc(u.version)}${u.preview ? ' <span class="tag warn" title="A test version (pre-release). You get these because Settings → Get preview versions is on.">preview</span>' : ''}`;
-    $('appUpdNotes').textContent = plainNotes(u.notes) || 'No notes for this release.';
+    $('appUpdVer').innerHTML = `${esc(u.version)}${u.preview ? ` <span class="tag warn" title="${esc(T('A test version (pre-release). You get these because Settings → Get preview versions is on.'))}">${T('preview')}</span>` : ''}`;
+    $('appUpdNotes').textContent = plainNotes(u.notes) || T('No notes for this release.');
     $('appUpdBar').hidden = u.status !== 'downloading';
     $('appUpdBar').firstElementChild.style.width = `${pct}%`;
     const btn = $('btnAppUpd');
     btn.disabled = u.status === 'downloading';
     if (!u.canInstall) {
-      btn.innerHTML = `${icon('external')}Open release page`;
-      $('appUpdHint').textContent = u.kind === 'source' ? 'Running from source: pull the new version with git.' : 'Download the new version from the release page.';
+      btn.innerHTML = `${icon('external')}${T('Open release page')}`;
+      $('appUpdHint').textContent = u.kind === 'source' ? T('Running from source: pull the new version with git.') : T('Download the new version from the release page.');
     } else if (u.status === 'ready') {
-      btn.innerHTML = `${icon('refresh')}Restart and update`;
-      $('appUpdHint').textContent = 'The app closes, installs the update and opens again. The SillyTavern server is stopped first.';
+      btn.innerHTML = `${icon('refresh')}${T('Restart and update')}`;
+      $('appUpdHint').textContent = T('The app closes, installs the update and opens again. The SillyTavern server is stopped first.');
     } else {
-      btn.innerHTML = `${icon('download')}Download update`;
-      $('appUpdHint').textContent = u.status === 'downloading' ? `${pct}%` : u.error ? `Download failed: ${u.error}` : '';
+      btn.innerHTML = `${icon('download')}${T('Download update')}`;
+      $('appUpdHint').textContent = u.status === 'downloading' ? `${pct}%` : u.error ? T('Download failed: {reason}', { reason: u.error }) : '';
     }
   }
   $('btnAppUpd').onclick = () => {
@@ -1277,17 +1421,19 @@
     const first = info.addresses[0];
     $('lanUrls').innerHTML = info.addresses.length
       ? info.addresses.map(a => `<div><span class="lan-url">${esc(a.url)}</span>${info.addresses.length > 1 ? ` <span class="muted small">${esc(a.name)}</span>` : ''}</div>`).join('')
-      : '<span class="muted">No home network found</span>';
+      : `<span class="muted">${T('No home network found')}</span>`;
     $('lanQr').innerHTML = first ? first.qr : '';
     $('lanQr').hidden = !first;
     let hint;
-    if (!first) hint = 'This PC is not on a home network right now. Connect it to your Wi-Fi or router.';
-    else if (info.attached) hint = 'SillyTavern was started outside this app, so phone access isn\'t applied to it. Stop it there and start it from here.';
-    else if (!info.running) hint = 'Start the server, then open this address on a phone or tablet on the same Wi-Fi, or scan the code.';
-    else if (info.needsRestart) hint = 'Phone settings changed. Restart the server to apply them.';
-    else hint = `Open this on a phone or tablet on the same Wi-Fi, or scan the code. ${info.hasPassword ? `Sign in as "${info.user}" with your password.` : 'No password is set.'} If Windows asks whether Node.js may use the network, choose Allow.`;
-    if (info.whitelistTxt) hint += ' Note: SillyTavern\'s whitelist.txt decides who may connect, not this app.';
-    if (info.older) hint += ` ⚠ This SillyTavern is ${info.older.newer} release${info.older.newer === 1 ? '' : 's'} behind (latest ${info.older.latest})${info.older.fixes.length ? ' and misses security fixes' : ''}. Other devices can reach it: update it first.`;
+    if (!first) hint = T('This PC is not on a home network right now. Connect it to your Wi-Fi or router.');
+    else if (info.attached) hint = T('SillyTavern was started outside this app, so phone access isn\'t applied to it. Stop it there and start it from here.');
+    else if (!info.running) hint = T('Start the server, then open this address on a phone or tablet on the same Wi-Fi, or scan the code.');
+    else if (info.needsRestart) hint = T('Phone settings changed. Restart the server to apply them.');
+    else hint = `${T('Open this on a phone or tablet on the same Wi-Fi, or scan the code.')} ${info.hasPassword ? T('Sign in as "{user}" with your password.', { user: info.user }) : T('No password is set.')} ${T('If Windows asks whether Node.js may use the network, choose Allow.')}`;
+    if (info.whitelistTxt) hint += ` ${T('Note: SillyTavern\'s whitelist.txt decides who may connect, not this app.')}`;
+    if (info.older) hint += ` ⚠ ${info.older.fixes.length
+      ? T('This SillyTavern is {n} release behind (latest {latest}) and misses security fixes. Other devices can reach it: update it first.|This SillyTavern is {n} releases behind (latest {latest}) and misses security fixes. Other devices can reach it: update it first.', { n: info.older.newer, latest: info.older.latest })
+      : T('This SillyTavern is {n} release behind (latest {latest}). Other devices can reach it: update it first.|This SillyTavern is {n} releases behind (latest {latest}). Other devices can reach it: update it first.', { n: info.older.newer, latest: info.older.latest })}`;
     $('lanHint').textContent = hint;
     $('btnLanRestart').hidden = !info.needsRestart;
   }
@@ -1297,16 +1443,16 @@
     $('setLan').checked = info.on;
     $('setLanUser').value = info.user || 'user';
     $('setLanPass').value = '';
-    $('setLanPass').placeholder = info.hasPassword ? 'Saved (type to change)' : 'None';
+    $('setLanPass').placeholder = info.hasPassword ? T('Saved (type to change)') : T('None');
     $('btnLanClear').hidden = !info.hasPassword;
   }
   async function saveLan(password) {
     $('btnLanSave').disabled = true;
-    $('lanStatus').textContent = state.running ? 'Saving… the server restarts if needed.' : 'Saving…';
+    $('lanStatus').textContent = state.running ? T('Saving… the server restarts if needed.') : T('Saving…');
     const info = await D.lanSave({ on: $('setLan').checked, user: $('setLanUser').value, password });
     unsaved.lan = false;
     $('btnLanSave').disabled = false;
-    $('lanStatus').textContent = 'Saved.';
+    $('lanStatus').textContent = T('Saved.');
     setTimeout(() => { $('lanStatus').textContent = ''; }, 2500);
     loadLan(info);
     fillLanForm();
@@ -1320,17 +1466,17 @@
     loadSchedule();
     const list = await D.listBackups();
     const el = $('backupList');
-    if (!list.length) { el.innerHTML = `<div class="empty">No backups yet. Click <b>Back up now</b> to make your first one.</div>`; return; }
+    if (!list.length) { el.innerHTML = `<div class="empty">${T('No backups yet. Click <b>Back up now</b> to make your first one.')}</div>`; return; }
     el.innerHTML = list.map(b => `
       <div class="item">
         <div class="main">
-          <div class="title">${esc(new Date(b.mtime).toLocaleString())}</div>
-          <div class="meta mono">${esc(b.name)}${b.where === 'elsewhere' ? ` · in ${esc(b.dir)}` : ''}</div>
+          <div class="title">${esc(new Date(b.mtime).toLocaleString(LOC))}</div>
+          <div class="meta mono">${esc(b.name)}${b.where === 'elsewhere' ? ` · ${T('in {dir}', { dir: esc(b.dir) })}` : ''}</div>
         </div>
-        <span class="tag ${b.auto ? '' : 'fox'}">${b.scheduled ? 'Scheduled' : b.auto ? 'Before update' : 'Manual'}</span>
+        <span class="tag ${b.auto ? '' : 'fox'}">${b.scheduled ? T('Scheduled') : b.auto ? T('Before update') : T('Manual')}</span>
         <span class="muted small" style="width:70px;text-align:right">${esc(b.sizeText)}</span>
-        <button class="btn sm" data-task data-restore="${esc(b.name)}" data-where="${esc(b.where)}">${icon('restore')}Restore</button>
-        <button class="btn sm ghost danger" data-del="${esc(b.name)}" data-where="${esc(b.where)}" title="Delete">${icon('trash')}</button>
+        <button class="btn sm" data-task data-restore="${esc(b.name)}" data-where="${esc(b.where)}">${icon('restore')}${T('Restore')}</button>
+        <button class="btn sm ghost danger" data-del="${esc(b.name)}" data-where="${esc(b.where)}" title="${T('Delete')}">${icon('trash')}</button>
       </div>`).join('');
     el.querySelectorAll('[data-restore]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => D.restoreBackup(b.dataset.restore, b.dataset.where); });
     el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => D.deleteBackup(b.dataset.del, b.dataset.where));
@@ -1338,10 +1484,10 @@
 
   // ----- scheduled backups -----
   const SCHED_HINT = {
-    off: 'Turn it on and the app backs up by itself — only when something changed since the last scheduled backup.',
-    start: 'Each time the app starts (a minute in), if something changed since the last scheduled backup.',
-    daily: 'Once a day while the app runs, if something changed since the last scheduled backup.',
-    weekly: 'Once a week while the app runs, if something changed since the last scheduled backup.',
+    off: T('Turn it on and the app backs up by itself — only when something changed since the last scheduled backup.'),
+    start: T('Each time the app starts (a minute in), if something changed since the last scheduled backup.'),
+    daily: T('Once a day while the app runs, if something changed since the last scheduled backup.'),
+    weekly: T('Once a week while the app runs, if something changed since the last scheduled backup.'),
   };
   function renderSchedule(s) {
     state.sched = s;
@@ -1352,15 +1498,15 @@
     $('schedMore').hidden = !on;
     $('btnSchedNow').hidden = !on;
     $('schedHint').textContent = SCHED_HINT[s.mode] || '';
-    $('schedDir').textContent = s.dir || 'backups/desktop inside each SillyTavern folder';
+    $('schedDir').textContent = s.dir || T('backups/desktop inside each SillyTavern folder');
     $('btnSchedDirOpen').hidden = !s.dir;
     $('btnSchedDirReset').hidden = !s.dir;
     if (document.activeElement !== $('schedKeep')) $('schedKeep').value = s.keep;
     $('schedErr').textContent = s.error || '';
-    $('schedStatus').innerHTML = s.profiles.map(p => `<div class="item" title="Saved in ${esc(p.dest)}">
+    $('schedStatus').innerHTML = s.profiles.map(p => `<div class="item" title="${esc(T('Saved in {dir}', { dir: p.dest }))}">
         <span class="check-ico ${p.error ? 'bad' : p.last ? 'ok' : ''}">${icon(p.error ? 'x' : p.last ? 'check' : 'clock')}</span>
-        <div class="main"><div class="title">${esc(p.name)}</div><div class="meta">${p.error ? `<span style="color:var(--bad)">Failed ${esc(ago(p.errorAt))}: ${esc(p.error)}</span>` : p.last ? `Last scheduled backup ${esc(ago(p.last))}` : 'No scheduled backup yet'}</div></div>
-      </div>`).join('') || '<div class="empty">No profile to back up.</div>';
+        <div class="main"><div class="title">${esc(p.name)}</div><div class="meta">${p.error ? `<span style="color:var(--bad)">${esc(T('Failed {when}: {reason}', { when: ago(p.errorAt), reason: p.error }))}</span>` : p.last ? esc(T('Last scheduled backup {when}', { when: ago(p.last) })) : T('No scheduled backup yet')}</div></div>
+      </div>`).join('') || `<div class="empty">${T('No profile to back up.')}</div>`;
     renderBackupErrors(s);
   }
   // Home: failed scheduled backups, until they work again or are dismissed.
@@ -1369,7 +1515,7 @@
     $('bkErrCard').hidden = !bad.length;
     $('bkErrList').innerHTML = bad.map(p => `<div class="item"><span class="check-ico bad">${icon('x')}</span>
       <div class="main"><div class="title">${esc(p.name)}</div><div class="meta">${esc(p.error.charAt(0).toUpperCase() + p.error.slice(1))} · ${esc(ago(p.errorAt))}</div></div>
-      <button class="btn sm" data-task data-sched-retry>Try again</button><button class="btn sm ghost" data-sched-dismiss="${esc(p.path)}">Dismiss</button></div>`).join('');
+      <button class="btn sm" data-task data-sched-retry>${T('Try again')}</button><button class="btn sm ghost" data-sched-dismiss="${esc(p.path)}">${T('Dismiss')}</button></div>`).join('');
     $('bkErrList').querySelectorAll('[data-sched-retry]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => D.backupScheduleRun(); });
     $('bkErrList').querySelectorAll('[data-sched-dismiss]').forEach(b => b.onclick = async () => renderSchedule(await D.backupScheduleDismiss(b.dataset.schedDismiss)));
   }
@@ -1391,27 +1537,27 @@
   // ---------- extensions ----------
   // ---------- SillyTavern extensions ----------
   // Ratings come from the Tavernary catalog (TavernKeeper scans), credited below the list.
-  const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 2 ? 'just now' : m < 120 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+  const ago = at => { const m = Math.round((Date.now() - at) / 60000); return m < 2 ? T('just now') : m < 120 ? T('{m} min ago', { m }) : m < 2880 ? T('{h} h ago', { h: Math.round(m / 60) }) : T('{d} days ago', { d: Math.round(m / 1440) }); };
   const RISK = {
-    low: ['good', 'Low concern'], medium: ['warn', 'Some concern'], moderate: ['warn', 'Some concern'],
-    high: ['bad', 'High concern'], critical: ['bad', 'Serious concern'],
+    low: ['good', T('Low concern')], medium: ['warn', T('Some concern')], moderate: ['warn', T('Some concern')],
+    high: ['bad', T('High concern')], critical: ['bad', T('Serious concern')],
   };
   const riskBad = r => ['high', 'critical'].includes(r);
   // The badge for an installed extension (or a catalog entry).
   function ratingTag(r, { remote = true } = {}) {
-    if (!r) return remote ? '<span class="tag" title="This extension is not in the Tavernary catalog, so there is no scan for it. That alone says nothing good or bad.">not in catalog</span>' : '';
-    const [cls, label] = RISK[r.risk] || ['', r.state === 'unsupported' ? 'Scan not possible' : 'Not scanned yet'];
-    const version = { scanned: 'your version was scanned', newer: 'your version is newer than the last scan', other: 'your version is not the scanned one' }[r.version] || '';
-    const tip = [r.headline, r.scanSummary || r.summary, version && `Note: ${version}.`, r.scannedAt && `Scanned ${new Date(r.scannedAt).toLocaleDateString()}.`, 'A scan is information about one version, not a guarantee.'].filter(Boolean).join(' ');
-    return `<span class="tag ${cls}" title="${esc(tip)}">${esc(label)}${r.version === 'newer' || r.version === 'other' ? ' · older scan' : ''}</span>`;
+    if (!r) return remote ? `<span class="tag" title="${esc(T('This extension is not in the Tavernary catalog, so there is no scan for it. That alone says nothing good or bad.'))}">${T('not in catalog')}</span>` : '';
+    const [cls, label] = RISK[r.risk] || ['', r.state === 'unsupported' ? T('Scan not possible') : T('Not scanned yet')];
+    const version = { scanned: T('Note: your version was scanned.'), newer: T('Note: your version is newer than the last scan.'), other: T('Note: your version is not the scanned one.') }[r.version] || '';
+    const tip = [r.headline, r.scanSummary || r.summary, version, r.scannedAt && T('Scanned {date}.', { date: new Date(r.scannedAt).toLocaleDateString(LOC) }), T('A scan is information about one version, not a guarantee.')].filter(Boolean).join(' ');
+    return `<span class="tag ${cls}" title="${esc(tip)}">${esc(label)}${r.version === 'newer' || r.version === 'other' ? ` · ${T('older scan')}` : ''}</span>`;
   }
-  const reportLink = r => (r?.reportUrl ? `<button class="link" data-xurl="${esc(r.reportUrl)}">report</button>` : '');
+  const reportLink = r => (r?.reportUrl ? `<button class="link" data-xurl="${esc(r.reportUrl)}">${T('report')}</button>` : '');
   document.addEventListener('click', e => { const b = e.target.closest('[data-xurl]'); if (b) D.openUrl(b.dataset.xurl); });
 
   const xs = { list: [], undo: { last: null, back: {} }, catalog: null, needsReload: false };
   async function loadExtensions(fetch) {
     const el = $('extList');
-    if (fetch) el.innerHTML = '<div class="empty">Checking each extension for updates…</div>';
+    if (fetch) el.innerHTML = `<div class="empty">${T('Checking each extension for updates…')}</div>`;
     // The ratings: loaded once a day (in the background the first time).
     if (!xs.catalogTried) { xs.catalogTried = true; D.extCatalog(false).then(r => { xs.catalogErr = r.ok ? r.stale : r.error; if (r.ok) loadExtensions(false); else renderCredit(); }); }
     // A refresh can overlap "Check for updates": only the newest answer counts.
@@ -1423,19 +1569,19 @@
     $('navExt').hidden = !behind;
     $('navExt').textContent = behind;
     $('btnExtUndo').hidden = !r.undo.last;
-    if (r.undo.last) $('btnExtUndo').title = `Puts back ${r.undo.last.names.join(', ')} as ${r.undo.last.count === 1 ? 'it was' : 'they were'} before the update of ${new Date(r.undo.last.at).toLocaleString()}.`;
+    if (r.undo.last) $('btnExtUndo').title = T('Puts back {names} as it was before the update of {when}.|Puts back {names} as they were before the update of {when}.', { n: r.undo.last.count, names: r.undo.last.names.join(', '), when: new Date(r.undo.last.at).toLocaleString(LOC) });
     $('btnExtReload').hidden = !xs.needsReload || !state.windows.open;
     renderCredit();
-    if (!r.exts.length) { el.innerHTML = '<div class="empty">No third-party extensions installed. <button class="link" id="btnExtFind2">Find extensions</button></div>'; $('btnExtFind2').onclick = openFind; return; }
+    if (!r.exts.length) { el.innerHTML = `<div class="empty">${T('No third-party extensions installed.')} <button class="link" id="btnExtFind2">${T('Find extensions')}</button></div>`; $('btnExtFind2').onclick = openFind; return; }
     el.innerHTML = r.exts.map(e => {
-      const status = !e.isGit ? '<span class="tag" title="Not installed with Git: it can\'t be updated here">manual install</span>'
-        : e.behind > 0 ? `<span class="tag fox">${e.behind} update${e.behind === 1 ? '' : 's'}</span>`
-        : e.behind === 0 ? '<span class="tag good">up to date</span>' : '<span class="tag">unknown</span>';
-      const meta = [e.version && `v${e.version}`, e.author, e.scope === 'all users' ? 'all users' : `user: ${e.scope}`].filter(Boolean).map(esc).join(' · ');
+      const status = !e.isGit ? `<span class="tag" title="${esc(T('Not installed with Git: it can\'t be updated here'))}">${T('manual install')}</span>`
+        : e.behind > 0 ? `<span class="tag fox">${T('{n} update|{n} updates', { n: e.behind })}</span>`
+        : e.behind === 0 ? `<span class="tag good">${T('up to date')}</span>` : `<span class="tag">${T('unknown')}</span>`;
+      const meta = [e.version && `v${e.version}`, e.author, e.scope === 'all users' ? T('all users') : T('user: {name}', { name: e.scope })].filter(Boolean).map(esc).join(' · ');
       const back = xs.undo.back[e.path];
       const acts = [
-        e.behind > 0 ? `<button class="btn sm" data-task data-xupd="${esc(e.path)}">Update</button>` : '',
-        back ? `<button class="btn sm ghost" data-task data-xback="${esc(e.path)}" title="Back to the version from before the update of ${esc(new Date(back.at).toLocaleString())}">${icon('restore')}Roll back</button>` : '',
+        e.behind > 0 ? `<button class="btn sm" data-task data-xupd="${esc(e.path)}">${T('Update')}</button>` : '',
+        back ? `<button class="btn sm ghost" data-task data-xback="${esc(e.path)}" title="${esc(T('Back to the version from before the update of {when}', { when: new Date(back.at).toLocaleString(LOC) }))}">${icon('restore')}${T('Roll back')}</button>` : '',
       ].join('');
       return `<div class="item"><div class="main"><div class="title">${esc(e.name)}</div>${e.isGit ? `<div class="meta tagline">${ratingTag(e.rating, { remote: !!e.remote })} ${reportLink(e.rating)}</div>` : ''}<div class="meta">${meta}</div></div>${status}<div class="acts">${acts}</div></div>`;
     }).join('');
@@ -1445,9 +1591,9 @@
   function renderCredit() {
     const c = xs.catalog;
     $('extCredit').innerHTML = c
-      ? `Safety ratings: TavernKeeper scans from the <button class="link" data-xurl="https://tavernary.org">Tavernary</button> catalog (${num(c.count)} extensions, data under the <button class="link" data-xurl="${esc(c.credit.licenseUrl)}">ODbL</button>), checked ${ago(c.checkedAt)}. <button class="link" id="btnExtRatings">Refresh</button> · A rating describes one version and is not a guarantee; this app is not affiliated with Tavernary.${xs.catalogErr ? ` <span class="err">(${esc(xs.catalogErr)})</span>` : ''}`
-      : xs.catalogErr ? `<span class="err">Safety ratings unavailable: ${esc(xs.catalogErr)}.</span> <button class="link" id="btnExtRatings">Try again</button>` : 'Loading safety ratings…';
-    if ($('btnExtRatings')) $('btnExtRatings').onclick = async () => { $('extCredit').textContent = 'Loading safety ratings…'; const r = await D.extCatalog(true); xs.catalogErr = r.ok ? r.stale : r.error; loadExtensions(false); };
+      ? `${T('Safety ratings: TavernKeeper scans from the {tavernary} catalog ({n} extensions, data under the {odbl}), checked {when}.', { tavernary: '<button class="link" data-xurl="https://tavernary.org">Tavernary</button>', n: c.count, odbl: `<button class="link" data-xurl="${esc(c.credit.licenseUrl)}">ODbL</button>`, when: ago(c.checkedAt) })} <button class="link" id="btnExtRatings">${T('Refresh')}</button> · ${T('A rating describes one version and is not a guarantee; this app is not affiliated with Tavernary.')}${xs.catalogErr ? ` <span class="err">(${esc(xs.catalogErr)})</span>` : ''}`
+      : xs.catalogErr ? `<span class="err">${esc(T('Safety ratings unavailable: {reason}.', { reason: xs.catalogErr }))}</span> <button class="link" id="btnExtRatings">${T('Try again')}</button>` : T('Loading safety ratings…');
+    if ($('btnExtRatings')) $('btnExtRatings').onclick = async () => { $('extCredit').textContent = T('Loading safety ratings…'); const r = await D.extCatalog(true); xs.catalogErr = r.ok ? r.stale : r.error; loadExtensions(false); };
   }
   $('btnExtCheck').onclick = () => loadExtensions(true);
   // After installing, updating or going back, open SillyTavern pages still run the old code.
@@ -1466,23 +1612,23 @@
   $('btnXClose').onclick = closeX;
   async function reviewUpdates(only) {
     const fresh = !only;
-    if (fresh) { $('extList').innerHTML = '<div class="empty">Checking each extension for updates…</div>'; await loadExtensions(true); }
+    if (fresh) { $('extList').innerHTML = `<div class="empty">${T('Checking each extension for updates…')}</div>`; await loadExtensions(true); }
     const list = xs.list.filter(e => e.behind > 0 && (!only || only.includes(e.path)));
-    if (!list.length) { append('All extensions are up to date.'); return; }
-    $('xTitle').textContent = list.length === 1 ? `Update ${list[0].name}` : `Update ${list.length} extensions`;
-    $('xLead').textContent = 'Untick anything you don\'t want to update now. The versions from before are remembered, so you can undo this update afterwards.';
+    if (!list.length) { append(T('All extensions are up to date.')); return; }
+    $('xTitle').textContent = list.length === 1 ? T('Update {name}', { name: list[0].name }) : T('Update {n} extension|Update {n} extensions', { n: list.length });
+    $('xLead').textContent = T('Untick anything you don\'t want to update now. The versions from before are remembered, so you can undo this update afterwards.');
     $('xExactBox').hidden = true;
     $('xList').innerHTML = list.map(e => {
       const r = e.rating;
-      const incoming = !r ? '<span class="tag" title="Not in the Tavernary catalog: no scan">no scan</span>'
-        : r.incoming === 'scanned' ? `<span class="tag ${(RISK[r.incomingRisk] || ['good'])[0]}" title="The exact version this update brings was scanned.">update scanned${r.incomingRisk && r.incomingRisk !== 'low' ? `: ${esc((RISK[r.incomingRisk] || [, r.incomingRisk])[1])}` : ''}</span>`
-        : '<span class="tag warn" title="The version this update brings has not been scanned yet. Most updates are fine; read the changes if you are unsure.">update not scanned yet</span>';
+      const incoming = !r ? `<span class="tag" title="${esc(T('Not in the Tavernary catalog: no scan'))}">${T('no scan')}</span>`
+        : r.incoming === 'scanned' ? `<span class="tag ${(RISK[r.incomingRisk] || ['good'])[0]}" title="${esc(T('The exact version this update brings was scanned.'))}">${T('update scanned')}${r.incomingRisk && r.incomingRisk !== 'low' ? `: ${esc((RISK[r.incomingRisk] || [, r.incomingRisk])[1])}` : ''}</span>`
+        : `<span class="tag warn" title="${esc(T('The version this update brings has not been scanned yet. Most updates are fine; read the changes if you are unsure.'))}">${T('update not scanned yet')}</span>`;
       const bad = riskBad(r?.latestRisk) || riskBad(r?.incomingRisk);
       return `<label class="item" style="cursor:pointer"><input type="checkbox" data-xpick="${esc(e.path)}"${bad ? '' : ' checked'} style="width:16px;height:16px;accent-color:var(--accent)">
-        <div class="main"><div class="title">${esc(e.name)}</div><div class="meta tagline">${ratingTag(r, { remote: !!e.remote })} ${reportLink(r)}</div><div class="meta">${e.behind} new change${e.behind === 1 ? '' : 's'}${bad ? ' · <span style="color:var(--bad)">rated high concern: read the report before updating</span>' : ''}</div></div>${incoming}</label>`;
+        <div class="main"><div class="title">${esc(e.name)}</div><div class="meta tagline">${ratingTag(r, { remote: !!e.remote })} ${reportLink(r)}</div><div class="meta">${T('{n} new change|{n} new changes', { n: e.behind })}${bad ? ` · <span style="color:var(--bad)">${T('rated high concern: read the report before updating')}</span>` : ''}</div></div>${incoming}</label>`;
     }).join('');
     const count = () => $('xList').querySelectorAll('[data-xpick]:checked').length;
-    const sync = () => { const n = count(); $('btnXGo').innerHTML = `${icon('download')}Update ${n || ''} extension${n === 1 ? '' : 's'}`; $('btnXGo').disabled = !n || !!state.busy; };
+    const sync = () => { const n = count(); $('btnXGo').innerHTML = `${icon('download')}${n ? T('Update {n} extension|Update {n} extensions', { n }) : T('Update extensions')}`; $('btnXGo').disabled = !n || !!state.busy; };
     $('xList').querySelectorAll('[data-xpick]').forEach(c => c.onchange = sync);
     sync();
     $('xNote').textContent = '';
@@ -1509,29 +1655,29 @@
   async function runFind() {
     const el = $('xfList');
     if (!xs.catalog) {
-      el.innerHTML = '<div class="empty">Loading the catalog…</div>';
+      el.innerHTML = `<div class="empty">${T('Loading the catalog…')}</div>`;
       const r = await D.extCatalog(false);
-      if (!r.ok) { el.innerHTML = `<div class="empty err">The catalog could not be loaded: ${esc(r.error)}</div>`; return; }
+      if (!r.ok) { el.innerHTML = `<div class="empty err">${esc(T('The catalog could not be loaded: {reason}', { reason: r.error }))}</div>`; return; }
       xs.catalog = r.info;
     }
     const q = $('xfSearch').value.trim();
     const res = await D.extSearch(q);
-    $('xfCredit').innerHTML = `From the <button class="link" data-xurl="https://tavernary.org">Tavernary</button> catalog (ODbL). It lists projects by their creators; listing and ratings are not endorsements, and installing runs the creator's code. ${q ? '' : 'Most-starred first. '}${res.length >= 60 ? 'Showing the first 60: search to narrow it down.' : ''}`;
+    $('xfCredit').innerHTML = `${T('From the {tavernary} catalog (ODbL). It lists projects by their creators; listing and ratings are not endorsements, and installing runs the creator\'s code.', { tavernary: '<button class="link" data-xurl="https://tavernary.org">Tavernary</button>' })} ${q ? '' : T('Most-starred first.')} ${res.length >= 60 ? T('Showing the first 60: search to narrow it down.') : ''}`;
     el.innerHTML = res.length ? res.map(e => {
-      const [cls, label] = RISK[e.risk] || ['', e.state === 'unsupported' ? 'Scan not possible' : 'Not scanned yet'];
-      const when = e.lastActivity ? `active ${new Date(e.lastActivity).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })}` : '';
+      const [cls, label] = RISK[e.risk] || ['', e.state === 'unsupported' ? T('Scan not possible') : T('Not scanned yet')];
+      const when = e.lastActivity ? T('active {date}', { date: new Date(e.lastActivity).toLocaleDateString(LOC, { year: 'numeric', month: 'short' }) }) : '';
       return `<div class="item"><div class="main">
-          <div class="title">${esc(e.name)} <span class="tag ${cls}" title="${esc(e.headline || '')}">${esc(label)}</span>${e.dormant ? ' <span class="tag" title="No recent activity from its creator">dormant</span>' : ''}</div>
+          <div class="title">${esc(e.name)} <span class="tag ${cls}" title="${esc(e.headline || '')}">${esc(label)}</span>${e.dormant ? ` <span class="tag" title="${esc(T('No recent activity from its creator'))}">${T('dormant')}</span>` : ''}</div>
           <div class="meta" style="white-space:normal">${esc(e.summary)}</div>
-          <div class="meta">${[e.tags.join(', '), e.stars ? `★ ${num(e.stars)}` : '', when, e.license].filter(Boolean).map(esc).join(' · ')} · <button class="link" data-xurl="${esc(e.url)}">page</button>${e.reportUrl ? ` · <button class="link" data-xurl="${esc(e.reportUrl)}">scan report</button>` : ''}</div></div>
-        ${e.installed ? '<span class="tag good">installed</span>' : `<button class="btn sm" data-task data-xinst="${esc(e.id)}">${icon('download')}Install</button>`}</div>`;
-    }).join('') : '<div class="empty">Nothing found. Try other words.</div>';
+          <div class="meta">${[e.tags.join(', '), e.stars ? `★ ${num(e.stars)}` : '', when, e.license].filter(Boolean).map(esc).join(' · ')} · <button class="link" data-xurl="${esc(e.url)}">${T('page')}</button>${e.reportUrl ? ` · <button class="link" data-xurl="${esc(e.reportUrl)}">${T('scan report')}</button>` : ''}</div></div>
+        ${e.installed ? `<span class="tag good">${T('installed')}</span>` : `<button class="btn sm" data-task data-xinst="${esc(e.id)}">${icon('download')}${T('Install')}</button>`}</div>`;
+    }).join('') : `<div class="empty">${T('Nothing found. Try other words.')}</div>`;
     el.querySelectorAll('[data-xinst]').forEach(b => {
       b.disabled = !!state.busy;
       b.onclick = async () => {
         b.disabled = true;
         const r = await D.extInstall(b.dataset.xinst);
-        if (r.error) append(`ERROR: ${r.error}`);
+        if (r.error) append(`${T('ERROR:')} ${r.error}`);
         if (r.installed) { xs.needsReload = true; runFind(); loadExtensions(false); loadKits(); } else b.disabled = false;
       };
     });
@@ -1544,16 +1690,16 @@
     $('kitList').innerHTML = kits.length ? kits.map(k => {
       const missing = k.extensions.filter(x => !x.installed).length;
       return `<div class="item"><div class="main"><div class="title">${esc(k.name)}</div>
-          <div class="meta">${k.extensions.length} extension${k.extensions.length === 1 ? '' : 's'} · ${missing ? `<span style="color:var(--accent2)">${missing} not installed in this profile</span>` : 'all installed here'}${k.description ? ` · ${esc(k.description)}` : ''}</div></div>
-        <div class="acts">${missing ? `<button class="btn sm" data-task data-kinst="${esc(k.id)}">${icon('download')}Install missing…</button>` : ''}
-        <button class="btn sm ghost" data-kexp="${esc(k.id)}" title="Save as a file to share">Export</button>
-        <button class="btn sm ghost danger" data-kdel="${esc(k.id)}" title="Delete the Kit (installed extensions stay)">${icon('trash')}</button></div></div>`;
-    }).join('') : '<div class="empty">No Kits yet. <b style="color:var(--title)">Save my extensions as a Kit</b> remembers the ones installed now.</div>';
+          <div class="meta">${T('{n} extension|{n} extensions', { n: k.extensions.length })} · ${missing ? `<span style="color:var(--accent2)">${T('{n} not installed in this profile', { n: missing })}</span>` : T('all installed here')}${k.description ? ` · ${esc(k.description)}` : ''}</div></div>
+        <div class="acts">${missing ? `<button class="btn sm" data-task data-kinst="${esc(k.id)}">${icon('download')}${T('Install missing…')}</button>` : ''}
+        <button class="btn sm ghost" data-kexp="${esc(k.id)}" title="${esc(T('Save as a file to share'))}">${T('Export')}</button>
+        <button class="btn sm ghost danger" data-kdel="${esc(k.id)}" title="${esc(T('Delete the Kit (installed extensions stay)'))}">${icon('trash')}</button></div></div>`;
+    }).join('') : `<div class="empty">${T('No Kits yet. <b>Save my extensions as a Kit</b> remembers the ones installed now.')}</div>`;
     $('kitList').querySelectorAll('[data-kinst]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => reviewKit(xs.kits.find(k => k.id === b.dataset.kinst)); });
     $('kitList').querySelectorAll('[data-kexp]').forEach(b => b.onclick = () => D.kitExport(b.dataset.kexp));
     $('kitList').querySelectorAll('[data-kdel]').forEach(b => b.onclick = async () => { if (await D.kitDelete(b.dataset.kdel)) loadKits(); });
   }
-  $('btnKitNew').onclick = () => { $('kitForm').hidden = false; $('kitErr').textContent = ''; $('kitName').value = $('kitName').value || 'My extensions'; $('kitName').focus(); };
+  $('btnKitNew').onclick = () => { $('kitForm').hidden = false; $('kitErr').textContent = ''; $('kitName').value = $('kitName').value || T('My extensions'); $('kitName').focus(); };
   $('btnKitCancel').onclick = () => { $('kitForm').hidden = true; };
   $('kitName').onkeydown = e => { if (e.key === 'Enter') $('btnKitSave').click(); };
   $('btnKitSave').onclick = async () => {
@@ -1564,29 +1710,29 @@
     $('kitForm').hidden = true; $('kitName').value = ''; $('kitDesc').value = '';
     loadKits();
   };
-  $('btnKitImport').onclick = async () => { const r = await D.kitImport(); if (r.error) append(`ERROR: ${r.error}`); loadKits(); };
+  $('btnKitImport').onclick = async () => { const r = await D.kitImport(); if (r.error) append(`${T('ERROR:')} ${r.error}`); loadKits(); };
 
   // What a Kit would install here, with ratings; nothing is installed without a tick.
   function reviewKit(kit) {
     const missing = kit.extensions.filter(x => !x.installed);
-    $('xTitle').textContent = `Install from "${kit.name}"`;
-    $('xLead').textContent = `${missing.length} of its ${kit.extensions.length} extensions are not installed in this profile. Untick any you don't want. Extensions from a Kit someone else made run their code like any other: check the ratings and pages first.`;
+    $('xTitle').textContent = T('Install from "{name}"', { name: kit.name });
+    $('xLead').textContent = `${T('{missing} of its {total} extensions are not installed in this profile.', { missing: missing.length, total: kit.extensions.length })} ${T('Untick any you don\'t want. Extensions from a Kit someone else made run their code like any other: check the ratings and pages first.')}`;
     $('xExactBox').hidden = !missing.some(x => x.commit);
     $('xExact').checked = false;
     $('xList').innerHTML = missing.map(x => `<label class="item" style="cursor:pointer"><input type="checkbox" data-xpick="${esc(x.url)}"${riskBad(x.rating?.latestRisk) ? '' : ' checked'} style="width:16px;height:16px;accent-color:var(--accent)">
-        <div class="main"><div class="title">${esc(x.name || x.url)}</div><div class="meta tagline">${ratingTag(x.rating ? { ...x.rating, version: '' } : null)} ${reportLink(x.rating)}</div><div class="meta"><button class="link" data-xurl="${esc(x.url)}">${esc(x.url)}</button>${x.scope === 'all users' ? ' · for all users' : ''}</div></div></label>`).join('');
-    const sync = () => { const n = $('xList').querySelectorAll('[data-xpick]:checked').length; $('btnXGo').innerHTML = `${icon('download')}Install ${n || ''} extension${n === 1 ? '' : 's'}`; $('btnXGo').disabled = !n || !!state.busy; };
+        <div class="main"><div class="title">${esc(x.name || x.url)}</div><div class="meta tagline">${ratingTag(x.rating ? { ...x.rating, version: '' } : null)} ${reportLink(x.rating)}</div><div class="meta"><button class="link" data-xurl="${esc(x.url)}">${esc(x.url)}</button>${x.scope === 'all users' ? ` · ${T('for all users')}` : ''}</div></div></label>`).join('');
+    const sync = () => { const n = $('xList').querySelectorAll('[data-xpick]:checked').length; $('btnXGo').innerHTML = `${icon('download')}${n ? T('Install {n} extension|Install {n} extensions', { n }) : T('Install extensions')}`; $('btnXGo').disabled = !n || !!state.busy; };
     $('xList').querySelectorAll('[data-xpick]').forEach(c => c.onchange = sync);
     sync();
     $('xNote').textContent = '';
     $('btnXGo').onclick = async () => {
       const urls = [...$('xList').querySelectorAll('[data-xpick]:checked')].map(c => c.dataset.xpick);
       $('btnXGo').disabled = true;
-      $('xNote').textContent = 'Installing…';
+      $('xNote').textContent = T('Installing…');
       const r = await D.kitInstall(kit.id, urls, $('xExact').checked);
       if (r.canceled) { $('xNote').textContent = ''; sync(); return; }
       closeX();
-      if (r.error) append(`ERROR: ${r.error}`);
+      if (r.error) append(`${T('ERROR:')} ${r.error}`);
       afterExtChange();
     };
     $('xModal').classList.add('show');
@@ -1595,6 +1741,7 @@
   // ----- desktop extensions (add-ons for this app) -----
   document.querySelectorAll('[data-ext-tab]').forEach(b => b.onclick = () => {
     state.extTab = b.dataset.extTab;
+    remember('extTab', state.extTab);
     document.querySelectorAll('[data-ext-tab]').forEach(x => x.classList.toggle('on', x === b));
     $('extSt').hidden = state.extTab !== 'st';
     $('extDesktop').hidden = state.extTab !== 'desktop';
@@ -1608,16 +1755,16 @@
     $('crxList').innerHTML = list.length ? list.map(e => {
       const icon = e.icon ? `<img src="${esc(e.icon)}" alt="" width="32" height="32" style="flex-shrink:0;align-self:flex-start">` : '';
       const tags = [
-        e.known ? `<span class="tag ${e.known.status === 'works' ? 'good' : ''}" title="${esc(e.known.note || '')}">${esc({ works: 'Works', partly: 'Partly works', broken: 'Does not work' }[e.known.status] || 'Tested')}</span>` : '<span class="tag" title="Not tested in this app yet: try it, most of it may work.">Not tested yet</span>',
-        e.everySite ? '<span class="tag" title="It can read and change every SillyTavern page, including what you type">All pages</span>' : '',
+        e.known ? `<span class="tag ${e.known.status === 'works' ? 'good' : ''}" title="${esc(e.known.note || '')}">${esc({ works: T('Works'), partly: T('Partly works'), broken: T('Does not work') }[e.known.status] || T('Tested'))}</span>` : `<span class="tag" title="${esc(T('Not tested in this app yet: try it, most of it may work.'))}">${T('Not tested yet')}</span>`,
+        e.everySite ? `<span class="tag" title="${esc(T('It can read and change every SillyTavern page, including what you type'))}">${T('All pages')}</span>` : '',
       ].join(' ');
-      const missing = e.missing.length ? `<div class="meta" style="color:var(--warn)">Not available here: ${esc(e.missing.join(', '))}</div>` : '';
+      const missing = e.missing.length ? `<div class="meta" style="color:var(--warn)">${esc(T('Not available here: {list}', { list: e.missing.join(', ') }))}</div>` : '';
       const note = e.known?.note ? `<div class="meta">${esc(e.known.note)}</div>` : '';
       return `<div class="item">${icon}<div class="main"><div class="title">${esc(e.name)} <span class="muted small">v${esc(e.version)}</span></div>
         <div class="meta">${esc(e.description)}</div>${note}${missing}<div class="meta tagline">${tags}</div>
-        <div class="row" style="margin-top:6px;gap:6px">${e.options ? `<button class="btn sm ghost" data-crx-open="${esc(e.id)}" data-what="options">Options</button>` : ''}<button class="btn sm ghost" data-crx-open="${esc(e.id)}" data-what="store">Store page</button><button class="btn sm ghost danger" data-crx-remove="${esc(e.id)}"><svg class="i"><use href="#i-trash"/></svg>Remove</button></div></div>
-        <label class="switch" style="border:0;padding:0" title="${e.enabled ? 'Turn off' : 'Turn on'}"><input type="checkbox" data-crx="${esc(e.id)}"${e.enabled ? ' checked' : ''}></label></div>`;
-    }).join('') : `<div class="empty">No Chrome extensions yet. <b style="color:var(--title)">Open Chrome Web Store</b>, find one and click <b style="color:var(--title)">Add to Chrome</b>.</div>`;
+        <div class="row" style="margin-top:6px;gap:6px">${e.options ? `<button class="btn sm ghost" data-crx-open="${esc(e.id)}" data-what="options">${T('Options')}</button>` : ''}<button class="btn sm ghost" data-crx-open="${esc(e.id)}" data-what="store">${T('Store page')}</button><button class="btn sm ghost danger" data-crx-remove="${esc(e.id)}"><svg class="i"><use href="#i-trash"/></svg>${T('Remove')}</button></div></div>
+        <label class="switch" style="border:0;padding:0" title="${e.enabled ? T('Turn off') : T('Turn on')}"><input type="checkbox" data-crx="${esc(e.id)}"${e.enabled ? ' checked' : ''}></label></div>`;
+    }).join('') : `<div class="empty">${T('No Chrome extensions yet. <b>Open Chrome Web Store</b>, find one and click <b>Add to Chrome</b>.')}</div>`;
     $('crxList').querySelectorAll('[data-crx]').forEach(c => c.onchange = async () => { c.disabled = true; await D.chromeExtSetEnabled(c.dataset.crx, c.checked); loadChromeExtensions(); });
     $('crxList').querySelectorAll('[data-crx-open]').forEach(b => b.onclick = () => D.chromeExtOpen(b.dataset.crxOpen, b.dataset.what));
     $('crxList').querySelectorAll('[data-crx-remove]').forEach(b => b.onclick = async () => { if (await D.chromeExtRemove(b.dataset.crxRemove)) loadChromeExtensions(); });
@@ -1635,9 +1782,9 @@
       const meta = [e.version && `v${e.version}`, e.author].filter(Boolean).map(esc).join(' · ');
       const status = e.error ? `<div class="meta" style="color:var(--bad)">${esc(e.error)}</div>` : e.description ? `<div class="meta">${esc(e.description)}</div>` : '';
       return `<div class="item"><div class="main"><div class="title">${esc(e.name)} <span class="muted small">${meta}</span></div>${status}</div>
-        <button class="btn sm ghost danger" data-dx-remove="${esc(e.id)}" title="Remove"><svg class="i"><use href="#i-trash"/></svg></button>
-        <label class="switch" style="border:0;padding:0" title="${e.enabled ? 'Turn off' : 'Turn on'}"><input type="checkbox" data-dx="${esc(e.id)}"${e.enabled ? ' checked' : ''}></label></div>`;
-    }).join('') : `<div class="empty">No desktop extensions yet. Install one from <b style="color:var(--title)">Get add-ons</b>, try <b style="color:var(--title)">Add example</b>, or put an extension's folder in the extensions folder.</div>`;
+        <button class="btn sm ghost danger" data-dx-remove="${esc(e.id)}" title="${T('Remove')}"><svg class="i"><use href="#i-trash"/></svg></button>
+        <label class="switch" style="border:0;padding:0" title="${e.enabled ? T('Turn off') : T('Turn on')}"><input type="checkbox" data-dx="${esc(e.id)}"${e.enabled ? ' checked' : ''}></label></div>`;
+    }).join('') : `<div class="empty">${T('No desktop extensions yet. Install one from <b>Get add-ons</b>, try <b>Add example</b>, or put an extension\'s folder in the extensions folder.')}</div>`;
     $('dxList').querySelectorAll('[data-dx]').forEach(c => c.onchange = async () => {
       c.disabled = true;
       await D.extSetEnabled(c.dataset.dx, c.checked);
@@ -1661,16 +1808,16 @@
     $('addonList').innerHTML = r.addons.length ? r.addons.map(a => {
       const meta = [a.version && `v${a.version}`, a.author].filter(Boolean).map(esc).join(' · ');
       const uses = a.uses.length ? `<div class="meta tagline">${a.uses.map(u => `<span class="tag">${esc(addonsUses[u] || u)}</span>`).join(' ')}</div>` : '';
-      const home = a.homepage ? ` <button class="link" data-addon-home="${esc(a.homepage)}">More</button>` : '';
+      const home = a.homepage ? ` <button class="link" data-addon-home="${esc(a.homepage)}">${T('More')}</button>` : '';
       let act;
-      if (addonBusy.has(a.id)) act = `<button class="btn sm" disabled>Installing…</button>`;
-      else if (a.tooOld) act = `<span class="muted small" title="Update this app first">Needs app ${esc(a.minAppVersion)}</span>`;
-      else if (a.update) act = `<button class="btn sm primary" data-addon="${esc(a.id)}"><svg class="i"><use href="#i-download"/></svg>Update to ${esc(a.version)}</button>`;
-      else if (a.installed) act = `<span class="tag good">Installed</span>`;
-      else act = `<button class="btn sm" data-addon="${esc(a.id)}"><svg class="i"><use href="#i-download"/></svg>Install</button>`;
+      if (addonBusy.has(a.id)) act = `<button class="btn sm" disabled>${T('Installing…')}</button>`;
+      else if (a.tooOld) act = `<span class="muted small" title="${esc(T('Update this app first'))}">${esc(T('Needs app {version}', { version: a.minAppVersion }))}</span>`;
+      else if (a.update) act = `<button class="btn sm primary" data-addon="${esc(a.id)}"><svg class="i"><use href="#i-download"/></svg>${esc(T('Update to {version}', { version: a.version }))}</button>`;
+      else if (a.installed) act = `<span class="tag good">${T('Installed')}</span>`;
+      else act = `<button class="btn sm" data-addon="${esc(a.id)}"><svg class="i"><use href="#i-download"/></svg>${T('Install')}</button>`;
       return `<div class="item"><div class="main"><div class="title">${esc(a.name)} <span class="muted small">${meta}</span></div>
         <div class="meta">${esc(a.description)}${home}</div>${uses}</div>${act}</div>`;
-    }).join('') : `<div class="empty">${r.error ? 'No add-ons to show right now.' : 'The add-on list is empty for now.'}</div>`;
+    }).join('') : `<div class="empty">${r.error ? T('No add-ons to show right now.') : T('The add-on list is empty for now.')}</div>`;
     $('addonList').querySelectorAll('[data-addon-home]').forEach(b => b.onclick = () => D.openUrl(b.dataset.addonHome));
     $('addonList').querySelectorAll('[data-addon]').forEach(b => b.onclick = () => installAddon(b.dataset.addon));
   }
@@ -1703,7 +1850,7 @@
       window.__dxMount[e.id] = { panel, ext: { id: e.id, invoke: (channel, ...args) => D.extInvoke(e.id, channel, ...args) } };
       const key = JSON.stringify(e.id);
       const script = document.createElement('script');
-      script.textContent = `(function (panel, ext) { try {\n${code}\n} catch (err) { panel.innerHTML = '<p class="muted" style="color:var(--bad)">This panel failed: ' + String(err.message).replace(/</g, '&lt;') + '</p>'; } })(window.__dxMount[${key}].panel, window.__dxMount[${key}].ext);`;
+      script.textContent = `(function (panel, ext) { try {\n${code}\n} catch (err) { panel.innerHTML = '<p class="muted" style="color:var(--bad)">' + ${JSON.stringify(esc(T('This panel failed:')))} + ' ' + String(err.message).replace(/</g, '&lt;') + '</p>'; } })(window.__dxMount[${key}].panel, window.__dxMount[${key}].ext);`;
       document.body.append(script);
       script.remove();
     }
@@ -1711,14 +1858,14 @@
   $('btnDxReload').onclick = async () => { await D.extReload(); loadDesktopExtensions(); };
   $('btnDxExample').onclick = async () => {
     const r = await D.extAddExample();
-    append(r.exists ? `The example extension "${r.id}" is already in the extensions folder.` : `Added the example extension "${r.id}". Turn it on to try it.`);
+    append(r.exists ? T('The example extension "{id}" is already in the extensions folder.', { id: r.id }) : T('Added the example extension "{id}". Turn it on to try it.', { id: r.id }));
     loadDesktopExtensions();
   };
 
   // ---------- maintenance ----------
   async function loadHealth() {
     const el = $('healthList');
-    el.innerHTML = `<div class="empty">Checking…</div>`;
+    el.innerHTML = `<div class="empty">${T('Checking…')}</div>`;
     const checks = await D.healthCheck();
     el.innerHTML = checks.map(c => `
       <div class="item">
@@ -1751,7 +1898,7 @@
   }
   function renderMiniLog() {
     $('miniLog').replaceChildren(...state.logs.slice(-7).map(lineDiv));
-    if (!state.logs.length) $('miniLog').innerHTML = '<div class="muted">Nothing yet.</div>';
+    if (!state.logs.length) $('miniLog').innerHTML = `<div class="muted">${T('Nothing yet.')}</div>`;
   }
   // One line or a batch of lines (the main process sends them in batches).
   const MAX_LOG_LINES = 2000;
@@ -1775,7 +1922,7 @@
     renderConsole();
   });
   $('logSearch').oninput = e => { state.search = e.target.value.toLowerCase(); renderConsole(); };
-  $('btnCopyLog').onclick = async () => { await D.copyLogs(); $('btnCopyLog').innerHTML = `${icon('check')}Copied`; setTimeout(() => $('btnCopyLog').innerHTML = `${icon('copy')}Copy`, 1500); };
+  $('btnCopyLog').onclick = async () => { await D.copyLogs(); $('btnCopyLog').innerHTML = `${icon('check')}${T('Copied')}`; setTimeout(() => $('btnCopyLog').innerHTML = `${icon('copy')}${T('Copy')}`, 1500); };
   $('btnClearLog').onclick = () => { state.logs = []; renderConsole(); renderMiniLog(); };
 
   // ---------- settings ----------
@@ -1790,7 +1937,7 @@
   LAN_FIELDS.forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, () => { unsaved.lan = true; })));
   function loadSettingsForm({ fresh = false } = {}) {
     if (fresh) unsaved.form = unsaved.lan = false;
-    $('curPath').textContent = current.sillytavernPath || 'Not set';
+    $('curPath').textContent = current.sillytavernPath || T('Not set');
     $('setAppPreview').checked = !!current.appPreview;
     if (!unsaved.form) {
       $('setPort').value = current.port;
@@ -1808,6 +1955,7 @@
     $('setSearch').value = current.searchEngine || 'google';
     $('setInspect').checked = !!current.inspectMenu;
     loadSpellEngine();
+    renderLangForm();
     renderLogFontForm();
     renderUiFontForm();
     if (!unsaved.lan) fillLanForm();
@@ -1827,7 +1975,7 @@
   $('btnSpellRestart').onclick = () => D.relaunch();
 
   // ----- console font: presets first, then every installed font -----
-  const LOG_FONTS = [['', 'Pixel (default)', 18], ['Departure Mono', 'Departure Mono (pixel)', 14], ['Cascadia Mono', 'Cascadia Mono', 14], ['Consolas', 'Consolas', 14], ['Courier New', 'Courier New', 14], ['Segoe UI', 'Segoe UI', 14]];
+  const LOG_FONTS = [['', T('Pixel (default)'), 18], ['Departure Mono', T('Departure Mono (pixel)'), 14], ['Cascadia Mono', 'Cascadia Mono', 14], ['Consolas', 'Consolas', 14], ['Courier New', 'Courier New', 14], ['Segoe UI', 'Segoe UI', 14]];
   let installedFonts = null;
   const cssFont = name => name ? `"${name.replace(/["\\]/g, '')}", var(--mono)` : 'var(--console-pixel)';
   function applyLogFont(font, size) {
@@ -1849,8 +1997,8 @@
     const opt = (v, label) => `<option value="${esc(v)}"${v === font ? ' selected' : ''}>${esc(label)}</option>`;
     const installed = (installedFonts || []).filter(f => !LOG_FONTS.some(([n]) => n === f));
     const extra = font && !LOG_FONTS.some(([f]) => f === font) && !installed.includes(font) ? [font] : [];
-    $('setLogFont').innerHTML = `<optgroup label="Suggested">${LOG_FONTS.map(([v, l]) => opt(v, l)).join('')}</optgroup>`
-      + (installed.length || extra.length ? `<optgroup label="Installed fonts">${[...extra, ...installed].map(f => opt(f, f)).join('')}</optgroup>` : '');
+    $('setLogFont').innerHTML = `<optgroup label="${T('Suggested')}">${LOG_FONTS.map(([v, l]) => opt(v, l)).join('')}</optgroup>`
+      + (installed.length || extra.length ? `<optgroup label="${T('Installed fonts')}">${[...extra, ...installed].map(f => opt(f, f)).join('')}</optgroup>` : '');
     $('setLogSize').value = current.consoleFontSize || 18;
   }
   async function saveLogFont(font, size) {
@@ -1873,7 +2021,7 @@
   const UI_FONT_CSS = { '': '"Departure Mono"', dotgothic: '"DotGothic16"', pixelify: '"Pixelify Sans"', vt323: '"VT323"', system: '"Segoe UI"' };
   function applyUiFont(font, zoom) {
     const name = font in UI_FONT_CSS ? UI_FONT_CSS[font] : `"${String(font).replace(/["\\;{}<>]/g, '')}"`;
-    document.documentElement.style.setProperty('--pixel-font', `${name}, "Segoe UI", system-ui, sans-serif`);
+    document.documentElement.style.setProperty('--pixel-font', `${name}, var(--lang-fonts, "Segoe UI"), system-ui, sans-serif`);
     D.setZoom(zoom || 100);
   }
   async function renderUiFontForm() {
@@ -1884,8 +2032,8 @@
     const builtIn = Object.values(UI_FONT_CSS).map(n => n.replace(/"/g, ''));
     const installed = (installedFonts || []).filter(f => !builtIn.includes(f));
     const extra = font && !(font in UI_FONT_CSS) && !installed.includes(font) ? [font] : [];
-    $('setUiFont').innerHTML = `<optgroup label="Built in">${uiFonts.fonts.map(f => opt(f.id, f.label)).join('')}</optgroup>`
-      + (installed.length || extra.length ? `<optgroup label="Installed fonts">${[...extra, ...installed].map(f => opt(f, f)).join('')}</optgroup>` : '');
+    $('setUiFont').innerHTML = `<optgroup label="${T('Built in')}">${uiFonts.fonts.map(f => opt(f.id, f.label)).join('')}</optgroup>`
+      + (installed.length || extra.length ? `<optgroup label="${T('Installed fonts')}">${[...extra, ...installed].map(f => opt(f, f)).join('')}</optgroup>` : '');
     $('setZoom').innerHTML = uiFonts.zooms.map(z => `<button data-zoom="${z}" class="${z === (current.uiZoom || 100) ? 'on' : ''}">${z}%</button>`).join('');
     $('setZoom').querySelectorAll('button').forEach(b => b.onclick = () => saveUiFont({ zoom: Number(b.dataset.zoom) }));
   }
@@ -1911,8 +2059,8 @@
     await D.saveSettings(s);
     unsaved.form = false;
     current = { ...current, ...s };
-    $('btnSave').innerHTML = `${icon('check')}Saved`;
-    setTimeout(() => $('btnSave').innerHTML = `${icon('check')}Save settings`, 1500);
+    $('btnSave').innerHTML = `${icon('check')}${T('Saved')}`;
+    setTimeout(() => $('btnSave').innerHTML = `${icon('check')}${T('Save settings')}`, 1500);
   };
 
   // ---------- welcome / setup ----------
@@ -1920,7 +2068,7 @@
   let setupForced = false;
   const reqRow = (name, r, min) => {
     const status = r.ok ? 'ok' : 'bad';
-    const detail = r.ok ? `Version ${r.version}` : r.installed ? `Version ${r.version} is too old — SillyTavern needs ${min} or newer` : 'Not installed';
+    const detail = r.ok ? T('Version {version}', { version: r.version }) : r.installed ? T('Version {version} is too old — SillyTavern needs {min} or newer', { version: r.version, min }) : T('Not installed');
     return `<div class="item"><span class="check-ico ${status}">${icon(r.ok ? 'check' : 'x')}</span><div class="main"><div class="title">${name}</div><div class="meta">${esc(detail)}</div></div></div>`;
   };
   async function loadSetup() {
@@ -1931,10 +2079,10 @@
     if (!show) return quick;
     const st = await D.setupState();
     $('btnSetupClose').hidden = !st.ready;
-    $('setupTitle').textContent = st.ready ? 'Choose your SillyTavern' : 'Welcome to SillyTavern Desktop';
+    $('setupTitle').textContent = st.ready ? T('Choose your SillyTavern') : T('Welcome to SillyTavern Desktop');
     $('setupLead').textContent = st.ready
-      ? 'Switch to another install on this PC, point to a folder, or install a fresh copy.'
-      : st.current ? `SillyTavern is no longer at ${st.current}. Pick where it is now, or install it again.` : "Let's get SillyTavern running. Two quick steps — everything happens right here.";
+      ? T('Switch to another install on this PC, point to a folder, or install a fresh copy.')
+      : st.current ? T('SillyTavern is no longer at {dir}. Pick where it is now, or install it again.', { dir: st.current }) : T("Let's get SillyTavern running. Two quick steps — everything happens right here.");
 
     const req = st.requirements;
     const reqOk = req.node.ok && req.git.ok;
@@ -1945,9 +2093,9 @@
     // Without winget, the app's own copy is the easy way; with it, a second choice.
     $('btnSetupRt').hidden = reqOk;
     $('btnSetupRt').classList.toggle('primary', !req.canAutoInstall);
-    $('reqHint').innerHTML = reqOk ? (st.runtime.active ? 'All set (this app\'s own copies).' : 'All set.')
-      : req.canAutoInstall ? '<b>Install for me</b> installs them in Windows (it may ask for permission once). <b>Get them for this app only</b> keeps a private copy instead, no permission needed.'
-      : 'Click <b>Get them for this app only</b>: a private copy for this app, nothing to install. Or install them from <button class="link" data-link="node">nodejs.org</button> and <button class="link" data-link="git">git-scm.com</button>, then restart this app.';
+    $('reqHint').innerHTML = reqOk ? (st.runtime.active ? T('All set (this app\'s own copies).') : T('All set.'))
+      : req.canAutoInstall ? T('<b>Install for me</b> installs them in Windows (it may ask for permission once). <b>Get them for this app only</b> keeps a private copy instead, no permission needed.')
+      : T('Click <b>Get them for this app only</b>: a private copy for this app, nothing to install. Or install them from {node} and {git}, then restart this app.', { node: '<button class="link" data-link="node">nodejs.org</button>', git: '<button class="link" data-link="git">git-scm.com</button>' });
     $('reqHint').querySelectorAll('[data-link]').forEach(b => b.onclick = () => D.openLink(b.dataset.link));
 
     const named = st.profiles.filter(p => p.ok).map(p => ({ path: p.path, version: p.version, name: p.name, isGit: true }));
@@ -1957,12 +2105,12 @@
     $('installList').innerHTML = list.length ? list.map(i => {
       const cur = st.ready && i.path.toLowerCase() === st.current.toLowerCase();
       return `<div class="item ${cur ? 'current' : ''}">
-        <div class="main">${i.name ? `<div class="title">${esc(i.name)}</div><div class="meta mono">${esc(i.path)}</div>` : `<div class="title mono">${esc(i.path)}</div>`}<div class="meta">SillyTavern ${esc(i.version)}${i.isGit ? '' : ' · not a git install (updates unavailable)'}</div></div>
-        ${cur ? '<span class="tag fox">In use</span>' : `<button class="btn sm" data-task data-use="${esc(i.path)}">Use this</button>`}
+        <div class="main">${i.name ? `<div class="title">${esc(i.name)}</div><div class="meta mono">${esc(i.path)}</div>` : `<div class="title mono">${esc(i.path)}</div>`}<div class="meta">SillyTavern ${esc(i.version)}${i.isGit ? '' : ` · ${T('not a git install (updates unavailable)')}`}</div></div>
+        ${cur ? `<span class="tag fox">${T('In use')}</span>` : `<button class="btn sm" data-task data-use="${esc(i.path)}">${T('Use this')}</button>`}
       </div>`;
-    }).join('') : `<div class="empty">No SillyTavern found on this PC.</div>`;
+    }).join('') : `<div class="empty">${T('No SillyTavern found on this PC.')}</div>`;
     $('installList').querySelectorAll('[data-use]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => D.useInstall(b.dataset.use).then(ok => finishSetup(ok, st.ready)); });
-    $('installHint').textContent = list.length ? '' : (reqOk ? 'Install a fresh copy, or point to one you already have.' : 'Finish step 1 first to install SillyTavern.');
+    $('installHint').textContent = list.length ? '' : (reqOk ? T('Install a fresh copy, or point to one you already have.') : T('Finish step 1 first to install SillyTavern.'));
     $('btnInstallST').disabled = !!state.busy || !reqOk;
     $('btnInstallST').classList.toggle('primary', !list.length);
     $('setupLog').replaceChildren(...state.logs.slice(-8).map(lineDiv));
@@ -1984,7 +2132,7 @@
   $('btnBrowse').onclick = async () => {
     const wasReady = (await D.setupReady()).ready;
     const r = await D.browseInstall();
-    if (r.error) append(`ERROR: ${r.error}`);
+    if (r.error) append(`${T('ERROR:')} ${r.error}`);
     finishSetup(r.ok, wasReady);
   };
   $('btnSetupClose').onclick = () => { setupForced = false; loadSetup(); };
@@ -1998,9 +2146,9 @@
     profiles = await D.profiles();
     const act = profiles.find(p => p.active);
     const sel = $('hdrProfile');
-    sel.innerHTML = (act ? '' : '<option value="" selected>No profile</option>')
-      + profiles.map(p => `<option value="${esc(p.id)}"${p.active ? ' selected' : ''}${p.ok ? '' : ' disabled'}>${esc(p.name)}${p.ok ? '' : ' (folder missing)'}</option>`).join('');
-    sel.parentElement.title = act ? `Profile "${act.name}": ${act.path}` : 'Profile: which SillyTavern folder the app runs';
+    sel.innerHTML = (act ? '' : `<option value="" selected>${T('No profile')}</option>`)
+      + profiles.map(p => `<option value="${esc(p.id)}"${p.active ? ' selected' : ''}${p.ok ? '' : ' disabled'}>${esc(p.name)}${p.ok ? '' : ` (${T('folder missing')})`}</option>`).join('');
+    sel.parentElement.title = act ? T('Profile "{name}": {path}', { name: act.name, path: act.path }) : T('Profile: which SillyTavern folder the app runs');
     sel.parentElement.hidden = !profiles.length;
     if (state.page === 'profiles') { renderProfiles(); loadRemotes(); }
     if (state.page === 'migrate' && !mg.scan && !mg.running) loadMigrate();
@@ -2013,12 +2161,12 @@
     remotes = await D.remotes();
     const el = $('remList');
     el.innerHTML = remotes.length ? remotes.map(r => `<div class="item">
-        <div class="main"><div class="title">${esc(r.name)} ${r.insecure ? '<span class="tag warn" title="Plain http outside your home network: not encrypted">not encrypted</span>' : ''}</div>
-          <div class="meta mono">${esc(r.url)}</div>${r.user ? `<div class="meta">Signs in as ${esc(r.user)}${r.hasPassword ? '' : ' (no password saved)'}</div>` : ''}</div>
-        <div class="acts"><button class="btn sm primary" data-ropen="${esc(r.id)}">${icon('play')}Open</button>
-          <button class="btn sm ghost" data-redit="${esc(r.id)}" title="Edit">${icon('pencil')}</button>
-          <button class="btn sm ghost danger" data-rdel="${esc(r.id)}" title="Remove">${icon('trash')}</button></div></div>`).join('')
-      : '<div class="empty">None yet. <b>Add</b> one with its address, like http://192.168.1.25:8000.</div>';
+        <div class="main"><div class="title">${esc(r.name)} ${r.insecure ? `<span class="tag warn" title="${esc(T('Plain http outside your home network: not encrypted'))}">${T('not encrypted')}</span>` : ''}</div>
+          <div class="meta mono">${esc(r.url)}</div>${r.user ? `<div class="meta">${esc(T('Signs in as {user}', { user: r.user }))}${r.hasPassword ? '' : ` (${T('no password saved')})`}</div>` : ''}</div>
+        <div class="acts"><button class="btn sm primary" data-ropen="${esc(r.id)}">${icon('play')}${T('Open')}</button>
+          <button class="btn sm ghost" data-redit="${esc(r.id)}" title="${T('Edit')}">${icon('pencil')}</button>
+          <button class="btn sm ghost danger" data-rdel="${esc(r.id)}" title="${T('Remove')}">${icon('trash')}</button></div></div>`).join('')
+      : `<div class="empty">${T('None yet. <b>Add</b> one with its address, like http://192.168.1.25:8000.')}</div>`;
     el.querySelectorAll('[data-ropen]').forEach(b => b.onclick = () => D.remoteOpen(b.dataset.ropen));
     el.querySelectorAll('[data-redit]').forEach(b => b.onclick = () => openRemForm(remotes.find(r => r.id === b.dataset.redit)));
     el.querySelectorAll('[data-rdel]').forEach(b => b.onclick = async () => { if (await D.remoteDelete(b.dataset.rdel)) { closeRemForm(); loadRemotes(); } });
@@ -2030,11 +2178,11 @@
     $('remUrl').value = r?.url || '';
     $('remUser').value = r?.user || '';
     $('remPass').value = '';
-    $('remPass').placeholder = r?.hasPassword ? 'Saved' : 'None';
+    $('remPass').placeholder = r?.hasPassword ? T('Saved') : T('None');
     $('btnRemClearPass').hidden = !r?.hasPassword;
     $('remError').textContent = '';
     $('remTestOut').textContent = '';
-    $('btnRemSave').lastChild.textContent = r ? 'Save' : 'Add';
+    $('btnRemSave').lastChild.textContent = r ? T('Save') : T('Add');
     checkRemUrl();
     $('remForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     $('remName').focus();
@@ -2049,10 +2197,10 @@
   $('remUrl').oninput = checkRemUrl;
   $('btnRemAdd').onclick = () => openRemForm(null);
   $('btnRemCancel').onclick = closeRemForm;
-  $('btnRemClearPass').onclick = () => { remEdit.clearPass = true; $('remPass').placeholder = 'Removed when you save'; $('btnRemClearPass').hidden = true; };
+  $('btnRemClearPass').onclick = () => { remEdit.clearPass = true; $('remPass').placeholder = T('Removed when you save'); $('btnRemClearPass').hidden = true; };
   $('btnRemTest').onclick = async () => {
     $('remTestOut').style.color = '';
-    $('remTestOut').textContent = 'Testing…';
+    $('remTestOut').textContent = T('Testing…');
     const r = await D.remoteProbe($('remUrl').value);
     $('remTestOut').textContent = r.error || r.text;
     $('remTestOut').style.color = r.error || !r.ok ? 'var(--bad)' : 'var(--good)';
@@ -2074,27 +2222,29 @@
   function older(p) {
     const o = p.older;
     if (!o) return '';
-    const tip = `${o.newer} newer release${o.newer === 1 ? '' : 's'} (latest ${o.latest})${o.fixes.length ? ', with security fixes this one doesn\'t have' : ''}. ${p.branch ? `${p.active ? '' : 'Switch to it, then '}update it from Home.` : 'It is a fixed version: switch it to release or staging in Maintenance to get updates.'}`;
-    return `<span class="tag warn" title="${esc(tip)}">${o.fixes.length ? '⚠ missing security fixes' : 'older version'}</span>`;
+    const tip = `${o.fixes.length
+      ? T('{n} newer release (latest {latest}), with security fixes this one doesn\'t have.|{n} newer releases (latest {latest}), with security fixes this one doesn\'t have.', { n: o.newer, latest: o.latest })
+      : T('{n} newer release (latest {latest}).|{n} newer releases (latest {latest}).', { n: o.newer, latest: o.latest })} ${p.branch ? (p.active ? T('Update it from Home.') : T('Switch to it, then update it from Home.')) : T('It is a fixed version: switch it to release or staging in Maintenance to get updates.')}`;
+    return `<span class="tag warn" title="${esc(tip)}">${o.fixes.length ? `⚠ ${T('missing security fixes')}` : T('older version')}</span>`;
   }
   function renderProfiles() {
     const el = $('profList');
-    if (!profiles.length) { el.innerHTML = '<div class="empty">No profiles yet. Add the SillyTavern you have, or download one.</div>'; return; }
+    if (!profiles.length) { el.innerHTML = `<div class="empty">${T('No profiles yet. Add the SillyTavern you have, or download one.')}</div>`; return; }
     el.innerHTML = profiles.map(p => {
       const id = esc(p.id);
-      const what = p.ok ? [p.version && `SillyTavern ${p.version}`, p.branch || 'fixed version'].filter(Boolean).map(esc).join(' · ')
-        : '<span style="color:var(--bad)">No SillyTavern in this folder anymore. Edit the profile, or remove it.</span>';
+      const what = p.ok ? [p.version && `SillyTavern ${p.version}`, p.branch || T('fixed version')].filter(Boolean).map(esc).join(' · ')
+        : `<span style="color:var(--bad)">${T('No SillyTavern in this folder anymore. Edit the profile, or remove it.')}</span>`;
       const acts = [
-        !p.active && p.ok ? `<button class="btn sm primary" data-task data-puse="${id}">Use</button>` : '',
-        !p.active && p.ok ? `<button class="btn sm ghost" data-palong="${id}" title="Run it at the same time, on its own port, in a new tab">Open next to it</button>` : '',
-        !p.active && p.ok ? `<button class="btn sm ghost" data-pmig="${id}" title="Copy characters, chats, presets… from this SillyTavern into another">${icon('swap')}</button>` : '',
-        p.ok ? `<button class="btn sm ghost" data-phist="${id}" title="History: updates and what changed">${icon('clock')}</button>` : '',
-        p.ok ? `<button class="btn sm ghost" data-pfolder="${id}" title="Open folder">${icon('folder')}</button>` : '',
-        `<button class="btn sm ghost" data-pedit="${id}" title="Edit">${icon('pencil')}</button>`,
-        p.active ? '' : `<button class="btn sm ghost danger" data-pdel="${id}" title="Remove profile (the folder stays)">${icon('trash')}</button>`,
+        !p.active && p.ok ? `<button class="btn sm primary" data-task data-puse="${id}">${T('Use')}</button>` : '',
+        !p.active && p.ok ? `<button class="btn sm ghost" data-palong="${id}" title="${esc(T('Run it at the same time, on its own port, in a new tab'))}">${T('Open next to it')}</button>` : '',
+        !p.active && p.ok ? `<button class="btn sm ghost" data-pmig="${id}" title="${esc(T('Copy characters, chats, presets… from this SillyTavern into another'))}">${icon('swap')}</button>` : '',
+        p.ok ? `<button class="btn sm ghost" data-phist="${id}" title="${esc(T('History: updates and what changed'))}">${icon('clock')}</button>` : '',
+        p.ok ? `<button class="btn sm ghost" data-pfolder="${id}" title="${esc(T('Open folder'))}">${icon('folder')}</button>` : '',
+        `<button class="btn sm ghost" data-pedit="${id}" title="${T('Edit')}">${icon('pencil')}</button>`,
+        p.active ? '' : `<button class="btn sm ghost danger" data-pdel="${id}" title="${esc(T('Remove profile (the folder stays)'))}">${icon('trash')}</button>`,
       ].join('');
       return `<div class="item ${p.active ? 'current' : ''}">
-        <div class="main"><div class="title">${esc(p.name)} ${p.active ? '<span class="tag fox">In use</span>' : ''} ${older(p)}</div><div class="meta">${what}</div><div class="meta mono">${esc(p.path)}</div></div>
+        <div class="main"><div class="title">${esc(p.name)} ${p.active ? `<span class="tag fox">${T('In use')}</span>` : ''} ${older(p)}</div><div class="meta">${what}</div><div class="meta mono">${esc(p.path)}</div></div>
         <div class="acts">${acts}</div></div>`;
     }).join('');
     const on = (attr, fn) => el.querySelectorAll(`[data-${attr}]`).forEach(b => b.onclick = () => fn(b.dataset[attr], b));
@@ -2104,7 +2254,7 @@
     on('phist', id => showHistory(id));
     on('pmig', id => openMigrate({ src: profiles.find(p => p.id === id).path }));
     on('pedit', id => openProfForm(profiles.find(p => p.id === id)));
-    on('pdel', async id => { const r = await D.profileDelete(id); if (r?.error) append(`ERROR: ${r.error}`); });
+    on('pdel', async id => { const r = await D.profileDelete(id); if (r?.error) append(`${T('ERROR:')} ${r.error}`); });
     el.querySelectorAll('[data-puse]').forEach(b => { b.disabled = !!state.busy; });
   }
 
@@ -2114,9 +2264,10 @@
     profEdit = { id: p?.id || null, path: p?.path || '' };
     $('profForm').hidden = false;
     $('profName').value = p?.name || '';
-    $('profPath').textContent = profEdit.path || 'Choose the folder that contains SillyTavern (server.js).';
+    $('profPath').textContent = profEdit.path || T('Choose the folder that contains SillyTavern (server.js).');
     $('profError').textContent = '';
-    $('btnProfSave').lastChild.textContent = p ? 'Save profile' : 'Add profile';
+    $('btnProfSave').lastChild.textContent = p ? T('Save profile') : T('Add profile');
+    $('btnProfTrash').hidden = !p || p.active || !p.ok;
     $('profForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   const closeProfForm = () => { profEdit = null; $('profForm').hidden = true; };
@@ -2134,7 +2285,7 @@
   $('btnProfCancel').onclick = closeProfForm;
   $('profName').onkeydown = e => { if (e.key === 'Enter') $('btnProfSave').click(); };
   $('btnProfSave').onclick = async () => {
-    if (!profEdit.path) { $('profError').textContent = 'Choose a folder first.'; return; }
+    if (!profEdit.path) { $('profError').textContent = T('Choose a folder first.'); return; }
     $('btnProfSave').disabled = true;
     const r = await D.profileSave({ id: profEdit.id, name: $('profName').value, path: profEdit.path });
     $('btnProfSave').disabled = false;
@@ -2145,8 +2296,8 @@
     const b = $('btnProfFound');
     b.disabled = true;
     const n = await D.profilesAddFound();
-    b.lastChild.textContent = n ? `Added ${n}` : 'Nothing new';
-    setTimeout(() => { b.lastChild.textContent = 'Find on this PC'; b.disabled = false; }, 1800);
+    b.lastChild.textContent = n ? T('Added {n}', { n }) : T('Nothing new');
+    setTimeout(() => { b.lastChild.textContent = T('Find on this PC'); b.disabled = false; }, 1800);
   };
   $('btnProfDownload').onclick = () => openDownload();
 
@@ -2166,7 +2317,7 @@
     $('dlUse').checked = !st.ready;
     dl.parent = dl.parent || def.parent;
     $('dlParent').textContent = dl.parent;
-    if (!dl.reqOk) $('dlError').textContent = 'Node.js and Git are needed first: the welcome screen or Maintenance → Back end installs them.';
+    if (!dl.reqOk) $('dlError').textContent = T('Node.js and Git are needed first: the welcome screen or Maintenance → Back end installs them.');
     await loadVersions(false);
   }
   const closeDownload = () => $('dlModal').classList.remove('show');
@@ -2175,22 +2326,22 @@
 
   async function loadVersions(fresh) {
     const sel = $('dlVersion');
-    sel.innerHTML = '<option>Loading versions…</option>';
+    sel.innerHTML = `<option>${T('Loading versions…')}</option>`;
     sel.disabled = true;
     const r = await D.stVersions(fresh);
     dl.versions = r.versions || [];
     $('dlVersionErr').hidden = !r.error;
-    $('dlVersionErr').textContent = r.error ? `Could not load the list of versions (${r.error}). The latest release and staging can still be downloaded.` : '';
+    $('dlVersionErr').textContent = r.error ? T('Could not load the list of versions ({reason}). The latest release and staging can still be downloaded.', { reason: r.error }) : '';
     const latest = dl.versions.find(v => v.recommended);
-    const month = d => (d ? new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }) : '');
+    const month = d => (d ? new Date(d).toLocaleDateString(LOC, { year: 'numeric', month: 'short' }) : '');
     // Versions with security fixes released after them are marked in the list.
     const fixedAfter = new Set();
     let seenFix = false;
     for (const v of dl.versions) { if (seenFix) fixedAfter.add(v.version); if (v.fixes?.length) seenFix = true; }
-    sel.innerHTML = `<option value="release">${latest ? esc(latest.version) : 'Latest'} — latest release (recommended)</option>`
-      + '<option value="staging">Staging — newest changes, may break</option>'
-      + (dl.versions.length ? `<optgroup label="A specific version (stays at that version)">${dl.versions.map(v =>
-        `<option value="${esc(v.version)}">${esc(v.version)}${v.date ? ` · ${esc(month(v.date))}` : ''}${v.recommended ? ' · latest' : ''}${fixedAfter.has(v.version) ? ' · ⚠ missing security fixes' : ''}${v.limited ? ' · some app features off' : ''}</option>`).join('')}</optgroup>` : '');
+    sel.innerHTML = `<option value="release">${latest ? esc(latest.version) : T('Latest')} — ${T('latest release (recommended)')}</option>`
+      + `<option value="staging">${T('Staging — newest changes, may break')}</option>`
+      + (dl.versions.length ? `<optgroup label="${esc(T('A specific version (stays at that version)'))}">${dl.versions.map(v =>
+        `<option value="${esc(v.version)}">${esc(v.version)}${v.date ? ` · ${esc(month(v.date))}` : ''}${v.recommended ? ` · ${T('latest')}` : ''}${fixedAfter.has(v.version) ? ` · ⚠ ${T('missing security fixes')}` : ''}${v.limited ? ` · ${T('some app features off')}` : ''}</option>`).join('')}</optgroup>` : '');
     sel.disabled = dl.running;
     versionChanged();
   }
@@ -2199,9 +2350,9 @@
     const ref = $('dlVersion').value;
     const latest = dl.versions.find(v => v.recommended);
     const v = ref === 'release' ? latest : dl.versions.find(x => x.version === ref);
-    $('dlVersionHint').textContent = ref === 'release' ? 'The stable version most people use. It gets updates (Home → Update now).'
-      : ref === 'staging' ? 'Gets new features first and changes almost daily, but can break. For trying things out.'
-      : `Exactly version ${ref}, kept as it is (no updates). Switch it to release later under Maintenance → Release channel if you want updates.${v?.limited ? ' Versions before 1.13.2 ignore some of this app\'s settings: phone access does not work, and a browser tab may open when the server starts.' : ''}`;
+    $('dlVersionHint').textContent = ref === 'release' ? T('The stable version most people use. It gets updates (Home → Update now).')
+      : ref === 'staging' ? T('Gets new features first and changes almost daily, but can break. For trying things out.')
+      : `${T('Exactly version {version}, kept as it is (no updates). Switch it to release later under Maintenance → Release channel if you want updates.', { version: ref })}${v?.limited ? ` ${T('Versions before 1.13.2 ignore some of this app\'s settings: phone access does not work, and a browser tab may open when the server starts.')}` : ''}`;
     // An older version: what it misses, and an "I understand" before downloading.
     const older = !['release', 'staging'].includes(ref) && latest && vnum(ref) && vcmp(vnum(ref), vnum(latest.version)) < 0;
     dl.needsRisk = !!older;
@@ -2209,14 +2360,14 @@
     $('dlRisk').checked = false;
     if (older) {
       const newer = dl.versions.filter(x => vcmp(vnum(x.version), vnum(ref)) > 0);
-      const fixes = newer.flatMap(x => (x.fixes || []).map(t => ({ v: x.version, t })));
-      $('dlOlderText').innerHTML = `<b>⚠ This is an older version.</b> ${newer.length} newer release${newer.length === 1 ? ' has' : 's have'} come out since ${esc(ref)} (the latest is ${esc(latest.version)}). It doesn't have the security and bug fixes made since then${fixes.length ? ', including:' : '.'}`;
-      $('dlOlderFixes').innerHTML = fixes.slice(0, 8).map(f => `<li><span class="mono">${esc(f.v)}</span> ${esc(f.t)}</li>`).join('') + (fixes.length > 8 ? `<li class="muted">…and ${fixes.length - 8} more (see the release notes)</li>` : '');
+      const fixes = newer.flatMap(x => (x.fixes || []).map(text => ({ v: x.version, text })));
+      $('dlOlderText').innerHTML = `<b>⚠ ${T('This is an older version.')}</b> ${T('{n} newer release has come out since {version} (the latest is {latest}).|{n} newer releases have come out since {version} (the latest is {latest}).', { n: newer.length, version: esc(ref), latest: esc(latest.version) })} ${fixes.length ? T('It doesn\'t have the security and bug fixes made since then, including:') : T('It doesn\'t have the security and bug fixes made since then.')}`;
+      $('dlOlderFixes').innerHTML = fixes.slice(0, 8).map(f => `<li><span class="mono">${esc(f.v)}</span> ${esc(f.text)}</li>`).join('') + (fixes.length > 8 ? `<li class="muted">${T('…and {n} more (see the release notes)', { n: fixes.length - 8 })}</li>` : '');
       $('dlOlderFixes').hidden = !fixes.length;
     }
     $('dlNotesBox').hidden = !v?.notes;
     dl.notes = v?.version || '';
-    if (v?.notes) { $('dlNotesTitle').textContent = `What's new in ${v.version}`; $('dlNotes').textContent = plainNotes(v.notes); }
+    if (v?.notes) { $('dlNotesTitle').textContent = T('What\'s new in {version}', { version: v.version }); $('dlNotes').textContent = plainNotes(v.notes); }
     const label = ref === 'release' ? (latest?.version || 'release') : ref;
     dl.base = `SillyTavern-${label}`;
     if (!dl.folderEdited) $('dlFolder').value = dl.base;
@@ -2234,16 +2385,16 @@
   // Shows where it goes; a folder name the app picked moves aside ("-2") from an existing folder.
   const GB = n => `${(n / 1024 ** 3).toFixed(n < 10 * 1024 ** 3 ? 1 : 0)} GB`;
   async function checkTarget() {
-    let t = await D.downloadTarget(dl.parent, $('dlFolder').value);
-    for (let i = 2; !dl.folderEdited && !t.ok && t.path && /already|exists/.test(t.problem) && i < 20; i++) {
+    let tg = await D.downloadTarget(dl.parent, $('dlFolder').value);
+    for (let i = 2; !dl.folderEdited && !tg.ok && tg.path && tg.taken && i < 20; i++) {
       $('dlFolder').value = `${dl.base}-${i}`;
-      t = await D.downloadTarget(dl.parent, $('dlFolder').value);
+      tg = await D.downloadTarget(dl.parent, $('dlFolder').value);
     }
-    $('dlTarget').innerHTML = t.ok
-      ? `Goes to <span class="mono" style="color:var(--title)">${esc(t.path)}</span>${t.free != null ? ` · ${GB(t.free)} free there` : ''} · needs about 600 MB`
-      : `<span class="err">${esc(t.problem)}</span>`;
-    $('btnDlStart').disabled = !t.ok || !dl.reqOk || !!state.busy || dl.running || (dl.needsRisk && !$('dlRisk').checked);
-    return t;
+    $('dlTarget').innerHTML = tg.ok
+      ? `${T('Goes to {path}', { path: `<span class="mono" style="color:var(--title)">${esc(tg.path)}</span>` })}${tg.free != null ? ` · ${T('{free} free there', { free: GB(tg.free) })}` : ''} · ${T('needs about 600 MB')}`
+      : `<span class="err">${esc(tg.problem)}</span>`;
+    $('btnDlStart').disabled = !tg.ok || !dl.reqOk || !!state.busy || dl.running || (dl.needsRisk && !$('dlRisk').checked);
+    return tg;
   }
   $('dlFolder').oninput = () => { dl.folderEdited = true; checkTarget(); };
   $('dlRisk').onchange = checkTarget;
@@ -2278,7 +2429,7 @@
     $('dlError').textContent = '';
     $('dlProgressBox').hidden = false;
     setDlStep(1);
-    setDlBar(null, 'Starting…');
+    setDlBar(null, T('Starting…'));
     dl.prevActive = profiles.find(p => p.active && p.ok)?.path || '';
     $('btnDlMigrate').hidden = true;
     dlRunning(true);
@@ -2287,13 +2438,13 @@
     if (r.error || r.cancelled) {
       $('dlError').textContent = r.error || '';
       $('dlProgressBox').hidden = !r.cancelled;
-      if (r.cancelled) { setDlBar(0, 'Cancelled.'); $('dlBar').classList.remove('wait'); }
+      if (r.cancelled) { setDlBar(0, T('Cancelled.')); $('dlBar').classList.remove('wait'); }
     } else {
       setDlStep(4);
-      setDlBar(100, r.used ? `Done — now using "${r.profile.name}".` : `Done — added the profile "${r.profile.name}".`);
+      setDlBar(100, r.used ? T('Done — now using "{name}".', { name: r.profile.name }) : T('Done — added the profile "{name}".', { name: r.profile.name }));
       dl.lastNew = { src: dl.prevActive, dst: r.path };
       $('btnDlMigrate').hidden = !dl.prevActive;
-      if (r.depsFailed) $('dlError').textContent = 'Downloaded, but installing its dependencies failed. Switch to it and use Maintenance → "Install missing dependencies".';
+      if (r.depsFailed) $('dlError').textContent = T('Downloaded, but installing its dependencies failed. Switch to it and use Maintenance → "Install missing dependencies".');
       dl.folderEdited = dl.nameEdited = false;
       dl.onDone?.(r);
     }
@@ -2320,27 +2471,27 @@
     if (!b || (a && vcmp(b, a) <= 0)) return [];
     return (await versions()).filter(v => { const n = vnum(v.version); return n && vcmp(n, b) <= 0 && (!a || vcmp(n, a) > 0); });
   }
-  const verText = x => (x ? `${x.version}${x.branch ? ` (${x.branch})` : x.pinned ? ' (fixed version)' : ''}` : '');
-  const KIND = { update: 'Updated', download: 'Downloaded', branch: 'Switched release channel', outside: 'Changed outside this app' };
-  const changeTitle = e => (e.kind === 'download' ? `Downloaded SillyTavern ${verText(e.to)}`
-    : e.from && verText(e.from) !== verText(e.to) ? `SillyTavern ${verText(e.from)} → ${verText(e.to)}${e.from.version === e.to.version && e.commitCount ? ` (${e.commitCount} change${e.commitCount === 1 ? '' : 's'})` : ''}`
-    : `SillyTavern ${verText(e.to)}: ${e.commitCount || 'new'} change${e.commitCount === 1 ? '' : 's'}`);
+  const verText = x => (x ? `${x.version}${x.branch ? ` (${x.branch})` : x.pinned ? ` (${T('fixed version')})` : ''}` : '');
+  const KIND = { update: T('Updated'), download: T('Downloaded'), branch: T('Switched release channel'), outside: T('Changed outside this app') };
+  const changeTitle = e => (e.kind === 'download' ? T('Downloaded SillyTavern {version}', { version: verText(e.to) })
+    : e.from && verText(e.from) !== verText(e.to) ? `SillyTavern ${verText(e.from)} → ${verText(e.to)}${e.from.version === e.to.version && e.commitCount ? ` (${T('{n} change|{n} changes', { n: e.commitCount })})` : ''}`
+    : `SillyTavern ${verText(e.to)}: ${e.commitCount ? T('{n} change|{n} changes', { n: e.commitCount }) : T('new changes')}`);
 
   // The dialog: release notes per version, then the list of changes (commits).
   // back: a function that goes back to the list it was opened from.
   function showChanges({ title, sub, releases = [], commits = [], commitCount = 0, back = 0, note = '', action = null, onBack = null }) {
     $('chgTitle').textContent = title;
     $('chgSub').textContent = sub || '';
-    const parts = releases.map((v, i) => `<details class="notes"${i === 0 ? ' open' : ''}><summary>What's new in ${esc(v.version)}${v.date ? ` · ${esc(new Date(v.date).toLocaleDateString())}` : ''}${v.fixes?.length ? '<span class="tag good">security fixes</span>' : ''}</summary>
-      <div>${esc(plainNotes(v.notes) || 'No notes for this release.')}</div><button class="link" data-relpage="${esc(v.version)}" style="margin-top:6px">Release page on GitHub</button></details>`);
+    const parts = releases.map((v, i) => `<details class="notes"${i === 0 ? ' open' : ''}><summary>${esc(T('What\'s new in {version}', { version: v.version }))}${v.date ? ` · ${esc(new Date(v.date).toLocaleDateString(LOC))}` : ''}${v.fixes?.length ? `<span class="tag good">${T('security fixes')}</span>` : ''}</summary>
+      <div>${esc(plainNotes(v.notes) || T('No notes for this release.'))}</div><button class="link" data-relpage="${esc(v.version)}" style="margin-top:6px">${T('Release page on GitHub')}</button></details>`);
     if (commits.length) {
-      const more = commitCount > commits.length ? `<div class="muted">…and ${commitCount - commits.length} more</div>` : '';
-      parts.push(`<details class="notes"${releases.length ? '' : ' open'}><summary>${commitCount || commits.length} change${(commitCount || commits.length) === 1 ? '' : 's'}, newest first</summary>
+      const more = commitCount > commits.length ? `<div class="muted">${T('…and {n} more', { n: commitCount - commits.length })}</div>` : '';
+      parts.push(`<details class="notes"${releases.length ? '' : ' open'}><summary>${T('{n} change, newest first|{n} changes, newest first', { n: commitCount || commits.length })}</summary>
         <div class="commits">${commits.map(c => `<div><span class="mono">${esc(c.d)}</span><span>${esc(c.s)}</span></div>`).join('')}${more}</div></details>`);
     }
-    if (back) parts.push(`<p class="muted">${back} change${back === 1 ? ' is' : 's are'} no longer included: this went back to an earlier state of SillyTavern.</p>`);
+    if (back) parts.push(`<p class="muted">${T('{n} change is no longer included: this went back to an earlier state of SillyTavern.|{n} changes are no longer included: this went back to an earlier state of SillyTavern.', { n: back })}</p>`);
     if (note) parts.push(`<p class="muted">${esc(note)}</p>`);
-    if (!parts.length) parts.push('<p class="muted">No details about this change.</p>');
+    if (!parts.length) parts.push(`<p class="muted">${T('No details about this change.')}</p>`);
     $('chgBody').innerHTML = parts.join('');
     $('chgBody').querySelectorAll('[data-relpage]').forEach(b => b.onclick = () => D.openStRelease(b.dataset.relpage));
     $('chgActions').innerHTML = action ? `<button class="btn primary" id="btnChgAction">${action.label}</button>` : '';
@@ -2358,9 +2509,9 @@
     const wentBack = e.from && vnum(e.from.version) && vnum(e.to.version) && vcmp(vnum(e.to.version), vnum(e.from.version)) < 0;
     showChanges({
       title: changeTitle(e),
-      sub: `${KIND[e.kind] || 'Changed'} · ${new Date(e.at).toLocaleString()}`,
+      sub: `${KIND[e.kind] || T('Changed')} · ${new Date(e.at).toLocaleString(LOC)}`,
       releases, commits: e.commits, commitCount: e.commitCount, back: e.back,
-      note: wentBack ? `This went back to an older version (${e.from.version} → ${e.to.version}).` : e.kind === 'outside' ? 'SillyTavern was changed while this app wasn\'t looking (for example with git pull or SillyTavern\'s own updater).' : '',
+      note: wentBack ? T('This went back to an older version ({from} → {to}).', { from: e.from.version, to: e.to.version }) : e.kind === 'outside' ? T('SillyTavern was changed while this app wasn\'t looking (for example with git pull or SillyTavern\'s own updater).') : '',
       onBack,
     });
     if (!e.seen) { e.seen = true; await D.historySeen(e.id); loadNews(); }
@@ -2370,12 +2521,12 @@
   async function showHistory(profileId) {
     const r = await D.history(profileId);
     const list = r.entries || [];
-    $('chgTitle').textContent = r.profile ? `History of "${r.profile.name}"` : 'History';
-    $('chgSub').textContent = list.length ? 'Updates, downloads and channel switches of this SillyTavern folder, newest first.' : '';
+    $('chgTitle').textContent = r.profile ? T('History of "{name}"', { name: r.profile.name }) : T('History');
+    $('chgSub').textContent = list.length ? T('Updates, downloads and channel switches of this SillyTavern folder, newest first.') : '';
     $('chgBody').innerHTML = list.length ? `<div class="list">${list.map((e, i) => `<div class="item">
-        <div class="main"><div class="title">${esc(changeTitle(e))}</div><div class="meta">${esc(KIND[e.kind] || 'Changed')} · ${esc(new Date(e.at).toLocaleString())}${e.seen ? '' : ' · <span style="color:var(--accent2)">new</span>'}</div></div>
-        <button class="btn sm" data-entry="${i}">Details</button></div>`).join('')}</div>`
-      : '<div class="empty">Nothing recorded yet. Updates, downloads and release/staging switches made from now on show up here, with their release notes and changes.</div>';
+        <div class="main"><div class="title">${esc(changeTitle(e))}</div><div class="meta">${esc(KIND[e.kind] || T('Changed'))} · ${esc(new Date(e.at).toLocaleString(LOC))}${e.seen ? '' : ` · <span style="color:var(--accent2)">${T('new')}</span>`}</div></div>
+        <button class="btn sm" data-entry="${i}">${T('Details')}</button></div>`).join('')}</div>`
+      : `<div class="empty">${T('Nothing recorded yet. Updates, downloads and release/staging switches made from now on show up here, with their release notes and changes.')}</div>`;
     $('chgBody').querySelectorAll('[data-entry]').forEach(b => b.onclick = () => showEntry(list[Number(b.dataset.entry)], () => showHistory(profileId)));
     $('chgActions').innerHTML = '';
     $('btnChgBack').hidden = true;
@@ -2391,7 +2542,7 @@
     $('newsCard').hidden = !e;
     if (!e) return;
     $('newsTitle').textContent = changeTitle(e);
-    $('newsSub').textContent = `${KIND[e.kind] || 'Changed'} ${new Date(e.at).toLocaleString()}. See the release notes and every change.`;
+    $('newsSub').textContent = `${KIND[e.kind] || T('Changed')} · ${new Date(e.at).toLocaleString(LOC)}. ${T('See the release notes and every change.')}`;
   }
   $('btnNewsShow').onclick = () => state.news && showEntry(state.news);
   $('btnNewsHide').onclick = async () => { if (state.news) await D.historySeen(state.news.id); loadNews(); };
@@ -2400,18 +2551,17 @@
   $('btnIncoming').onclick = async () => {
     const r = await D.stIncoming();
     showChanges({
-      title: r.to && r.to !== r.from ? `Update: SillyTavern ${r.from} → ${r.to}` : `Update for SillyTavern ${r.from}`,
-      sub: 'Nothing is installed until you click Update now.',
+      title: r.to && r.to !== r.from ? T('Update: SillyTavern {from} → {to}', { from: r.from, to: r.to }) : T('Update for SillyTavern {version}', { version: r.from }),
+      sub: T('Nothing is installed until you click Update now.'),
       releases: await releasesBetween(r.from, r.to),
       commits: r.commits, commitCount: r.commits.length,
-      action: { label: 'Update now', fn: () => D.update() },
+      action: { label: T('Update now'), fn: () => D.update() },
     });
   };
 
   // ---------- migrate data ----------
   const size = n => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : n >= 1024 ** 2 ? `${(n / 1024 ** 2).toFixed(n < 10 * 1024 ** 2 ? 1 : 0)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-  const num = n => Number(n).toLocaleString();
-  const plural = (n, word) => `${num(n)} ${word}${n === 1 ? '' : 's'}`;
+  const num = n => Number(n).toLocaleString(LOC);
   // The last categories picked are remembered for next time (this PC only).
   const migStore = {
     get(k, d) { try { const v = localStorage.getItem(`mig.${k}`); return v == null ? d : JSON.parse(v); } catch { return d; } },
@@ -2432,9 +2582,9 @@
     mg.preset = null;
     const dst = all.find(f => f.path === want.dst) || all.find(f => f.active) || all[0];
     const src = all.find(f => f.path === want.src && (f !== dst || f.users.length > 1)) || all.find(f => f !== dst) || dst;
-    const opt = (f, on) => `<option value="${esc(f.path)}"${on ? ' selected' : ''}>${esc(f.name)}${f.version ? ` · ${esc(f.version)}` : ''}${f.active ? ' (in use)' : ''}</option>`;
+    const opt = (f, on) => `<option value="${esc(f.path)}"${on ? ' selected' : ''}>${esc(f.name)}${f.version ? ` · ${esc(f.version)}` : ''}${f.active ? ` (${T('in use')})` : ''}</option>`;
     $('migDst').innerHTML = all.map(f => opt(f, f === dst)).join('');
-    $('migSrc').innerHTML = all.map(f => opt(f, f === src)).join('') + '<option value="__browse">Another SillyTavern folder…</option>';
+    $('migSrc').innerHTML = all.map(f => opt(f, f === src)).join('') + `<option value="__browse">${T('Another SillyTavern folder…')}</option>`;
     fillMigUsers();
     if (!mg.scan) endsChanged();
     loadJournals();
@@ -2443,7 +2593,7 @@
     for (const [sel, users] of [['migSrcUser', migFolder($('migSrc').value)?.users], ['migDstUser', migFolder($('migDst').value)?.users]]) {
       const list = users?.length ? users : ['default-user'];
       const keep = $(sel).value;
-      $(sel).innerHTML = list.map(u => `<option value="${esc(u)}">${u === 'default-user' ? 'default user' : `user: ${esc(u)}`}</option>`).join('');
+      $(sel).innerHTML = list.map(u => `<option value="${esc(u)}">${u === 'default-user' ? T('default user') : esc(T('user: {name}', { name: u }))}</option>`).join('');
       if (list.includes(keep)) $(sel).value = keep;
       // Only worth showing when SillyTavern has more than one user.
       $(sel).hidden = list.length < 2;
@@ -2459,12 +2609,12 @@
     const e = ends();
     const same = e.src === e.dst && e.srcUser === e.dstUser;
     $('btnMigScan').disabled = same || !e.src || !e.dst || mg.running;
-    $('migScanInfo').textContent = migAll().length < 2 && same ? 'There is only one SillyTavern here. Add another under Profiles (or download one), or pick another folder above.'
-      : same ? 'Pick a different folder (or user) to copy from.' : 'Looks at both folders and shows what can be copied. Nothing is changed yet.';
+    $('migScanInfo').textContent = migAll().length < 2 && same ? T('There is only one SillyTavern here. Add another under Profiles (or download one), or pick another folder above.')
+      : same ? T('Pick a different folder (or user) to copy from.') : T('Looks at both folders and shows what can be copied. Nothing is changed yet.');
     const s = migFolder(e.src)?.version, d = migFolder(e.dst)?.version;
     const newer = vnum(s) && vnum(d) && vcmp(vnum(s), vnum(d)) > 0;
     $('migVerWarn').hidden = !newer || same;
-    $('migVerWarn').innerHTML = newer ? `<b>⚠ Copying from a newer SillyTavern (${esc(s)}) into an older one (${esc(d)}).</b> Older versions may not read everything newer ones saved. Update the target first if you can (switch to it and use Update now).` : '';
+    $('migVerWarn').innerHTML = newer ? `<b>⚠ ${T('Copying from a newer SillyTavern ({from}) into an older one ({to}).', { from: esc(s), to: esc(d) })}</b> ${T('Older versions may not read everything newer ones saved. Update the target first if you can (switch to it and use Update now).')}` : '';
     loadJournals();
   }
   $('migSrc').onchange = async () => {
@@ -2475,7 +2625,7 @@
         await loadMigrate();
         $('migSrc').value = r.path;
       } else {
-        if (r.error) append(`ERROR: ${r.error}`);
+        if (r.error) append(`${T('ERROR:')} ${r.error}`);
         $('migSrc').selectedIndex = 0;
       }
     }
@@ -2497,7 +2647,7 @@
   const itemState = i => (i.sameFiles === i.files ? 'same' : i.newFiles === i.files ? 'new' : i.diffFiles ? 'different' : 'partial');
   async function scanMig({ keepSelection = false } = {}) {
     $('btnMigScan').disabled = true;
-    $('migScanInfo').textContent = 'Looking at both folders…';
+    $('migScanInfo').textContent = T('Looking at both folders…');
     const r = await D.migScan(ends());
     $('btnMigScan').disabled = false;
     if (r.error) { $('migScanInfo').innerHTML = `<span class="err">${esc(r.error)}</span>`; return; }
@@ -2508,7 +2658,8 @@
     if (keepSelection) mg.sel = new Set([...before].filter(k => mg.items.has(k)));
     else selectPreset(migStore.get('cats', null) ? 'remembered' : 'recommended');
     const all = [...mg.items.values()];
-    $('migScanInfo').textContent = `Found ${plural(all.length, 'thing')} (${size(all.reduce((n, i) => n + i.size, 0))}). ${(n => (n ? `${num(n)} of them ${n === 1 ? 'is' : 'are'} already in the target.` : 'None of them is in the target yet.'))(all.filter(i => itemState(i) === 'same').length)}`;
+    const already = all.filter(i => itemState(i) === 'same').length;
+    $('migScanInfo').textContent = `${T('Found {n} thing ({size}).|Found {n} things ({size}).', { n: all.length, size: size(all.reduce((n, i) => n + i.size, 0)) })} ${already ? T('{n} of them is already in the target.|{n} of them are already in the target.', { n: already }) : T('None of them is in the target yet.')}`;
     $('migPick').hidden = $('migGo').hidden = false;
     renderMig();
   }
@@ -2537,9 +2688,9 @@
     if (!picked.length) return '';
     if (c.warn) return c.warn;
     const orphans = picked.filter(chatOrphan).length;
-    if (orphans) return `${plural(orphans, 'chat folder')} belong${orphans === 1 ? 's' : ''} to characters that won't be in the target.`;
+    if (orphans) return T('{n} chat folder belongs to characters that won\'t be in the target.|{n} chat folders belong to characters that won\'t be in the target.', { n: orphans });
     const groups = picked.filter(i => groupMissing(i).length).length;
-    if (groups) return `${plural(groups, 'group')} use${groups === 1 ? 's' : ''} characters that won't be in the target.`;
+    if (groups) return T('{n} group uses characters that won\'t be in the target.|{n} groups use characters that won\'t be in the target.', { n: groups });
     return '';
   }
 
@@ -2564,16 +2715,16 @@
     for (const i of c.items) st[itemState(i)]++;
     return { picked: c.items.filter(i => mg.sel.has(i.key)).length, size: c.items.reduce((n, i) => n + i.size, 0), st };
   }
-  const stateLine = st => [st.new && `${num(st.new)} new`, st.different && `${num(st.different)} different`, st.partial && `${num(st.partial)} partly there`, st.same && `${num(st.same)} already there`].filter(Boolean).join(' · ');
+  const stateLine = st => [st.new && T('{n} new', { n: st.new }), st.different && T('{n} different', { n: st.different }), st.partial && T('{n} partly there', { n: st.partial }), st.same && T('{n} already there', { n: st.same })].filter(Boolean).join(' · ');
   function renderCats() {
     const cats = mg.scan.categories;
     $('migCats').innerHTML = cats.map(c => {
       const k = catCounts(c);
       const warn = catWarning(c);
       return `<label class="mig-cat ${k.picked ? 'on' : ''}"><input type="checkbox" data-mcat="${c.id}"${k.picked === c.items.length ? ' checked' : ''}>
-        <div><b>${esc(c.label)}</b>${k.picked && k.picked < c.items.length ? ` <span class="tag">${num(k.picked)} of ${num(c.items.length)}</span>` : ''}
+        <div><b>${esc(c.label)}</b>${k.picked && k.picked < c.items.length ? ` <span class="tag">${T('{picked} of {total}', { picked: k.picked, total: c.items.length })}</span>` : ''}
         <div class="meta">${esc(c.desc)}</div>
-        <div class="meta">${plural(c.items.length, 'item')} · ${size(k.size)} — ${stateLine(k.st)}</div>
+        <div class="meta">${T('{n} item|{n} items', { n: c.items.length })} · ${size(k.size)} — ${stateLine(k.st)}</div>
         ${warn ? `<div class="warn">⚠ ${esc(warn)}</div>` : ''}</div></label>`;
     }).join('');
     $('migCats').querySelectorAll('[data-mcat]').forEach(inp => {
@@ -2599,11 +2750,11 @@
   }
   function itemRow(i) {
     const st = itemState(i);
-    const tag = { new: '<span class="tag good">new</span>', same: '<span class="tag">already there</span>', partial: '<span class="tag">partly there</span>',
-      different: `<span class="tag warn" title="${num(i.diffFiles)} file${i.diffFiles === 1 ? '' : 's'} differ; ${num(i.newerInSource)} of them newer in the source">different</span>` }[st];
+    const tag = { new: `<span class="tag good">${T('new')}</span>`, same: `<span class="tag">${T('already there')}</span>`, partial: `<span class="tag">${T('partly there')}</span>`,
+      different: `<span class="tag warn" title="${esc(T('{n} file differs; {newer} of them newer in the source|{n} files differ; {newer} of them newer in the source', { n: i.diffFiles, newer: i.newerInSource }))}">${T('different')}</span>` }[st];
     const missing = groupMissing(i);
-    const extra = chatOrphan(i) ? '<span class="tag warn" title="Its character is not in the target and not picked">character not copied</span>'
-      : missing.length ? `<span class="tag warn" title="${esc(missing.join(', '))}">needs ${plural(missing.length, 'character')}</span>` : '';
+    const extra = chatOrphan(i) ? `<span class="tag warn" title="${esc(T('Its character is not in the target and not picked'))}">${T('character not copied')}</span>`
+      : missing.length ? `<span class="tag warn" title="${esc(missing.join(', '))}">${T('needs {n} character|needs {n} characters', { n: missing.length })}</span>` : '';
     return `<label class="mig-item"><input type="checkbox" data-mitem="${esc(i.key)}"${mg.sel.has(i.key) ? ' checked' : ''}><span class="lbl">${esc(i.label)}${i.sub ? ` <i>· ${esc(i.sub)}</i>` : ''}</span>${extra}${tag}<span class="sz">${size(i.size)}</span></label>`;
   }
   function renderAdv() {
@@ -2616,9 +2767,9 @@
       const k = catCounts(c);
       const open = mg.open.has(c.id) || (mg.search && items.length <= 50);
       return `<details class="mig-group" data-mgroup="${c.id}"${open ? ' open' : ''}><summary><input type="checkbox" data-mgcat="${c.id}"${k.picked === c.items.length ? ' checked' : ''}><b>${esc(c.label)}</b>
-        <span class="muted">${num(k.picked)} of ${num(c.items.length)} picked · ${size(k.size)}${catWarning(c) ? ' · <span style="color:var(--warn)">⚠</span>' : ''}</span></summary>
+        <span class="muted">${T('{picked} of {total} picked', { picked: k.picked, total: c.items.length })} · ${size(k.size)}${catWarning(c) ? ' · <span style="color:var(--warn)">⚠</span>' : ''}</span></summary>
         <div class="mig-items">${open ? items.map(itemRow).join('') : ''}</div></details>`;
-    }).join('') || '<div class="empty">Nothing matches.</div>';
+    }).join('') || `<div class="empty">${T('Nothing matches.')}</div>`;
     box.querySelectorAll('[data-mgroup]').forEach(d => {
       const list = d.querySelector('.mig-items');
       if (list) list.scrollTop = scrolls[d.dataset.mgroup] || 0;
@@ -2658,10 +2809,14 @@
       const p = await D.migPreview(mg.scan.id, keys, mg.policy);
       if (!p) return;
       const enough = p.free == null || p.bytes < p.free - 200 * 1024 ** 2;
-      $('migSummary').innerHTML = !keys.length ? 'Pick what to copy above.'
-        : !p.files ? `Nothing to copy: ${p.skipped ? `the ${plural(p.skipped, 'different file')} stay as they are (see below), everything else` : 'everything you picked'} is already there.`
-        : `Copies <b>${plural(p.files, 'file')}</b> (${size(p.bytes)}) from ${plural(keys.length, 'picked item')}${p.replaces ? `, replacing ${plural(p.replaces, 'file')} in the target (the old ones are kept for Undo)` : ''}.${p.skipped ? ` ${plural(p.skipped, 'different file')} stay${p.skipped === 1 ? 's' : ''} as ${p.skipped === 1 ? 'it is' : 'they are'}.` : ''}`
-          + (enough ? '' : ` <span class="err">Not enough free space on the target's drive (${size(p.free)} free).</span>`);
+      $('migSummary').innerHTML = !keys.length ? T('Pick what to copy above.')
+        : !p.files ? (p.skipped
+          ? T('Nothing to copy: the {n} different file stays as it is (see below), everything else is already there.|Nothing to copy: the {n} different files stay as they are (see below), everything else is already there.', { n: p.skipped })
+          : T('Nothing to copy: everything you picked is already there.'))
+        : `${T('Copies <b>{files}</b> ({size}) from {items}.', { files: T('{n} file|{n} files', { n: p.files }), size: size(p.bytes), items: T('{n} picked item|{n} picked items', { n: keys.length }) })}`
+          + (p.replaces ? ` ${T('Replaces {n} file in the target (the old one is kept for Undo).|Replaces {n} files in the target (the old ones are kept for Undo).', { n: p.replaces })}` : '')
+          + (p.skipped ? ` ${T('{n} different file stays as it is.|{n} different files stay as they are.', { n: p.skipped })}` : '')
+          + (enough ? '' : ` <span class="err">${esc(T('Not enough free space on the target\'s drive ({free} free).', { free: size(p.free) }))}</span>`);
       $('btnMigRun').disabled = !p.files || !enough || mg.running || !!state.busy;
     }, 120);
   }
@@ -2688,7 +2843,7 @@
   }
   D.onMigProgress(p => {
     $('migBar').firstElementChild.style.width = `${p.totalBytes ? Math.floor((p.bytes * 100) / p.totalBytes) : Math.floor((p.done * 100) / (p.total || 1))}%`;
-    $('migProgText').textContent = `${num(p.done)} of ${plural(p.total, 'file')} · ${size(p.bytes)} of ${size(p.totalBytes)}`;
+    $('migProgText').textContent = T('{done} of {total} files · {bytes} of {totalBytes}', { done: p.done, total: p.total, bytes: size(p.bytes), totalBytes: size(p.totalBytes) });
   });
   $('btnMigCancel').onclick = () => { $('btnMigCancel').disabled = true; D.migCancel(); };
   $('btnMigRun').onclick = async () => {
@@ -2696,16 +2851,16 @@
     $('migErr').textContent = '';
     $('migDone').hidden = true;
     $('migBar').firstElementChild.style.width = '0%';
-    $('migProgText').textContent = $('migBackup').checked ? 'Backing up the target first…' : 'Starting…';
+    $('migProgText').textContent = $('migBackup').checked ? T('Backing up the target first…') : T('Starting…');
     migRunning(true);
     const r = await D.migRun({ id: mg.scan.id, dst: e.dst, keys: [...mg.sel], policy: mg.policy, backupFirst: $('migBackup').checked });
     migRunning(false);
-    if (!r.id) { $('migErr').textContent = r.error || 'Nothing was copied.'; return; }
+    if (!r.id) { $('migErr').textContent = r.error || T('Nothing was copied.'); return; }
     const target = migFolder(e.dst);
     $('migDone').hidden = false;
-    $('migDone').innerHTML = `<span class="${r.error ? 'err' : r.cancelled ? 'muted' : ''}" style="flex:1;min-width:240px">${r.error ? 'Stopped by an error' : r.cancelled ? 'Stopped' : '✓ Done'}: ${plural(r.added, 'file')} added, ${num(r.replaced)} replaced${r.skipped ? `, ${num(r.skipped)} kept as ${r.skipped === 1 ? 'it was' : 'they were'}` : ''}.${r.error ? ` (${esc(r.error)})` : ''}</span>
-      <button class="btn sm" id="btnMigUndoNow"><svg class="i"><use href="#i-restore"/></svg>Undo</button>
-      ${target?.active ? '<button class="btn sm primary" id="btnMigOpen"><svg class="i"><use href="#i-play"/></svg>Open SillyTavern</button>' : target ? `<button class="btn sm primary" id="btnMigUse">Switch to "${esc(target.name)}"</button>` : ''}`;
+    $('migDone').innerHTML = `<span class="${r.error ? 'err' : r.cancelled ? 'muted' : ''}" style="flex:1;min-width:240px">${r.error ? T('Stopped by an error') : r.cancelled ? T('Stopped') : `✓ ${T('Done')}`}: ${T('{added} added, {replaced} replaced', { added: T('{n} file|{n} files', { n: r.added }), replaced: r.replaced })}${r.skipped ? `, ${T('{n} kept as it was|{n} kept as they were', { n: r.skipped })}` : ''}.${r.error ? ` (${esc(r.error)})` : ''}</span>
+      <button class="btn sm" id="btnMigUndoNow"><svg class="i"><use href="#i-restore"/></svg>${T('Undo')}</button>
+      ${target?.active ? `<button class="btn sm primary" id="btnMigOpen"><svg class="i"><use href="#i-play"/></svg>${T('Open SillyTavern')}</button>` : target ? `<button class="btn sm primary" id="btnMigUse">${esc(T('Switch to "{name}"', { name: target.name }))}</button>` : ''}`;
     $('btnMigUndoNow').onclick = () => undoMig(e.dst, r.id);
     if ($('btnMigOpen')) $('btnMigOpen').onclick = () => D.openST();
     if ($('btnMigUse')) $('btnMigUse').onclick = () => D.profileUse(target.id);
@@ -2719,9 +2874,9 @@
     const list = dst ? await D.migJournals(dst) : [];
     $('migPast').hidden = !list.length;
     $('migPastList').innerHTML = list.map(j => `<div class="item"><div class="main">
-        <div class="title">${esc(new Date(j.at).toLocaleString())}${j.cancelled ? ' <span class="tag">stopped early</span>' : ''}</div>
-        <div class="meta">From ${esc(j.from)}${j.fromUser !== 'default-user' ? ` (user ${esc(j.fromUser)})` : ''}${j.toUser !== 'default-user' ? ` into user ${esc(j.toUser)}` : ''} · ${plural(j.added, 'file')} added, ${num(j.replaced)} replaced</div></div>
-        <button class="btn sm" data-task data-migundo="${esc(j.id)}"><svg class="i"><use href="#i-restore"/></svg>Undo</button></div>`).join('');
+        <div class="title">${esc(new Date(j.at).toLocaleString(LOC))}${j.cancelled ? ` <span class="tag">${T('stopped early')}</span>` : ''}</div>
+        <div class="meta">${esc(T('From {from}', { from: j.from }))}${j.fromUser !== 'default-user' ? ` (${esc(T('user: {name}', { name: j.fromUser }))})` : ''}${j.toUser !== 'default-user' ? ` → ${esc(T('user: {name}', { name: j.toUser }))}` : ''} · ${T('{added} added, {replaced} replaced', { added: T('{n} file|{n} files', { n: j.added }), replaced: j.replaced })}</div></div>
+        <button class="btn sm" data-task data-migundo="${esc(j.id)}"><svg class="i"><use href="#i-restore"/></svg>${T('Undo')}</button></div>`).join('');
     $('migPastList').querySelectorAll('[data-migundo]').forEach(b => { b.disabled = !!state.busy; b.onclick = () => undoMig(dst, b.dataset.migundo); });
   }
   async function undoMig(dst, id) {
@@ -2735,29 +2890,29 @@
     const req = st.requirements, rt = st.runtime;
     // Which copy is in use: the app's own when it's switched on and downloaded.
     const ownNode = rt.active && rt.node, ownGit = rt.active && rt.git;
-    const row = (name, r, own) => `<div class="item"><span class="check-ico ${r.ok ? 'ok' : 'bad'}">${icon(r.ok ? 'check' : 'x')}</span><div class="main"><div class="title">${name}</div><div class="meta">${r.installed ? `Version ${esc(r.version)} · ${own ? 'this app\'s own copy' : 'installed on this PC'}` : 'Not installed'}</div></div></div>`;
+    const row = (name, r, own) => `<div class="item"><span class="check-ico ${r.ok ? 'ok' : 'bad'}">${icon(r.ok ? 'check' : 'x')}</span><div class="main"><div class="title">${name}</div><div class="meta">${r.installed ? `${esc(T('Version {version}', { version: r.version }))} · ${own ? T('this app\'s own copy') : T('installed on this PC')}` : T('Not installed')}</div></div></div>`;
     $('backendList').innerHTML = row('Node.js', req.node, ownNode) + row('Git', req.git, ownGit);
     $('btnUpdateBackend').hidden = !req.canAutoInstall || rt.active;
     $('backendHint').textContent = rt.active
-      ? 'The app uses its own copies. Download checks for newer ones; switch it off below to use the ones installed on this PC.'
-      : 'Update installs the latest Node.js (LTS) and Git with Windows\' package manager, then reinstalls SillyTavern\'s dependencies so everything matches.';
+      ? T('The app uses its own copies. Download checks for newer ones; switch it off below to use the ones installed on this PC.')
+      : T('Update installs the latest Node.js (LTS) and Git with Windows\' package manager, then reinstalls SillyTavern\'s dependencies so everything matches.');
     const have = rt.node || rt.git;
     $('rtUse').checked = !!st.runtime.on;
     $('rtUse').disabled = !have;
-    $('btnRtGet').innerHTML = `${icon('download')}${have ? 'Check for newer' : 'Download'}`;
-    $('btnRtGet').title = have ? '' : 'About 70 MB to download, about 210 MB on disk';
+    $('btnRtGet').innerHTML = `${icon('download')}${have ? T('Check for newer') : T('Download')}`;
+    $('btnRtGet').title = have ? '' : T('About 70 MB to download, about 210 MB on disk');
     $('btnRtRemove').hidden = !have;
     if (!state.rtProgress) $('rtState').textContent = have
-      ? `Downloaded: Node.js ${rt.node ? rt.node.version : '—'}, Git ${rt.git ? rt.git.version : '—'}.${st.runtime.on && !rt.active ? ' Missing files — download again.' : ''}`
-      : 'Not downloaded (about 70 MB to download, 210 MB on disk).';
+      ? `${T('Downloaded: Node.js {node}, Git {git}.', { node: rt.node ? rt.node.version : '—', git: rt.git ? rt.git.version : '—' })}${st.runtime.on && !rt.active ? ` ${T('Missing files — download again.')}` : ''}`
+      : T('Not downloaded (about 70 MB to download, 210 MB on disk).');
   }
   $('btnUpdateBackend').onclick = () => D.updateBackend();
   $('btnRtGet').onclick = () => D.runtimeInstall();
   $('btnRtRemove').onclick = () => D.runtimeRemove();
   $('rtUse').onchange = async () => { await D.runtimeUse($('rtUse').checked); loadBackend(); };
-  D.onRuntimeProgress(t => {
-    state.rtProgress = t;
-    if (t) { $('rtState').textContent = t; $('reqHint').textContent = t; }
+  D.onRuntimeProgress(text => {
+    state.rtProgress = text;
+    if (text) { $('rtState').textContent = text; $('reqHint').textContent = text; }
     else if (state.page === 'maintenance') loadBackend();
   });
 
@@ -2780,7 +2935,7 @@
   // A theme is base colors + a logo. Logos are shrunk to 32px and shown
   // with pixelated scaling, so any image becomes pixel art.
   const VAR_OF = { bg: '--bg', panel: '--panel', border: '--border', accent: '--accent', text: '--text', title: '--title', muted: '--muted', onAccent: '--on-accent', good: '--good', warn: '--warn', bad: '--bad' };
-  const EDIT_KEYS = [['bg', 'Background'], ['panel', 'Panels'], ['border', 'Borders'], ['accent', 'Accent'], ['text', 'Text'], ['title', 'Headings'], ['muted', 'Secondary text']];
+  const EDIT_KEYS = [['bg', T('Background')], ['panel', T('Panels')], ['border', T('Borders')], ['accent', T('Accent')], ['text', T('Text')], ['title', T('Headings')], ['muted', T('Secondary text')]];
   const FALLBACK = { onAccent: '#140c0a', good: '#8fcf8f', warn: '#e6c36a', bad: '#f28a6c' };
   const svgUrl = (body, vb) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}">${body}</svg>`);
   const FOX_SVG = svgUrl(document.getElementById('fox').innerHTML, '0 0 64 64');
@@ -2844,10 +2999,10 @@
       const c = { ...FALLBACK, ...t.colors };
       const sw = [c.bg, c.panel, c.border, c.accent, c.text].map(x => `<i style="background:${x}"></i>`).join('');
       const acts = t.builtin
-        ? `<button class="btn sm ghost" data-copy="${esc(t.id)}">Customize</button><button class="btn sm ghost" data-export="${esc(t.id)}">Export</button>`
-        : `<button class="btn sm ghost" data-edit="${esc(t.id)}">Edit</button><button class="btn sm ghost" data-export="${esc(t.id)}">Export</button><button class="btn sm ghost danger" data-deltheme="${esc(t.id)}" title="Delete">${icon('trash')}</button>`;
+        ? `<button class="btn sm ghost" data-copy="${esc(t.id)}">${T('Customize')}</button><button class="btn sm ghost" data-export="${esc(t.id)}">${T('Export')}</button>`
+        : `<button class="btn sm ghost" data-edit="${esc(t.id)}">${T('Edit')}</button><button class="btn sm ghost" data-export="${esc(t.id)}">${T('Export')}</button><button class="btn sm ghost danger" data-deltheme="${esc(t.id)}" title="${T('Delete')}">${icon('trash')}</button>`;
       return `<div class="theme-card ${t.id === themeState.active ? 'on' : ''}" data-theme="${esc(t.id)}">
-        <div class="top"><img class="logo" src="${await logoSrc(t.logo)}" alt=""><div><b>${esc(t.name)}</b><div class="muted small">${t.builtin ? 'Built-in' : esc(t.author || 'Custom')}${t.id === themeState.active ? ' · in use' : ''}</div></div></div>
+        <div class="top"><img class="logo" src="${await logoSrc(t.logo)}" alt=""><div><b>${esc(t.name)}</b><div class="muted small">${t.builtin ? T('Built-in') : esc(t.author || T('Custom'))}${t.id === themeState.active ? ` · ${T('in use')}` : ''}</div></div></div>
         <div class="swatches">${sw}</div>
         <div class="acts">${acts}</div>
       </div>`;
@@ -2859,7 +3014,7 @@
     el.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(themeState.themes.find(t => t.id === b.dataset.edit), b.dataset.edit));
     el.querySelectorAll('[data-copy]').forEach(b => {
       const t = themeState.themes.find(x => x.id === b.dataset.copy);
-      b.onclick = () => openEditor({ ...t, name: `My ${t.name}` }, null);
+      b.onclick = () => openEditor({ ...t, name: T('My {name}', { name: t.name }) }, null);
     });
   }
 
@@ -2891,7 +3046,7 @@
     $('themeEditor').hidden = true;
     applyTheme(activeTheme());
   }
-  $('btnNewTheme').onclick = () => openEditor({ ...activeTheme(), name: 'My theme', author: '' }, null);
+  $('btnNewTheme').onclick = () => openEditor({ ...activeTheme(), name: T('My theme'), author: '' }, null);
   $('btnCancelTheme').onclick = closeEditor;
   $('btnThemeLogo').onclick = () => $('themeLogoFile').click();
   document.querySelectorAll('[data-logo-preset]').forEach(b => b.onclick = () => { editing.theme.logo = b.dataset.logoPreset; previewEditorLogo(); });
@@ -2911,7 +3066,7 @@
         editing.theme.logo = c.toDataURL('image/png');
         previewEditorLogo();
       };
-      img.onerror = () => { $('themeError').textContent = 'That image could not be read.'; };
+      img.onerror = () => { $('themeError').textContent = T('That image could not be read.'); };
       img.src = reader.result;
     };
     reader.readAsDataURL(f);
@@ -2925,7 +3080,7 @@
   };
   $('btnImportTheme').onclick = async () => {
     const r = await D.importTheme();
-    if (r.error) append(`ERROR: Theme import failed: ${r.error}`);
+    if (r.error) append(`${T('ERROR:')} ${T('Theme import failed: {reason}', { reason: r.error })}`);
   };
 
   // ---------- importing cards, lorebooks, presets ----------
@@ -2942,36 +3097,36 @@
         <div class="main"><div class="title">${esc(i.file)}</div><div class="meta" data-imp-meta="${esc(i.file)}">${i.kind ? esc(i.label) : `<span style="color:var(--bad)">${esc(i.error)}</span>`}</div></div>
       </div>`).join('');
     const sel = $('impProfile');
-    sel.innerHTML = r.profiles.map(p => `<option value="${esc(p.id)}"${p.active ? ' selected' : ''}>${esc(p.name)}${p.active ? ' (in use)' : ''} · SillyTavern ${esc(p.version)}</option>`).join('');
+    sel.innerHTML = r.profiles.map(p => `<option value="${esc(p.id)}" data-active="${p.active ? 1 : ''}"${p.active ? ' selected' : ''}>${esc(p.name)}${p.active ? ` (${T('in use')})` : ''} · SillyTavern ${esc(p.version)}</option>`).join('');
     $('impProfileBox').hidden = r.profiles.length < 2;
     $('btnImpGo').hidden = false;
     $('btnImpGo').disabled = !ok.length || !r.profiles.length || !!state.busy;
-    $('btnImpGo').innerHTML = `${icon('download')}Import ${ok.length || ''} file${ok.length === 1 ? '' : 's'}`;
+    $('btnImpGo').innerHTML = `${icon('download')}${ok.length ? T('Import {n} file|Import {n} files', { n: ok.length }) : T('Import')}`;
     $('btnImpReload').hidden = true;
-    $('impNote').textContent = !r.profiles.length ? 'Set up SillyTavern first.' : ok.length ? (state.running ? '' : 'The server starts for this.') : '';
+    $('impNote').textContent = !r.profiles.length ? T('Set up SillyTavern first.') : ok.length ? (state.running ? '' : T('The server starts for this.')) : '';
     $('impModal').classList.add('show');
   }
   const dlgOpen = id => $(id).classList.contains('show');
   $('impProfile').onchange = () => {
-    const active = $('impProfile').selectedOptions[0]?.textContent.includes('(in use)');
-    $('impNote').textContent = active ? (state.running ? '' : 'The server starts for this.') : 'A server for that profile runs just for the import.';
+    const active = !!$('impProfile').selectedOptions[0]?.dataset.active;
+    $('impNote').textContent = active ? (state.running ? '' : T('The server starts for this.')) : T('A server for that profile runs just for the import.');
   };
   $('btnImpGo').onclick = async () => {
     $('btnImpGo').disabled = true;
-    $('impNote').textContent = 'Importing…';
+    $('impNote').textContent = T('Importing…');
     const r = await D.importRun({ paths: imp.items.filter(i => i.kind).map(i => i.path), profileId: $('impProfile').value });
     imp.done = true;
     if (r.error) { $('impNote').textContent = r.error; $('btnImpGo').disabled = false; return; }
     for (const x of r.results) {
       const el = [...document.querySelectorAll('[data-imp-meta]')].find(e => e.dataset.impMeta === x.file);
       if (!el) continue;
-      el.innerHTML = x.ok ? `<span style="color:var(--good)">Imported as ${esc(x.as)}</span>` : `<span style="color:var(--bad)">${esc(x.error)}</span>`;
+      el.innerHTML = x.ok ? `<span style="color:var(--good)">${esc(T('Imported as {name}', { name: x.as }))}</span>` : `<span style="color:var(--bad)">${esc(x.error)}</span>`;
       el.closest('.item').querySelector('.check-ico').className = `check-ico ${x.ok ? 'ok' : 'bad'}`;
     }
     const n = r.results.filter(x => x.ok).length;
     $('btnImpGo').hidden = true;
     $('btnImpReload').hidden = !n || !r.reloadable;
-    $('impNote').textContent = `${n} of ${r.results.length} imported into "${r.profile}".${n && r.reloadable ? ' Reload SillyTavern to see them.' : ''}`;
+    $('impNote').textContent = `${T('{n} of {total} imported into "{profile}".', { n, total: r.results.length, profile: r.profile })}${n && r.reloadable ? ` ${T('Reload SillyTavern to see them.')}` : ''}`;
   };
   $('btnImpReload').onclick = async () => { await D.reloadST(); $('impModal').classList.remove('show'); };
   $('btnImpClose').onclick = () => $('impModal').classList.remove('show');
@@ -3007,7 +3162,192 @@
   D.onHistory(loadNews);
   D.onStDownload(p => { setDlStep(p.step === 'deps' ? 2 : 1); setDlBar(p.percent, p.text); });
 
+  $('btnProfTrash').onclick = async () => {
+    const r = await D.profileTrash(profEdit?.id);
+    if (r?.error) { $('profError').textContent = r.error; return; }
+    if (r) closeProfForm();
+  };
+
+  // ---------- remote link (Cloudflare) and Tailscale ----------
+  function renderTunnel(s) {
+    state.tunnel = s;
+    const on = s.status === 'on', busy = ['downloading', 'starting'].includes(s.status);
+    $('btnTunStart').hidden = on || busy;
+    $('btnTunStop').hidden = !(on || busy);
+    $('tunState').textContent = s.status === 'downloading' ? T('Downloading cloudflared… {pct}%', { pct: String(s.progress ?? 0) })
+      : s.status === 'starting' ? (s.error || T('Connecting to Cloudflare…'))
+      : on ? T('On: {url}', { url: s.url })
+      : s.error || (s.hasPassword === false ? T('Set a password above first.') : '');
+    $('tunCard').hidden = !on;
+    if (on) {
+      $('tunUrl').innerHTML = `<span class="lan-url">${esc(s.url)}</span>`;
+      $('tunHint').textContent = T('Open it on any device and sign in as "{user}" with the phone-access password. Stop it when you don\'t need it.', { user: s.user || 'user' });
+      $('tunQr').innerHTML = s.qr || '';
+    }
+  }
+  async function loadTunnel() { renderTunnel(await D.tunnelStatus()); }
+  D.onTunnel(s => renderTunnel({ ...state.tunnel, ...s }));
+  $('btnTunStart').onclick = async () => {
+    $('btnTunStart').disabled = true;
+    $('tunState').textContent = T('Starting…');
+    const r = await D.tunnelStart();
+    $('btnTunStart').disabled = false;
+    if (r?.error) { $('tunState').textContent = r.error; return; }
+    loadTunnel();
+  };
+  $('btnTunStop').onclick = $('btnTunStopHome').onclick = async () => { await D.tunnelStop(); loadTunnel(); loadLan(); };
+  $('btnTunCopy').onclick = async () => { await navigator.clipboard.writeText(state.tunnel?.url || ''); $('btnTunCopy').lastChild.textContent = T('Copied'); setTimeout(() => { $('btnTunCopy').lastChild.textContent = T('Copy link'); }, 1500); };
+  async function loadTailscale() {
+    const ts = await D.tailscaleInfo();
+    $('btnTsInstall').hidden = ts.installed;
+    $('tsState').textContent = !ts.installed ? T('Not installed on this PC.')
+      : !ts.running ? T('Installed, but not connected. Open Tailscale and sign in.')
+      : T('Connected as {name} ({ips}). {phone}', { name: ts.dns || ts.name, ips: ts.ips.join(', '), phone: current.lanAccess ? T('Its address shows on Home.') : T('Turn on phone access to use it.') });
+  }
+  $('btnTsInstall').onclick = async () => { await D.tailscaleInstall(); loadTailscale(); };
+
+  // ---------- SillyTavern server options (environment variables) ----------
+  const onOff = v => (v === true ? T('on') : v === false ? T('off') : v ? String(v) : T('not set'));
+  function renderServerOptions(r) {
+    state.so = r;
+    $('setHttps').checked = r.https;
+    $('httpsInfo').hidden = !r.cert;
+    if (r.cert) $('httpsInfo').textContent = T('Certificate valid until {date}, for {names}.', { date: new Date(r.cert.validTo).toLocaleDateString(LOC), names: r.cert.names.replace(/DNS:|IP Address:/g, '') });
+    $('soList').innerHTML = r.options.map(o => {
+      const cfg = T('config.yaml: {value}', { value: onOff(o.config) });
+      const control = o.kind === 'bool'
+        ? `<select data-so="${esc(o.key)}" style="width:auto;min-width:180px"><option value="">${esc(T('As in config.yaml'))}</option><option value="on"${o.value === true ? ' selected' : ''}>${esc(T('On'))}</option><option value="off"${o.value === false ? ' selected' : ''}>${esc(T('Off'))}</option></select>`
+        : `<input type="text" data-so="${esc(o.key)}" value="${esc(o.value ?? '')}" placeholder="${esc(o.placeholder || '')}" spellcheck="false" style="width:240px">`;
+      return `<div class="item"><div class="main"><div class="title">${esc(T(o.label))}</div><div class="meta" style="white-space:normal">${esc(T(o.desc))}</div><div class="meta mono">${esc(o.key)} · ${esc(cfg)}</div></div>${control}</div>`;
+    }).join('');
+    $('soList').querySelectorAll('[data-so]').forEach(el => el.onchange = saveServerOptions);
+    $('btnSoRestart').hidden = !r.needsRestart;
+    $('soNote').textContent = r.needsRestart ? T('The server runs with the old options until it restarts.') : r.running ? '' : T('Applies when the server starts.');
+  }
+  async function loadServerOptions() { renderServerOptions(await D.serverOptions()); }
+  async function saveServerOptions() {
+    const overrides = {};
+    $('soList').querySelectorAll('[data-so]').forEach(el => {
+      if (el.tagName === 'SELECT') { if (el.value) overrides[el.dataset.so] = el.value === 'on'; }
+      else if (el.value.trim()) overrides[el.dataset.so] = el.value.trim();
+    });
+    renderServerOptions(await D.serverOptionsSave({ overrides, https: $('setHttps').checked }));
+    loadLan();
+  }
+  $('setHttps').onchange = saveServerOptions;
+  $('btnSoRestart').onclick = async () => { $('btnSoRestart').disabled = true; renderServerOptions(await D.serverRestart()); $('btnSoRestart').disabled = false; };
+
+  // ---------- start with SillyTavern ----------
+  function renderCompanions(list) {
+    $('compList').innerHTML = list.length ? list.map(c => `<div class="item"><div class="main"><div class="title">${esc(c.name)}${c.missing ? ` <span class="tag warn">${T('missing')}</span>` : c.running ? ` <span class="tag good">${T('running')}</span>` : ''}</div><div class="meta mono">${esc(c.path)}</div>
+        <div class="row" style="margin-top:6px;gap:10px"><input type="text" data-cargs="${esc(c.id)}" value="${esc(c.args || '')}" placeholder="${esc(T('Arguments (optional)'))}" spellcheck="false" style="flex:1;min-width:160px">
+        <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-cstop="${esc(c.id)}"${c.stop ? ' checked' : ''}>${T('Stop it with SillyTavern')}</label></div></div>
+        <div class="acts"><button class="btn sm ghost" data-cstart="${esc(c.id)}">${icon('play')}${T('Start now')}</button><button class="btn sm ghost danger" data-cdel="${esc(c.id)}" title="${T('Remove')}">${icon('trash')}</button></div></div>`).join('')
+      : `<div class="empty">${T('Nothing yet. <b>Add program…</b> picks an .exe, .bat, .cmd, .ps1 or shortcut.')}</div>`;
+    $('compList').querySelectorAll('[data-cargs]').forEach(el => el.onchange = async () => renderCompanions(await D.companionSave(el.dataset.cargs, { args: el.value })));
+    $('compList').querySelectorAll('[data-cstop]').forEach(el => el.onchange = async () => renderCompanions(await D.companionSave(el.dataset.cstop, { stop: el.checked })));
+    $('compList').querySelectorAll('[data-cstart]').forEach(el => el.onclick = async () => renderCompanions(await D.companionStart(el.dataset.cstart)));
+    $('compList').querySelectorAll('[data-cdel]').forEach(el => el.onclick = async () => renderCompanions(await D.companionRemove(el.dataset.cdel)));
+  }
+  async function loadCompanions() { renderCompanions(await D.companions()); }
+  $('btnCompAdd').onclick = async () => renderCompanions(await D.companionAdd());
+
+  // ---------- what can this PC run ----------
+  async function loadPc(fresh = false) {
+    const r = await D.pcCheck(fresh);
+    const cards = r.cards.map(c => `<div class="item"><span class="check-ico ${c.integrated ? '' : 'ok'}">${icon(c.integrated ? 'minus' : 'check')}</span><div class="main"><div class="title">${esc(c.name)}</div><div class="meta">${c.integrated ? esc(T('Built into the processor (shares the PC\'s memory)')) : esc(T('{gb} GB of its own memory (VRAM)', { gb: c.vramGB }))}</div></div></div>`).join('');
+    const rows = r.fits.map(f => `<tr><td>${f.size}B</td><td>${f.quant ? `<span class="tag good">${esc(f.quant)}</span> <span class="muted small">~${f.gb} GB</span>` : f.slowQuant ? `<span class="tag warn">${esc(T('slow'))}</span> <span class="muted small">${esc(T('{quant}, partly on the processor', { quant: f.slowQuant }))}</span>` : `<span class="muted small">${esc(T('too large'))}</span>`}</td></tr>`).join('');
+    $('pcBox').innerHTML = `<div class="list">${cards}</div>
+      <p style="margin:10px 0 6px;color:var(--title)">${esc(r.summary)}</p>
+      <table class="pc-table"><thead><tr><th>${T('Model size')}</th><th>${T('Fits on the graphics card ({gb} GB usable, {ram} GB memory)', { gb: r.usableGB, ram: r.ramGB })}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  $('btnPcCheck').onclick = () => { $('pcBox').innerHTML = `<div class="empty">${T('Checking…')}</div>`; loadPc(true); };
+
+  // ---------- troubleshooting ----------
+  async function loadTrouble() {
+    const [tr, onb] = await Promise.all([D.gitTrouble(), D.onboarding()]);
+    $('btnGitFix').classList.toggle('primary', !!tr.stuck);
+    $('gitText').textContent = !tr.git ? T('Not a git install: nothing to repair here.')
+      : tr.stuck ? T('An update stopped halfway ({n} file with conflicts). Repair puts the official files back; changed files are kept on a backup branch.|An update stopped halfway ({n} files with conflicts). Repair puts the official files back; changed files are kept on a backup branch.', { n: tr.conflicts.length })
+      : tr.changed.length || tr.ahead ? T('{n} program file is changed, which can block updates. Repair keeps it on a backup branch and puts the official file back.|{n} program files are changed, which can block updates. Repair keeps them on a backup branch and puts the official files back.', { n: tr.changed.length + tr.ahead })
+      : T('Everything matches the official files. Use this if an update ever stops halfway.');
+    $('btnGitFix').disabled = !tr.git || !tr.upstream || !!state.busy;
+    $('onbList').innerHTML = onb.length ? onb.map(o => `<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" data-onb="${esc(o.user)}"${o.on ? ' checked' : ''}>${esc(o.user === 'default-user' ? T('Show it again') : T('Show it again for {user}', { user: o.user }))}</label>`).join('')
+      : `<span class="muted small">${T('SillyTavern hasn\'t been started yet.')}</span>`;
+    $('onbList').querySelectorAll('[data-onb]').forEach(el => el.onchange = async () => { el.disabled = true; await D.onboardingSet(el.dataset.onb, el.checked); loadTrouble(); });
+  }
+  $('btnPortCheck').onclick = async () => {
+    $('portText').textContent = T('Checking…');
+    const r = await D.portUser();
+    $('btnPortFree').hidden = true;
+    if (!r.user) $('portText').textContent = T('Port {port} is free.', { port: String(r.port) });
+    else if (r.ours) $('portText').textContent = T('Port {port} is used by this app\'s SillyTavern. That\'s right.', { port: String(r.port) });
+    else {
+      $('portText').textContent = T('Port {port} is used by {name} (PID {pid}). SillyTavern can\'t start there while it runs.', { port: String(r.port), name: r.user.name || '?', pid: String(r.user.pid) });
+      $('btnPortFree').hidden = false;
+      $('btnPortFree').textContent = T('Use port {port} instead', { port: String(r.free) });
+      $('btnPortFree').onclick = async () => { await D.usePort(r.free); $('btnPortCheck').click(); };
+    }
+  };
+  $('btnGitFix').onclick = async () => { await D.gitFix(); loadTrouble(); };
+  $('btnNpmCache').onclick = () => D.npmCache();
+  $('btnReport').onclick = async () => { await D.systemReport(); $('btnReport').lastChild.textContent = T('Copied'); setTimeout(() => { $('btnReport').lastChild.textContent = T('Copy system report'); }, 1500); };
+
+  // ---------- language ----------
+  // The globe in the header (and on the welcome screen) opens the picker; a
+  // choice reloads the launcher in that language at once.
+  const LANG = I18N.data;
+  const langName = id => (LANG.languages.find(l => l.id === id) || {}).name || id;
+  document.querySelectorAll('[data-lang-name]').forEach(el => { el.textContent = langName(LANG.lang); });
+  // "Language" stays readable for someone who picked a language they can't read.
+  const bothWords = LANG.lang === 'en' ? 'Language' : `${T('Language')} · Language`;
+  document.querySelectorAll('[data-lang-open]').forEach(b => { b.title = bothWords; });
+  $('langPop').querySelector('h3').lastChild.textContent = bothWords;
+  function renderLangGrid() {
+    $('langGrid').innerHTML = LANG.languages.map(l => `<button data-lang="${esc(l.id)}" lang="${esc(l.id)}" class="${l.id === LANG.lang && LANG.chosen ? 'on' : ''}">${esc(l.name)}<small lang="en">${esc(l.english)}</small></button>`).join('')
+      + `<button data-lang="" class="${LANG.chosen ? '' : 'on'}">${esc(T('Same as Windows'))}<small>${esc(langName(LANG.system))}</small></button>`;
+    $('langGrid').querySelectorAll('[data-lang]').forEach(b => b.onclick = () => chooseLanguage(b.dataset.lang));
+    $('langStSync').checked = !!LANG.stSync;
+  }
+  function chooseLanguage(id) {
+    if (id === (LANG.chosen || '')) { closeLangPop(); return; }
+    D.setLanguage(id); // the launcher reloads in the new language
+  }
+  const closeLangPop = () => $('langPop').classList.remove('show');
+  document.querySelectorAll('[data-lang-open]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const pop = $('langPop');
+    if (pop.classList.toggle('show')) {
+      renderLangGrid();
+      const r = b.getBoundingClientRect();
+      pop.style.top = `${Math.round(r.bottom + 6)}px`;
+      pop.style.left = `${Math.round(Math.max(12, Math.min(r.right - pop.offsetWidth, innerWidth - pop.offsetWidth - 12)))}px`;
+      pop.querySelector('button.on')?.focus();
+    }
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('#langPop')) closeLangPop(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLangPop(); });
+  $('langStSync').onchange = async () => { LANG.stSync = $('langStSync').checked; await D.setStLanguageSync(LANG.stSync); };
+  // Settings → Appearance: the same choice as a list.
+  function renderLangForm() {
+    $('setLang').innerHTML = `<option value="">${esc(T('Same as Windows'))} (${esc(langName(LANG.system))})</option>`
+      + LANG.languages.map(l => `<option value="${esc(l.id)}"${l.id === LANG.chosen ? ' selected' : ''}>${esc(l.name)}${l.id === 'en' ? '' : ` — ${esc(l.english)}`}</option>`).join('');
+    $('setLang').value = LANG.chosen || '';
+    $('setStLang').checked = !!LANG.stSync;
+  }
+  $('setLang').onchange = () => chooseLanguage($('setLang').value);
+  $('setStLang').onchange = async () => { LANG.stSync = $('setStLang').checked; await D.setStLanguageSync(LANG.stSync); };
+  // After a change: SillyTavern pages that are open switch when they reload.
+  $('langToast').hidden = !LANG.stReload;
+  $('btnLangReload').onclick = async () => { $('langToast').hidden = true; await D.stLanguageReload(); };
+  $('btnLangLater').onclick = () => { $('langToast').hidden = true; };
+
   (async () => {
+    // Back on the page that was open before a language change.
+    const page = recall('page');
+    if (page && page !== 'home' && TITLES[page]) go(page);
+    const extTab = recall('extTab');
+    if (extTab && extTab !== 'st') document.querySelector(`[data-ext-tab="${CSS.escape(extTab)}"]`)?.click();
     await loadThemes();
     const s = await D.getState();
     current = s.settings;

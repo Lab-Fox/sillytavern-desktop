@@ -13,6 +13,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { t, N } from './i18n.js';
 
 let log = () => {};
 export function initMigrate({ logLine }) { log = logLine; }
@@ -32,25 +33,25 @@ const THIRD_PARTY = 'public/scripts/extensions/third-party';
 
 // id, label, description, on by default, warning shown when picked
 export const CATEGORIES = [
-    { id: 'characters', label: 'Characters', desc: 'Character cards, with their expression sprites.', on: true },
-    { id: 'chats', label: 'Chats', desc: 'Chats with each character.', on: true },
-    { id: 'groups', label: 'Groups and group chats', desc: 'Group settings and their chats. The characters in them are separate.', on: true },
-    { id: 'worlds', label: 'Lorebooks (World Info)', desc: 'Lorebooks not built into a character card.', on: true },
-    { id: 'presets', label: 'Presets', desc: 'Chat and Text Completion, KoboldAI, NovelAI, instruct, context, system prompt and reasoning presets.', on: true },
-    { id: 'personas', label: 'Persona avatars', desc: 'The pictures of your personas. Their names and descriptions are part of Settings.', on: true },
-    { id: 'quickreplies', label: 'Quick Replies', desc: 'Quick Reply sets.', on: true },
-    { id: 'themes', label: 'UI themes and layouts', desc: 'SillyTavern themes and MovingUI layouts.', on: true },
-    { id: 'backgrounds', label: 'Backgrounds', desc: 'Chat backgrounds you added.', on: true },
-    { id: 'extensions', label: 'Extensions', desc: 'Third-party extensions (their settings are part of Settings).', on: true },
-    { id: 'media', label: 'Images and files', desc: 'Gallery images, data bank files, ComfyUI workflows and assets.', on: true },
-    { id: 'other', label: 'Extension data', desc: 'Folders that extensions created in your data folder.', on: true },
-    { id: 'vectors', label: 'Vector storage', desc: 'The search index of Vector Storage. SillyTavern can rebuild it.', on: false },
-    { id: 'backups', label: 'SillyTavern\'s own backups', desc: 'Automatic chat and settings backups SillyTavern made.', on: false },
-    { id: 'settings', label: 'Settings', desc: 'Everything in SillyTavern\'s settings: UI, API connections, persona names and descriptions, extension settings.', on: false,
-        warn: 'Replaces all settings of the target as a whole (API connections, personas, extension settings, UI). Pick this for a full copy, not to add a few things.' },
-    { id: 'secrets', label: 'API keys', desc: 'Your saved API keys and passwords (secrets.json).', on: false,
-        warn: 'Copies your API keys. Only do this between your own SillyTavern folders.' },
-    { id: 'stats', label: 'Usage stats', desc: 'Message and time statistics.', on: false },
+    { id: 'characters', label: N('Characters'), desc: N('Character cards, with their expression sprites.'), on: true },
+    { id: 'chats', label: N('Chats'), desc: N('Chats with each character.'), on: true },
+    { id: 'groups', label: N('Groups and group chats'), desc: N('Group settings and their chats. The characters in them are separate.'), on: true },
+    { id: 'worlds', label: N('Lorebooks (World Info)'), desc: N('Lorebooks not built into a character card.'), on: true },
+    { id: 'presets', label: N('Presets'), desc: N('Chat and Text Completion, KoboldAI, NovelAI, instruct, context, system prompt and reasoning presets.'), on: true },
+    { id: 'personas', label: N('Persona avatars'), desc: N('The pictures of your personas. Their names and descriptions are part of Settings.'), on: true },
+    { id: 'quickreplies', label: N('Quick Replies'), desc: N('Quick Reply sets.'), on: true },
+    { id: 'themes', label: N('UI themes and layouts'), desc: N('SillyTavern themes and MovingUI layouts.'), on: true },
+    { id: 'backgrounds', label: N('Backgrounds'), desc: N('Chat backgrounds you added.'), on: true },
+    { id: 'extensions', label: N('Extensions'), desc: N('Third-party extensions (their settings are part of Settings).'), on: true },
+    { id: 'media', label: N('Images and files'), desc: N('Gallery images, data bank files, ComfyUI workflows and assets.'), on: true },
+    { id: 'other', label: N('Extension data'), desc: N('Folders that extensions created in your data folder.'), on: true },
+    { id: 'vectors', label: N('Vector storage'), desc: N('The search index of Vector Storage. SillyTavern can rebuild it.'), on: false },
+    { id: 'backups', label: N('SillyTavern\'s own backups'), desc: N('Automatic chat and settings backups SillyTavern made.'), on: false },
+    { id: 'settings', label: N('Settings'), desc: N('Everything in SillyTavern\'s settings: UI, API connections, persona names and descriptions, extension settings.'), on: false,
+        warn: N('Replaces all settings of the target as a whole (API connections, personas, extension settings, UI). Pick this for a full copy, not to add a few things.') },
+    { id: 'secrets', label: N('API keys'), desc: N('Your saved API keys and passwords (secrets.json).'), on: false,
+        warn: N('Copies your API keys. Only do this between your own SillyTavern folders.') },
+    { id: 'stats', label: N('Usage stats'), desc: N('Message and time statistics.'), on: false },
 ];
 
 // ---------- file helpers ----------
@@ -167,7 +168,7 @@ export async function scan({ src, srcUser, dst, dstUser }) {
     return {
         id, targetChars,
         categories: CATEGORIES.map(c => ({
-            ...c,
+            ...c, label: t(c.label), desc: t(c.desc), warn: c.warn ? t(c.warn) : undefined,
             items: items.filter(i => i.cat === c.id).map(i => ({
                 key: i.key, label: i.label, sub: i.sub || '', chats: i.chats, character: i.character, members: i.members,
                 files: i.files.length, size: i.files.reduce((n, f) => n + f.size, 0),
@@ -212,9 +213,9 @@ export const journalsDir = stRoot => path.join(stRoot, 'backups', 'desktop', 'mi
 
 export async function run(scanId, keys, policy, onProgress = () => {}) {
     const s = scans.get(scanId);
-    if (!s) return { error: 'Look at the folders again first (the scan is out of date).' };
+    if (!s) return { error: t('Look at the folders again first (the scan is out of date).') };
     const { todo, skipped, bytes } = plan(s, keys, policy);
-    if (!todo.length) return { error: 'Nothing to copy: everything you picked is already there.' };
+    if (!todo.length) return { error: t('Nothing to copy: everything you picked is already there.') };
     const id = stamp();
     const dir = path.join(journalsDir(s.dst), id);
     const journal = { id, at: Date.now(), from: s.src, fromUser: s.srcUser, to: s.dst, toUser: s.dstUser, policy, added: [], replaced: [], items: keys.length, done: false };

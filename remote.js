@@ -6,6 +6,7 @@
 // (Electron safeStorage) and never goes to the launcher.
 import { net, safeStorage } from 'electron';
 import crypto from 'crypto';
+import { t } from './i18n.js';
 
 const clean = s => String(s || '').replace(/\s+/g, ' ').trim();
 const newId = () => crypto.randomBytes(4).toString('hex');
@@ -13,13 +14,13 @@ const newId = () => crypto.randomBytes(4).toString('hex');
 // http(s)://host[:port]/path/ — no login in the address, no query.
 export function normalizeUrl(raw) {
     let s = clean(raw);
-    if (!s) return { error: 'Enter the address, for example http://192.168.1.25:8000' };
+    if (!s) return { error: t('Enter the address, for example http://192.168.1.25:8000') };
     if (!/^[a-z]+:\/\//i.test(s)) s = `http://${s}`;
     let u;
-    try { u = new URL(s); } catch { return { error: 'That is not a web address.' }; }
-    if (!['http:', 'https:'].includes(u.protocol)) return { error: 'Only http:// and https:// addresses work.' };
-    if (u.username || u.password) return { error: 'Put the user name and password in their own fields, not in the address.' };
-    if (!u.hostname) return { error: 'The address needs a computer name or IP.' };
+    try { u = new URL(s); } catch { return { error: t('That is not a web address.') }; }
+    if (!['http:', 'https:'].includes(u.protocol)) return { error: t('Only http:// and https:// addresses work.') };
+    if (u.username || u.password) return { error: t('Put the user name and password in their own fields, not in the address.') };
+    if (!u.hostname) return { error: t('The address needs a computer name or IP.') };
     u.search = ''; u.hash = '';
     if (!u.pathname.endsWith('/')) u.pathname += '/';
     return { url: u.href };
@@ -57,14 +58,14 @@ export const get = (settings, id) => all(settings).find(r => r.id === id) || nul
 // Add (no id) or edit. password: undefined keeps it, '' or null removes it.
 export function save(settings, { id, name, url, user, password }) {
     const n = clean(name).slice(0, 40);
-    if (!n) return { error: 'Give it a name.' };
+    if (!n) return { error: t('Give it a name.') };
     const u = normalizeUrl(url);
     if (u.error) return u;
     const list = all(settings);
     const existing = id ? list.find(r => r.id === id) : null;
-    if (id && !existing) return { error: 'That entry no longer exists.' };
-    if (list.some(r => r.id !== id && r.name.toLowerCase() === n.toLowerCase())) return { error: `There is already one called "${n}".` };
-    if (settings.profiles?.some(p => p.name.toLowerCase() === n.toLowerCase())) return { error: `A profile is already called "${n}".` };
+    if (id && !existing) return { error: t('That entry no longer exists.') };
+    if (list.some(r => r.id !== id && r.name.toLowerCase() === n.toLowerCase())) return { error: t('There is already one called "{name}".', { name: n }) };
+    if (settings.profiles?.some(p => p.name.toLowerCase() === n.toLowerCase())) return { error: t('A profile is already called "{name}".', { name: n }) };
     const r = existing || { id: newId() };
     const changedUrl = existing && existing.url !== u.url;
     Object.assign(r, { name: n, url: u.url, user: clean(user).slice(0, 64) });
@@ -96,14 +97,14 @@ export async function probe(url) {
     try {
         const res = await net.fetch(u.url, { signal: ctl.signal, cache: 'no-store', redirect: 'follow', credentials: 'omit' });
         const text = res.status === 200 ? (await res.text()).slice(0, 20000) : '';
-        if (res.status === 401) return { ok: true, status: 401, login: true, text: 'It answers and asks for a user name and password (fill them in below).' };
-        if (res.status === 403) return { ok: false, status: 403, text: 'It answers but refuses this PC (403). Its whitelist probably doesn\'t include this PC\'s address.' };
-        if (res.status >= 400) return { ok: false, status: res.status, text: `It answers with an error (${res.status}).` };
+        if (res.status === 401) return { ok: true, status: 401, login: true, text: t('It answers and asks for a user name and password (fill them in below).') };
+        if (res.status === 403) return { ok: false, status: 403, text: t('It answers but refuses this PC (403). Its whitelist probably doesn\'t include this PC\'s address.') };
+        if (res.status >= 400) return { ok: false, status: res.status, text: t('It answers with an error ({status}).', { status: String(res.status) }) };
         const isSt = /SillyTavern/i.test(text);
         return { ok: true, status: res.status, text: isSt ? 'SillyTavern answers.' : 'Something answers, but it doesn\'t look like SillyTavern.' };
     } catch (e) {
         const msg = ctl.signal.aborted ? 'no answer within 8 seconds' : e.message.replace(/^net::/, '');
-        return { ok: false, text: `Can't reach it (${msg}). Is that computer on, SillyTavern running there with "listen" on, and the address right?` };
+        return { ok: false, text: t('Can\'t reach it ({reason}). Is that computer on, SillyTavern running there with "listen" on, and the address right?', { reason: msg }) };
     } finally {
         clearTimeout(timer);
     }

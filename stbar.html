@@ -99,10 +99,13 @@
     <button id="btnMenu" title="Menu"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
     <div class="controls" id="controls"></div>
   </div>
+<script src="i18n-dom.js"></script>
 <script>
+  I18N.apply();
+  const t = I18N.t;
   const $ = id => document.getElementById(id);
   const VARS = { bg: '--bg', panel: '--panel', border: '--border', accent: '--accent', text: '--text', title: '--title', muted: '--muted', warn: '--warn' };
-  const LAYER_TEXT = { top: 'On top', bottom: 'In background' };
+  const LAYER_TEXT = { top: t('On top'), bottom: t('In background') };
   $('btnReload').onclick = () => bar.action('reload');
   // Menus drop down from the button that opened them.
   const below = el => { const r = el.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.bottom) }; };
@@ -125,7 +128,7 @@
     const el = document.createElement('div');
     el.className = 'tab';
     el.dataset.id = id;
-    el.innerHTML = '<img alt="" hidden><i hidden></i><span></span><b class="chip"></b><button title="Close tab (Ctrl+W)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>';
+    el.innerHTML = `<img alt="" hidden><i hidden></i><span></span><b class="chip"></b><button title="${t('Close tab (Ctrl+W)')}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`;
     el.onpointerdown = e => {
       if (e.button !== 0 || e.target.closest('button')) return;
       bar.action('tab-select', { id });

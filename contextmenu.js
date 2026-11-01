@@ -5,6 +5,7 @@
 // Desktop extensions add their own entries (extensions.js → contextItems),
 // shown only for the kind of thing that was clicked.
 import { Menu, clipboard } from 'electron';
+import { t } from './i18n.js';
 
 export const SEARCH_ENGINES = {
     google: ['Google', 'https://www.google.com/search?q='],
@@ -56,8 +57,8 @@ export function build(wc, p, opts) {
     // extension with its own dictionary entries replaces "Add to dictionary".
     if (p.isEditable && p.misspelledWord) {
         const g = (p.dictionarySuggestions || []).slice(0, 5).map(s => ({ label: s, click: () => wc.replaceMisspelling(s) }));
-        if (!g.length) g.push({ label: 'No spelling suggestions', enabled: false });
-        if (!spellingExtra.length) g.push({ label: `Add "${short(p.misspelledWord, 20)}" to dictionary`, click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
+        if (!g.length) g.push({ label: t('No spelling suggestions'), enabled: false });
+        if (!spellingExtra.length) g.push({ label: t('Add "{word}" to dictionary', { word: short(p.misspelledWord, 20) }), click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
         groups.push(g);
     }
     if (spellingExtra.length) {
@@ -67,41 +68,41 @@ export function build(wc, p, opts) {
 
     if (p.linkURL && !p.linkURL.startsWith('javascript:')) {
         const g = [];
-        if (opts.openTab && opts.inside?.(p.linkURL)) g.push({ label: 'Open link in new tab', click: () => opts.openTab(p.linkURL) });
-        if (httpish(p.linkURL)) g.push({ label: 'Open link in browser', click: () => opts.openExternal(p.linkURL) });
-        g.push({ label: p.linkURL.startsWith('mailto:') ? 'Copy email address' : 'Copy link address', click: () => clipboard.writeText(p.linkURL.replace(/^mailto:/, '')) });
+        if (opts.openTab && opts.inside?.(p.linkURL)) g.push({ label: t('Open link in new tab'), click: () => opts.openTab(p.linkURL) });
+        if (httpish(p.linkURL)) g.push({ label: t('Open link in browser'), click: () => opts.openExternal(p.linkURL) });
+        g.push({ label: p.linkURL.startsWith('mailto:') ? t('Copy email address') : t('Copy link address'), click: () => clipboard.writeText(p.linkURL.replace(/^mailto:/, '')) });
         groups.push(g);
     }
 
     if (p.mediaType === 'image' && p.srcURL) {
         const g = [];
-        if (opts.openTab && opts.inside?.(p.srcURL)) g.push({ label: 'Open image in new tab', click: () => opts.openTab(p.srcURL) });
-        g.push({ label: 'Save image as…', click: () => wc.downloadURL(p.srcURL) });
-        g.push({ label: 'Copy image', click: () => wc.copyImageAt(p.x, p.y) });
-        if (!p.srcURL.startsWith('data:')) g.push({ label: 'Copy image address', click: () => clipboard.writeText(p.srcURL) });
+        if (opts.openTab && opts.inside?.(p.srcURL)) g.push({ label: t('Open image in new tab'), click: () => opts.openTab(p.srcURL) });
+        g.push({ label: t('Save image as…'), click: () => wc.downloadURL(p.srcURL) });
+        g.push({ label: t('Copy image'), click: () => wc.copyImageAt(p.x, p.y) });
+        if (!p.srcURL.startsWith('data:')) g.push({ label: t('Copy image address'), click: () => clipboard.writeText(p.srcURL) });
         groups.push(g);
     }
 
     if (p.isEditable) {
         groups.push([
-            { label: 'Undo', role: 'undo', accelerator: 'Ctrl+Z', enabled: f.canUndo },
-            { label: 'Redo', role: 'redo', accelerator: 'Ctrl+Y', enabled: f.canRedo },
+            { label: t('Undo'), role: 'undo', accelerator: 'Ctrl+Z', enabled: f.canUndo },
+            { label: t('Redo'), role: 'redo', accelerator: 'Ctrl+Y', enabled: f.canRedo },
         ]);
         groups.push([
-            { label: 'Cut', role: 'cut', accelerator: 'Ctrl+X', enabled: f.canCut },
-            { label: 'Copy', role: 'copy', accelerator: 'Ctrl+C', enabled: f.canCopy },
-            { label: 'Paste', role: 'paste', accelerator: 'Ctrl+V', enabled: f.canPaste },
-            { label: 'Paste as plain text', role: 'pasteAndMatchStyle', accelerator: 'Ctrl+Shift+V', enabled: f.canPaste },
-            { label: 'Delete', role: 'delete', enabled: f.canDelete },
+            { label: t('Cut'), role: 'cut', accelerator: 'Ctrl+X', enabled: f.canCut },
+            { label: t('Copy'), role: 'copy', accelerator: 'Ctrl+C', enabled: f.canCopy },
+            { label: t('Paste'), role: 'paste', accelerator: 'Ctrl+V', enabled: f.canPaste },
+            { label: t('Paste as plain text'), role: 'pasteAndMatchStyle', accelerator: 'Ctrl+Shift+V', enabled: f.canPaste },
+            { label: t('Delete'), role: 'delete', enabled: f.canDelete },
         ]);
-        groups.push([{ label: 'Select all', role: 'selectAll', accelerator: 'Ctrl+A', enabled: f.canSelectAll }]);
+        groups.push([{ label: t('Select all'), role: 'selectAll', accelerator: 'Ctrl+A', enabled: f.canSelectAll }]);
     } else if (sel) {
-        groups.push([{ label: 'Copy', role: 'copy', accelerator: 'Ctrl+C' }]);
+        groups.push([{ label: t('Copy'), role: 'copy', accelerator: 'Ctrl+C' }]);
     }
 
     if (sel && opts.search) {
         const [name, base] = SEARCH_ENGINES[opts.search()] || SEARCH_ENGINES.google;
-        groups.push([{ label: `Search ${name} for "${short(sel)}"`, click: () => opts.openExternal(base + encodeURIComponent(sel.slice(0, 500))) }]);
+        groups.push([{ label: t('Search {engine} for "{text}"', { engine: name, text: short(sel) }), click: () => opts.openExternal(base + encodeURIComponent(sel.slice(0, 500))) }]);
     }
 
     const others = extra.filter(i => !i.spelling);
@@ -110,13 +111,13 @@ export function build(wc, p, opts) {
     // Empty space on a page: navigation, like a browser.
     if (!p.isEditable && !sel && !p.linkURL && p.mediaType === 'none' && opts.openTab) {
         groups.push([
-            { label: 'Back', enabled: wc.navigationHistory.canGoBack(), click: () => wc.navigationHistory.goBack() },
-            { label: 'Forward', enabled: wc.navigationHistory.canGoForward(), click: () => wc.navigationHistory.goForward() },
-            { label: 'Reload', accelerator: 'F5', click: () => wc.reload() },
+            { label: t('Back'), enabled: wc.navigationHistory.canGoBack(), click: () => wc.navigationHistory.goBack() },
+            { label: t('Forward'), enabled: wc.navigationHistory.canGoForward(), click: () => wc.navigationHistory.goForward() },
+            { label: t('Reload'), accelerator: 'F5', click: () => wc.reload() },
         ]);
     }
 
-    if (opts.inspect?.()) groups.push([{ label: 'Inspect element', click: () => { wc.inspectElement(p.x, p.y); if (wc.isDevToolsOpened()) wc.devToolsWebContents?.focus(); } }]);
+    if (opts.inspect?.()) groups.push([{ label: t('Inspect element'), click: () => { wc.inspectElement(p.x, p.y); if (wc.isDevToolsOpened()) wc.devToolsWebContents?.focus(); } }]);
 
     return groups.filter(g => g.length).flatMap((g, i) => (i ? [{ type: 'separator' }, ...g] : g));
 }

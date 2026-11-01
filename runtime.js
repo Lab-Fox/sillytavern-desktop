@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import yauzl from 'yauzl';
+import { t } from './i18n.js';
 
 const NODE_INDEX = 'https://nodejs.org/dist/index.json';
 const GIT_LATEST = 'https://api.github.com/repos/git-for-windows/git/releases/latest';
@@ -68,21 +69,21 @@ async function json(url) {
 async function latestNode() {
     const list = await json(NODE_INDEX);
     const lts = list.find(r => r.lts && r.files?.includes('win-x64-zip'));
-    if (!lts) throw new Error('no Node.js LTS for Windows found');
+    if (!lts) throw new Error(t('no Node.js LTS for Windows found'));
     const name = `node-${lts.version}-win-x64.zip`;
     const sums = await net.fetch(`https://nodejs.org/dist/${lts.version}/SHASUMS256.txt`, { cache: 'no-store' });
     if (!sums.ok) throw new Error(`nodejs.org answered ${sums.status} for the checksums`);
     const line = (await sums.text()).split('\n').find(l => l.trim().endsWith(`  ${name}`));
-    if (!line) throw new Error('the checksum for the Node.js zip is missing');
+    if (!line) throw new Error(t('the checksum for the Node.js zip is missing'));
     return { version: lts.version.replace(/^v/, ''), url: `https://nodejs.org/dist/${lts.version}/${name}`, sha256: line.trim().split(/\s+/)[0].toLowerCase(), strip: true };
 }
 
 async function latestGit() {
     const rel = await json(GIT_LATEST);
     const asset = (rel.assets || []).find(a => MINGIT_ASSET.test(a.name));
-    if (!asset) throw new Error('no MinGit download found in the latest Git for Windows release');
+    if (!asset) throw new Error(t('no MinGit download found in the latest Git for Windows release'));
     const sha = /^sha256:([0-9a-f]{64})$/i.exec(asset.digest || '');
-    if (!sha) throw new Error('GitHub gave no SHA256 for MinGit');
+    if (!sha) throw new Error(t('GitHub gave no SHA256 for MinGit'));
     const version = (rel.tag_name || '').replace(/^v/, '').replace(/\.windows\.1$/, '');
     return { version, url: asset.browser_download_url, sha256: sha[1].toLowerCase(), size: asset.size, strip: false };
 }
@@ -112,7 +113,7 @@ export async function fetchTo(src, file, onProgress = () => {}) {
         },
     });
     await pipeline(Readable.fromWeb(res.body), meter, fs.createWriteStream(file));
-    if (hash.digest('hex') !== src.sha256) throw new Error('the file does not match its published SHA256');
+    if (hash.digest('hex') !== src.sha256) throw new Error(t('the file does not match its published SHA256'));
 }
 
 export async function unzip(file, dest, strip) {
@@ -156,13 +157,13 @@ export async function install(which = ['node', 'git'], onProgress = () => {}) {
         const tmp = path.join(root, `${w}.partial`);
         const zipFile = path.join(root, `${w}.zip`);
         try {
-            onProgress(`Looking up the latest ${label} …`);
+            onProgress(t('Looking up the latest {name} …', { name: label }));
             const src = w === 'node' ? await latestNode() : await latestGit();
             const have = readVersion(dirs()[w]);
             if (have?.version === src.version && info()[w]) { log(`${label} ${src.version} (this app's copy) is already the latest.`); done.push(w); continue; }
             log(`Downloading ${label} ${src.version} from ${new URL(src.url).host} …`);
-            await fetchTo(src, zipFile, pct => onProgress(`Downloading ${label} ${src.version} … ${pct}%`));
-            onProgress(`Unpacking ${label} …`);
+            await fetchTo(src, zipFile, pct => onProgress(t('Downloading {name} {version} … {pct}%', { name: label, version: src.version, pct: String(pct) })));
+            onProgress(t('Unpacking {name} …', { name: label }));
             fs.rmSync(tmp, { recursive: true, force: true });
             await unzip(zipFile, tmp, src.strip);
             const exe = w === 'node' ? path.join(tmp, 'node.exe') : path.join(tmp, 'cmd', 'git.exe');

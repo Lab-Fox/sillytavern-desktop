@@ -8,6 +8,7 @@ import { net } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { fetchTo, unzip, swapIn } from './runtime.js';
+import { t, N, current } from './i18n.js';
 
 const CATALOG_URL = process.env.ST_DESKTOP_ADDONS_URL
     || 'https://raw.githubusercontent.com/Lab-Fox/sillytavern-desktop-extensions/main/catalog.json';
@@ -19,13 +20,13 @@ const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 
 // What an add-on says it uses (manifest/catalog "uses"), in the launcher's words.
 export const USES = {
-    pages: 'Changes SillyTavern pages',
-    contextMenu: 'Right-click menu',
-    menu: 'Window menu',
-    panel: 'Launcher panel',
-    download: 'Downloads files',
-    spellcheck: 'Spellchecker words',
-    files: 'Reads your SillyTavern files',
+    pages: N('Changes SillyTavern pages'),
+    contextMenu: N('Right-click menu'),
+    menu: N('Window menu'),
+    panel: N('Launcher panel'),
+    download: N('Downloads files'),
+    spellcheck: N('Spellchecker words'),
+    files: N('Reads your SillyTavern files'),
 };
 
 let log = () => {};
@@ -82,8 +83,8 @@ export async function catalog({ fresh = false } = {}) {
         fs.writeFileSync(cacheFile, JSON.stringify(data));
         return data;
     } catch (e) {
-        if (cached?.url === CATALOG_URL) return { ...cached, error: `Could not refresh the add-on list (${e.message}); showing the one from ${new Date(cached.fetched).toLocaleString()}.` };
-        return { url: CATALOG_URL, fetched: 0, addons: [], error: `Could not load the add-on list: ${e.message}` };
+        if (cached?.url === CATALOG_URL) return { ...cached, error: t('Could not refresh the add-on list ({reason}); showing the one from {when}.', { reason: e.message, when: new Date(cached.fetched).toLocaleString(current().id) }) };
+        return { url: CATALOG_URL, fetched: 0, addons: [], error: t('Could not load the add-on list: {reason}', { reason: e.message }) };
     }
 }
 
@@ -102,7 +103,7 @@ function manifestRoot(dir) {
 // Downloads, checks and unpacks; the caller turns the extension off first
 // (and on again afterwards) when it is running.
 export async function install(entry, appVersion) {
-    if (entry.minAppVersion && isNewer(entry.minAppVersion, appVersion)) throw new Error(`it needs SillyTavern Desktop ${entry.minAppVersion} or newer`);
+    if (entry.minAppVersion && isNewer(entry.minAppVersion, appVersion)) throw new Error(t('it needs SillyTavern Desktop {version} or newer', { version: entry.minAppVersion }));
     const dest = path.join(extDir, entry.id);
     const work = path.join(extDir, `.get-${entry.id}`);
     const zipFile = `${work}.zip`;
@@ -112,9 +113,9 @@ export async function install(entry, appVersion) {
         fs.mkdirSync(work, { recursive: true });
         await unzip(zipFile, work, false);
         const top = manifestRoot(work);
-        if (!top) throw new Error('the download has no manifest.json');
+        if (!top) throw new Error(t('the download has no manifest.json'));
         const m = JSON.parse(fs.readFileSync(path.join(top, 'manifest.json'), 'utf8'));
-        if (!m || typeof m !== 'object' || !m.name) throw new Error('its manifest.json has no name');
+        if (!m || typeof m !== 'object' || !m.name) throw new Error(t('its manifest.json has no name'));
         // What the extension saved for itself survives the update.
         for (const k of KEEP) {
             const from = path.join(dest, k);
@@ -132,9 +133,9 @@ export async function install(entry, appVersion) {
 
 // The whole folder, including what it saved. The caller asks first.
 export function remove(id) {
-    if (!ID.test(id)) throw new Error('not an extension id');
+    if (!ID.test(id)) throw new Error(t('not an extension id'));
     const dest = path.join(extDir, id);
-    if (!fs.existsSync(path.join(dest, 'manifest.json'))) throw new Error('not installed');
+    if (!fs.existsSync(path.join(dest, 'manifest.json'))) throw new Error(t('not installed'));
     fs.rmSync(dest, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     log(`Removed the desktop extension "${id}".`);
 }

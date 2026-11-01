@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as mx from './maintenance.js';
+import { t } from './i18n.js';
 
 const HOUR = 3600 * 1000;
 // A little under a day / week, so a PC started at the same time each day isn't skipped.
@@ -62,16 +63,16 @@ async function backupOne(profile, { force = false } = {}) {
             log(`Scheduled backup of "${profile.name}": nothing changed since the last one.`);
             return 'same';
         }
-        if (s.backupScheduleDir && !fs.existsSync(s.backupScheduleDir)) throw new Error(`the backup folder ${s.backupScheduleDir} is not there (a drive that isn't connected?)`);
+        if (s.backupScheduleDir && !fs.existsSync(s.backupScheduleDir)) throw new Error(t('the backup folder {dir} is not there (a drive that isn\'t connected?)', { dir: s.backupScheduleDir }));
         const dir = destFor(profile);
         fs.mkdirSync(dir, { recursive: true });
         // Media is stored uncompressed, so the zip is about as large as data/.
         const free = fs.statfsSync(dir);
         const freeBytes = free.bavail * free.bsize;
-        if (freeBytes < fp.bytes * 1.05 + 50 * 1024 * 1024) throw new Error(`not enough free space in ${dir} (needs about ${Math.ceil(fp.bytes / 1e9 * 10) / 10} GB)`);
+        if (freeBytes < fp.bytes * 1.05 + 50 * 1024 * 1024) throw new Error(t('not enough free space in {dir} (needs about {size} GB)', { dir, size: String(Math.ceil(fp.bytes / 1e9 * 10) / 10) }));
         log(`Scheduled backup of "${profile.name}" …`);
         const file = await mx.createBackup(profile.path, 'auto-scheduled', s.backupScheduleKeep, { dir });
-        if (!file) throw new Error('the backup failed (see the Console)');
+        if (!file) throw new Error(t('the backup failed (see the Console)'));
         Object.assign(st, { last: Date.now(), checked: Date.now(), fingerprint: fp.key, file });
         delete st.error;
         delete st.errorAt;

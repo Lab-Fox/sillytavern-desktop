@@ -5,8 +5,10 @@
 // the files and talks to the running server with a session and CSRF token.
 import fs from 'fs';
 import http from 'http';
+import https from 'https';
 import path from 'path';
 import crypto from 'crypto';
+import { t } from './i18n.js';
 
 const MAX_BYTES = 60 * 1024 * 1024;
 const CHAR_EXT = new Set(['.png', '.charx', '.byaf', '.yaml', '.yml']);
@@ -47,25 +49,25 @@ export function classify(file) {
     const base = { path: file, file: path.basename(file) };
     const ext = path.extname(file).toLowerCase();
     let st;
-    try { st = fs.statSync(file); } catch { return { ...base, error: 'File not found.' }; }
-    if (!st.isFile()) return { ...base, error: 'Folders can\'t be imported; drop the files inside it.' };
-    if (st.size > MAX_BYTES) return { ...base, error: 'Too large for a card, lorebook or preset.' };
-    if (!EXTENSIONS.includes(ext)) return { ...base, error: 'Not a file SillyTavern can import here (cards: .png, .json, .charx, .byaf, .yaml; lorebooks and presets: .json).' };
+    try { st = fs.statSync(file); } catch { return { ...base, error: t('File not found.') }; }
+    if (!st.isFile()) return { ...base, error: t('Folders can\'t be imported; drop the files inside it.') };
+    if (st.size > MAX_BYTES) return { ...base, error: t('Too large for a card, lorebook or preset.') };
+    if (!EXTENSIONS.includes(ext)) return { ...base, error: t('Not a file SillyTavern can import here (cards: .png, .json, .charx, .byaf, .yaml; lorebooks and presets: .json).') };
     if (ext === '.png') {
         let buf;
         try { buf = fs.readFileSync(file); } catch (e) { return { ...base, error: e.message }; }
-        return pngHasCard(buf) ? { ...base, kind: 'character', fileType: 'png', label: 'Character card' } : { ...base, error: 'A picture without character data, so not a character card.' };
+        return pngHasCard(buf) ? { ...base, kind: 'character', fileType: 'png', label: t('Character card') } : { ...base, error: t('A picture without character data, so not a character card.') };
     }
-    if (CHAR_EXT.has(ext)) return { ...base, kind: 'character', fileType: ext.slice(1), label: 'Character card' };
+    if (CHAR_EXT.has(ext)) return { ...base, kind: 'character', fileType: ext.slice(1), label: t('Character card') };
     let j;
-    try { j = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); } catch { return { ...base, error: 'Not valid JSON.' }; }
-    if (!j || typeof j !== 'object' || Array.isArray(j)) return { ...base, error: 'Not a card, lorebook or preset.' };
-    if (isCharacterJson(j)) return { ...base, kind: 'character', fileType: 'json', label: 'Character card' };
-    if ('entries' in j) return { ...base, kind: 'lorebook', label: 'Lorebook', name: path.parse(file).name };
-    if (j.instruct && j.context) return { ...base, error: 'A combined template export. Import it in SillyTavern: Advanced Formatting → Master Import.' };
+    try { j = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); } catch { return { ...base, error: t('Not valid JSON.') }; }
+    if (!j || typeof j !== 'object' || Array.isArray(j)) return { ...base, error: t('Not a card, lorebook or preset.') };
+    if (isCharacterJson(j)) return { ...base, kind: 'character', fileType: 'json', label: t('Character card') };
+    if ('entries' in j) return { ...base, kind: 'lorebook', label: t('Lorebook'), name: path.parse(file).name };
+    if (j.instruct && j.context) return { ...base, error: t('A combined template export. Import it in SillyTavern: Advanced Formatting → Master Import.') };
     const p = PRESETS.find(([, , , test]) => test(j));
     if (p) return { ...base, kind: 'preset', apiId: p[0], label: p[1], folder: p[2], name: (typeof j.name === 'string' && j.name.trim()) || path.parse(file).name };
-    return { ...base, error: 'Not recognised as a card, lorebook or preset. Try SillyTavern\'s own Import button.' };
+    return { ...base, error: t('Not recognised as a card, lorebook or preset. Try SillyTavern\'s own Import button.') };
 }
 
 // "Name", "Name (2)", … — not taken in that folder of the default user.
@@ -86,7 +88,8 @@ function request(base, method, urlPath, { headers = {}, body, auth, cookie } = {
         if (auth) h.Authorization = `Basic ${Buffer.from(`${auth.user}:${auth.password}`).toString('base64')}`;
         if (cookie) h.Cookie = cookie;
         if (body) h['Content-Length'] = body.length;
-        const req = http.request(u, { method, headers: h, timeout: 60000 }, res => {
+        // This PC's own SillyTavern: with HTTPS on, its certificate is the app's own.
+        const req = (u.protocol === 'https:' ? https : http).request(u, { method, headers: h, timeout: 60000, rejectUnauthorized: false }, res => {
             const chunks = [];
             res.on('data', c => chunks.push(c));
             res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text: Buffer.concat(chunks).toString('utf8') }));
@@ -111,7 +114,7 @@ function multipart(fields, file) {
 // A session of our own: SillyTavern hands out a CSRF token tied to its cookie.
 async function openSession(base, auth) {
     const r = await request(base, 'GET', '/csrf-token', { auth });
-    if (r.status === 401) throw new Error('SillyTavern asked for a password this app doesn\'t have.');
+    if (r.status === 401) throw new Error(t('SillyTavern asked for a password this app doesn\'t have.'));
     if (r.status !== 200) throw new Error(`SillyTavern answered ${r.status}.`);
     const cookie = (r.headers['set-cookie'] || []).map(c => c.split(';')[0]).join('; ');
     return { auth, cookie, token: JSON.parse(r.text).token };
@@ -140,7 +143,7 @@ export async function importAll(base, stRoot, items, { auth } = {}) {
             const data = fs.readFileSync(it.path);
             if (it.kind === 'character') {
                 const r = await post(base, s, '/api/characters/import', { form: multipart({ file_type: it.fileType }, { name: it.file, data }) });
-                if (r.error || !r.file_name) throw new Error('SillyTavern could not read this card.');
+                if (r.error || !r.file_name) throw new Error(t('SillyTavern could not read this card.'));
                 results.push({ file: it.file, ok: true, as: `character "${r.file_name}"` });
             } else if (it.kind === 'lorebook') {
                 const name = freeName(path.join(userDir, 'worlds'), it.name);

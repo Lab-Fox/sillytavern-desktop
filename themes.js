@@ -3,22 +3,23 @@
 // an imported file can't inject styles or scripts into the launcher.
 import path from 'path';
 import fs from 'fs';
+import { t, N } from './i18n.js';
 
 // The app's font (launcher and the SillyTavern window's top bar; not
 // SillyTavern's own pages). '' is the default. Any other value is the name
 // of a font installed on the PC.
 export const UI_FONTS = [
-    ['', 'Departure Mono (pixel, clearest)', '"Departure Mono"'],
-    ['dotgothic', 'DotGothic16 (pixel, rounder)', '"DotGothic16"'],
-    ['pixelify', 'Pixelify Sans (pixel, until 1.5)', '"Pixelify Sans"'],
-    ['vt323', 'VT323 (pixel, narrow)', '"VT323"'],
-    ['system', 'Segoe UI (Windows)', '"Segoe UI"'],
+    ['', N('Departure Mono (pixel, clearest)'), '"Departure Mono"'],
+    ['dotgothic', N('DotGothic16 (pixel, rounder)'), '"DotGothic16"'],
+    ['pixelify', N('Pixelify Sans (pixel, until 1.5)'), '"Pixelify Sans"'],
+    ['vt323', N('VT323 (pixel, narrow)'), '"VT323"'],
+    ['system', N('Segoe UI (Windows)'), '"Segoe UI"'],
 ];
 export const ZOOMS = [80, 90, 100, 110, 125, 150];
 export function uiFontCss(font) {
     const builtin = UI_FONTS.find(f => f[0] === font);
     const name = builtin ? builtin[2] : `"${String(font || '').replace(/["\\;{}<>]/g, '')}"`;
-    return `${name}, "Segoe UI", system-ui, sans-serif`;
+    return `${name}, var(--lang-fonts, "Segoe UI"), system-ui, sans-serif`;
 }
 
 // Required keys; the launcher derives the in-between shades from these.
@@ -61,9 +62,9 @@ export function initThemes(userData) {
 
 // Returns a clean theme or throws a message fit to show the user.
 export function validate(raw) {
-    if (!raw || typeof raw !== 'object') throw new Error('Not a theme file.');
+    if (!raw || typeof raw !== 'object') throw new Error(t('Not a theme file.'));
     const name = String(raw.name || '').trim().slice(0, 40);
-    if (!name) throw new Error('The theme needs a name.');
+    if (!name) throw new Error(t('The theme needs a name.'));
     const colors = {};
     for (const k of [...COLOR_KEYS, ...OPTIONAL_KEYS]) {
         const v = raw.colors?.[k];
@@ -76,8 +77,8 @@ export function validate(raw) {
     }
     let logo = raw.logo || 'st';
     if (logo !== 'st' && logo !== 'fox') {
-        if (typeof logo !== 'string' || !LOGO_DATA.test(logo)) throw new Error('The logo must be a PNG, JPEG, GIF or WebP image.');
-        if (logo.length * 0.75 > MAX_LOGO_BYTES) throw new Error('The logo image is too large (max 512 KB).');
+        if (typeof logo !== 'string' || !LOGO_DATA.test(logo)) throw new Error(t('The logo must be a PNG, JPEG, GIF or WebP image.'));
+        if (logo.length * 0.75 > MAX_LOGO_BYTES) throw new Error(t('The logo image is too large (max 512 KB).'));
     }
     return { name, author: String(raw.author || '').trim().slice(0, 40), colors, logo };
 }
