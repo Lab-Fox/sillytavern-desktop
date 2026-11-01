@@ -10,6 +10,10 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import yauzl from 'yauzl';
+// Electron's fs treats *.asar files as archives; downloaded apps can contain
+// some (the web UI's portable build ships Electron), so unpacking and moving
+// folders uses the plain file system.
+import ofs from 'original-fs';
 import { t } from './i18n.js';
 
 const NODE_INDEX = 'https://nodejs.org/dist/index.json';
@@ -126,9 +130,9 @@ export async function unzip(file, dest, strip) {
             const out = path.join(dest, name);
             // yauzl already refuses absolute and ../ names; stay inside dest anyway.
             if (!path.resolve(out).startsWith(path.resolve(dest) + path.sep)) continue;
-            if (name.endsWith('/')) { fs.mkdirSync(out, { recursive: true }); continue; }
-            fs.mkdirSync(path.dirname(out), { recursive: true });
-            await pipeline(await zip.openReadStreamPromise(entry), fs.createWriteStream(out));
+            if (name.endsWith('/')) { ofs.mkdirSync(out, { recursive: true }); continue; }
+            ofs.mkdirSync(path.dirname(out), { recursive: true });
+            await pipeline(await zip.openReadStreamPromise(entry), ofs.createWriteStream(out));
         }
     } finally {
         zip.close();
@@ -139,13 +143,13 @@ export async function unzip(file, dest, strip) {
 // use (a server running on it) can't be renamed; the caller stops servers first.
 export function swapIn(tmp, dest) {
     const old = `${dest}.old`;
-    fs.rmSync(old, { recursive: true, force: true });
-    if (fs.existsSync(dest)) fs.renameSync(dest, old);
-    try { fs.renameSync(tmp, dest); } catch (e) {
-        if (fs.existsSync(old)) fs.renameSync(old, dest);
+    ofs.rmSync(old, { recursive: true, force: true });
+    if (ofs.existsSync(dest)) ofs.renameSync(dest, old);
+    try { ofs.renameSync(tmp, dest); } catch (e) {
+        if (ofs.existsSync(old)) ofs.renameSync(old, dest);
         throw e;
     }
-    fs.rmSync(old, { recursive: true, force: true });
+    ofs.rmSync(old, { recursive: true, force: true });
 }
 
 // Downloads Node.js and/or Git (which = ['node', 'git']). onProgress(text).

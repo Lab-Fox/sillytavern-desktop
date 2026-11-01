@@ -69,6 +69,7 @@ It's a **wrapper, not a fork**: it runs your own SillyTavern exactly as it is an
 - **HTTPS** with the app's own certificate, and **SillyTavern server options** (lazy-loading characters, user accounts, server plugins, a proxy for AI services…) set without editing `config.yaml`.
 - **Start with SillyTavern:** start programs or scripts (KoboldCpp, a voice app…) with the server, and stop them with it.
 - **Remove a SillyTavern** you no longer need (to the Recycle Bin, with a backup of its data first if you want).
+- **AI apps:** install, start and update **KoboldCpp**, **llama.cpp**, Oobabooga's **Text generation web UI** and **TabbyAPI** in one click (the right build for your graphics card), download models picked for your PC from Hugging Face, and see exactly what to paste into SillyTavern.
 
 **Comfort**
 - **In your language:** English, Bahasa Indonesia, 日本語, 한국어, 简体中文 and 繁體中文. Click the globe in the top right to switch at once; SillyTavern's own language can follow along. [Add your language](locales/README.md): it's one file.
@@ -234,6 +235,23 @@ Only devices on your own home network can connect. Your `config.yaml` is never c
 ### Start with SillyTavern
 
 **Settings → Start with SillyTavern → Add program…** picks an `.exe`, `.bat`, `.cmd`, `.ps1` or shortcut to start whenever the server starts, with optional arguments. Ticked **Stop it with SillyTavern**, it is closed (with everything it started) when the server stops or the app quits.
+
+### AI apps
+
+The **AI apps** page runs a model on this PC instead of an online service:
+
+| App | What it is | In SillyTavern |
+|---|---|---|
+| **KoboldCpp** | One program for GGUF models, with its own chat page. The easiest start. | Text Completion → KoboldCpp, `http://127.0.0.1:5001/` |
+| **llama.cpp** | The engine behind most local AI apps, as a small server with a chat page. | Text Completion → llama.cpp, `http://127.0.0.1:8080/` |
+| **Text generation web UI** | Oobabooga's UI with many settings; the app installs its portable build. | Text Completion → Text Generation WebUI (ooba), `http://127.0.0.1:5000/` |
+| **TabbyAPI** | A fast server for EXL3/EXL2 models, NVIDIA only (about 4 GB to install). | Text Completion → TabbyAPI, `http://127.0.0.1:5005/` + the API key it shows |
+
+**Install** downloads the build for your graphics card (CUDA for NVIDIA, Vulkan for AMD and Intel, else the processor) from the project's GitHub release and checks it against the SHA256 GitHub publishes. TabbyAPI gets its own Python through [uv](https://github.com/astral-sh/uv) (no Miniconda). Then **Start**, **Open its page** (as a tab in the SillyTavern window), **Stop**, **Update** (keeps the web UI's `user_data`), the folder, and **Remove** (to the Recycle Bin; models stay). **Settings** per app: the model, context size, GPU layers, ports and extra command-line options. **Start with SillyTavern** starts an app with the server; every app stops when this app quits. Each app's output is in its **Log**, and the card shows what to choose and paste in SillyTavern's API Connections.
+
+Apps go to an `ai-apps` folder next to your SillyTavern folder (**Change…** picks another one, for example a big second drive). Apps that SillyTavern-Launcher's `Launcher.bat` installed (in `text-completion\`) are found and used where they are.
+
+**Models:** one folder of GGUF models for KoboldCpp, llama.cpp and the web UI. **Suggested for this PC** lists well-known models (small to 24B, several made for roleplay) marked *fits*, *slow* or *too large* for your graphics memory; **Download** picks the best size of it for your card, **Choose file…** lists every file with its size. **Find on Hugging Face** searches all GGUF models. Downloads are checked against Hugging Face's SHA256, can be stopped, and continue where they stopped. TabbyAPI's card downloads EXL3/EXL2 models by name and lets you pick the size (bits per weight).
 
 ### What can my PC run? and troubleshooting
 
@@ -475,6 +493,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `i18n.js`, `i18n-dom.js`, `locales/` | Languages: `t()` for the main process, the page translator and `T()` for the launcher and top bar, one JSON file per language (English text is the key; see `locales/README.md`) |
 | `serveropts.js` | SillyTavern options passed as `SILLYTAVERN_*` variables (reads `config.yaml` without writing it) and the HTTPS certificate (made with Node's crypto) |
 | `tunnel.js` | Remote link (downloads and runs `cloudflared`, reads its address) and Tailscale (status, addresses) |
+| `aiapps.js` | AI apps: the app list (KoboldCpp, llama.cpp, Text generation web UI, TabbyAPI), install/update from GitHub releases (SHA256-checked) or git + uv, start/stop/logs, options, models (Hugging Face search, files, resumable checked downloads) |
 | `pccheck.js` | Graphics cards and memory, model-size advice, which program holds a port, VPN adapters, the system report |
 | `tools/i18n-check.mjs` | `npm run i18n`: finds every translatable string and checks each language file (missing, broken placeholders or markup, plural forms); `--new` and `--fill` for translators |
 | `setup.js` | Finding SillyTavern, installing Node.js and Git, moving an install |
@@ -552,7 +571,8 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] Writing helper add-on: dictionary, suggestions, autocorrect; built-in English spellchecker
 - [x] Languages: English, Indonesian, Japanese, Korean, Chinese (Simplified and Traditional); more from contributors
 - [x] Launcher.bat's SillyTavern tools: remote link, Tailscale, HTTPS, server options, start with SillyTavern, PC check, troubleshooting
-- [ ] Installing and running AI apps (KoboldCpp, llama.cpp, ComfyUI, voice apps…) from the launcher
+- [x] AI apps for text: KoboldCpp, llama.cpp, Text generation web UI, TabbyAPI, with model downloads
+- [ ] AI apps for images and voice (ComfyUI, Forge, SwarmUI, AllTalk, XTTS, RVC…)
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)
 

@@ -272,6 +272,18 @@
   header .pill, header .btn { flex-shrink: 0; white-space: nowrap; }
   .hdr-profile + .pill { margin-left: 0; }
 
+  /* ---------- AI apps ---------- */
+  .ai-card { display: flex; flex-direction: column; gap: 10px; }
+  .ai-card .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ai-card details > summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  .ai-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 8px; }
+  .ai-opts .wide { grid-column: 1 / -1; }
+  .ai-log { font-family: var(--log-font); font-size: calc(var(--log-size) - 3px); line-height: 1.2; background: var(--well); padding: 6px 8px; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: var(--muted); user-select: text; }
+  .ai-connect { background: var(--well); padding: 8px 10px; font-size: 14px; display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 4px 10px; align-items: center; }
+  .ai-connect > span { overflow-wrap: anywhere; }
+  .sub-h { font-size: 15px; color: var(--title); margin-top: 10px; }
+  @media (max-width: 960px) { .ai-opts { grid-template-columns: 1fr; } }
+
   /* ---------- what can this PC run ---------- */
   .pc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
   .pc-table th { text-align: left; color: var(--muted); font-weight: 400; padding: 4px 8px; border-bottom: var(--px) solid var(--border); }
@@ -389,6 +401,7 @@
       <button data-page="backups"><svg class="i"><use href="#i-archive"/></svg>Backups</button>
       <button data-page="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions<span class="badge" id="navExt" hidden></span></button>
       <button data-page="maintenance"><svg class="i"><use href="#i-pulse"/></svg>Maintenance</button>
+      <button data-page="aiapps"><svg class="i"><use href="#i-chip"/></svg>AI apps</button>
       <button data-page="console"><svg class="i"><use href="#i-terminal"/></svg>Console</button>
       <button data-page="settings"><svg class="i"><use href="#i-sliders"/></svg>Settings</button>
     </nav>
@@ -879,6 +892,31 @@
       </div>
     </section>
 
+    <!-- ===== AI apps ===== -->
+    <section class="page" id="page-aiapps">
+      <p class="lead">Run an AI model on this PC instead of an online service: install a program, download a model, start it, and connect SillyTavern to it. Everything downloads from the projects' own pages and is checked against their published checksums.</p>
+      <div class="stack">
+        <div class="card">
+          <h2>Where they go<span class="act row" style="gap:8px"><button class="btn sm ghost" id="btnAiDir"><svg class="i"><use href="#i-folder"/></svg>Change…</button><button class="btn sm ghost" id="btnAiDirReset" hidden>Back to the default</button></span></h2>
+          <div class="path" id="aiDir"></div>
+          <p class="muted small" id="aiDirInfo" style="margin-top:6px"></p>
+        </div>
+        <div class="grid g2" id="aiList"></div>
+        <div class="card stack">
+          <h2>Models<span class="act row" style="gap:8px"><button class="btn sm ghost" data-ai-folder="models"><svg class="i"><use href="#i-folder"/></svg>Open folder</button></span></h2>
+          <p class="muted small">GGUF models for KoboldCpp, llama.cpp and the Text generation web UI, all in one folder. Download one below or put your own .gguf files in the folder.</p>
+          <div class="list" id="aiModels"></div>
+          <div class="row" id="aiDlBox" hidden style="margin-top:6px"><div class="progress" id="aiDlBar"><i></i></div><span class="muted small" id="aiDlText" style="flex:1;min-width:200px"></span><button class="btn sm danger" id="btnAiDlCancel">Stop</button></div>
+          <h3 class="sub-h">Suggested for this PC</h3>
+          <div class="list" id="aiSuggest"><div class="empty">Loading…</div></div>
+          <h3 class="sub-h">Find on Hugging Face</h3>
+          <div class="row"><input type="search" id="aiSearch" placeholder="Model name, e.g. Mistral Nemo, Stheno, Qwen…" style="flex:1;min-width:220px"><button class="btn sm" id="btnAiSearch">Search</button></div>
+          <div class="list" id="aiResults"></div>
+          <p class="muted small">Models are made by their authors and come with their own licenses. Many roleplay models are uncensored.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== Console ===== -->
     <section class="page fill" id="page-console">
       <div class="console-bar">
@@ -1242,6 +1280,7 @@
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
       <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16zM14 6l4 4"/></symbol>
       <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></symbol>
+      <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4M10 10h4v4h-4z"/></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
     </defs>
   </svg>
@@ -1259,7 +1298,7 @@
   const state = { running: false, startedAt: 0, busy: '', url: '', windows: { open: 0, minimized: false }, page: 'home', logs: [], filter: 'all', search: '', extTab: 'st' };
 
   // ---------- navigation ----------
-  const TITLES = { home: T('Home'), profiles: T('Profiles'), migrate: T('Migrate data'), backups: T('Backups'), extensions: T('Extensions'), maintenance: T('Maintenance'), console: T('Console'), settings: T('Settings') };
+  const TITLES = { home: T('Home'), profiles: T('Profiles'), migrate: T('Migrate data'), backups: T('Backups'), extensions: T('Extensions'), maintenance: T('Maintenance'), aiapps: T('AI apps'), console: T('Console'), settings: T('Settings') };
   // The page stays open across a language change (which reloads the launcher).
   const remember = (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* not available */ } };
   const recall = k => { try { return sessionStorage.getItem(k); } catch { return null; } };
@@ -1287,6 +1326,7 @@
     if (page === 'extensions') { loadExtensions(false); loadKits(); if (state.extTab === 'desktop') loadDesktopExtensions(); }
     if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); loadPc(); loadTrouble(); }
     if (page === 'console') renderConsole();
+    if (page === 'aiapps') loadAi();
     if (page === 'settings') { loadSettingsForm({ fresh: true }); loadServerOptions(); loadCompanions(); loadTunnel(); loadTailscale(); }
   }
 
@@ -3292,6 +3332,179 @@
   $('btnGitFix').onclick = async () => { await D.gitFix(); loadTrouble(); };
   $('btnNpmCache').onclick = () => D.npmCache();
   $('btnReport').onclick = async () => { await D.systemReport(); $('btnReport').lastChild.textContent = T('Copied'); setTimeout(() => { $('btnReport').lastChild.textContent = T('Copy system report'); }, 1500); };
+
+  // ---------- AI apps ----------
+  const ai = { apps: new Map(), models: [], gpu: '', loaded: false };
+  const GB1 = n => `${(n / 1e9).toFixed(n < 1e10 ? 1 : 0)} GB`;
+  const STATUS = () => ({ missing: T('not installed'), installed: T('installed'), installing: T('installing…'), starting: T('starting…'), running: T('running'), stopping: T('stopping…') });
+  async function loadAi() {
+    const r = await D.aiApps();
+    Object.assign(ai, { models: r.models, gpu: r.gpu, appsDir: r.appsDir, loaded: true });
+    $('aiDir').textContent = r.appsDir;
+    $('aiDirInfo').textContent = `${r.free != null ? T('{free} free there.', { free: GB1(r.free) }) : ''} ${T('Builds for: {kind}.', { kind: { cuda: T('NVIDIA (CUDA)'), vulkan: T('AMD or Intel (Vulkan)'), cpu: T('the processor (no suitable graphics card)') }[r.gpu] })} ${T('Apps that SillyTavern-Launcher (Launcher.bat) installed are found and used where they are.')}`;
+    $('btnAiDirReset').hidden = !current.appsDir;
+    $('aiList').innerHTML = r.apps.map(appCard).join('');
+    r.apps.forEach(a => { ai.apps.set(a.id, a); wireApp(a); });
+    for (const a of r.apps) D.aiLog(a.id).then(lines => { const el = document.querySelector(`[data-app="${a.id}"] .ai-log`); if (el) { el.textContent = lines.join('\n'); el.scrollTop = el.scrollHeight; } });
+    renderModels();
+    renderDl(r.downloading);
+    loadSuggested();
+  }
+  function appCard(a) {
+    return `<div class="card ai-card" data-app="${esc(a.id)}">
+      <h2>${esc(a.name)}<span class="act row" style="gap:8px"><button class="link" data-xurl="${esc(a.site)}">${T('Project page')}</button></span></h2>
+      <p class="muted small">${esc(a.desc)}</p>
+      <div data-part="status"></div>
+      <label class="switch" style="border:0;padding:0"><input type="checkbox" data-ai-auto${a.autostart ? ' checked' : ''}><div><b>${T('Start with SillyTavern')}</b><span>${T('Starts when the SillyTavern server starts. AI apps always stop when this app quits.')}</span></div></label>
+      <details${a.installed ? '' : ' hidden'} data-part="settings"><summary>${T('Settings')}</summary><div class="ai-opts">${a.opts.map(o => optField(a, o)).join('')}</div></details>
+      <div data-part="connect"></div>
+      <details data-part="logbox"><summary>${T('Log')}</summary><div class="ai-log"></div></details>
+    </div>`;
+  }
+  function optField(a, o) {
+    const v = a.values[o.key] ?? '';
+    const wide = ['model', 'extra', 'folder'].includes(o.kind) || o.key === 'extra' ? ' wide' : '';
+    let input;
+    if (o.kind === 'model') input = `<select data-opt="${esc(o.key)}"><option value="">${esc(a.id === 'koboldcpp' ? T('None (KoboldCpp asks when it starts)') : T('None'))}</option>${ai.models.map(m => `<option value="${esc(m.path)}"${m.path === v ? ' selected' : ''}>${esc(m.name)} · ${GB1(m.size)}</option>`).join('')}</select>`;
+    else if (o.kind === 'folder') input = `<select data-opt="${esc(o.key)}"><option value="">${esc(T('None'))}</option>${(a.folders || []).map(f => `<option${f === v ? ' selected' : ''}>${esc(f)}</option>`).join('')}</select>
+      <div class="row" style="margin-top:6px"><input type="text" data-tabby-repo placeholder="${esc(T('Hugging Face name, e.g. turboderp/Llama-3.1-8B-Instruct-exl3'))}" spellcheck="false" style="flex:1;min-width:200px"><button class="btn sm" data-tabby-dl>${T('Download')}</button></div>`;
+    else input = `<input type="${o.kind === 'number' ? 'number' : 'text'}" data-opt="${esc(o.key)}" value="${esc(v)}"${o.min ? ` min="${o.min}"` : ''}${o.max ? ` max="${o.max}"` : ''} spellcheck="false">`;
+    return `<div class="field${wide}"><label>${esc(o.label)}</label>${input}${o.hint ? `<p class="muted small" style="margin-top:2px">${esc(o.hint)}</p>` : ''}</div>`;
+  }
+  // Status, buttons and the SillyTavern connection: redrawn on every change.
+  function renderApp(a) {
+    const card = document.querySelector(`[data-app="${a.id}"]`);
+    if (!card) return;
+    ai.apps.set(a.id, a);
+    const busy = ['installing', 'starting', 'stopping'].includes(a.status);
+    const blocked = a.nvidiaOnly && ai.gpu !== 'cuda';
+    const tagCls = a.status === 'running' ? 'good' : a.status === 'missing' ? '' : busy ? 'warn' : 'fox';
+    const acts = !a.installed
+      ? `<button class="btn sm primary" data-ai="install"${busy || blocked ? ' disabled' : ''}>${icon('download')}${T('Install')}</button>${blocked ? `<span class="muted small">${T('Needs an NVIDIA graphics card.')}</span>` : ''}`
+      : [a.running ? `<button class="btn sm danger" data-ai="stop"${a.status === 'stopping' ? ' disabled' : ''}>${icon('stop')}${T('Stop')}</button>` : `<button class="btn sm primary" data-ai="start"${busy ? ' disabled' : ''}>${icon('play')}${T('Start')}</button>`,
+        a.status === 'running' ? `<button class="btn sm" data-ai="open">${icon('external')}${T('Open its page')}</button>` : '',
+        a.canUpdate ? `<button class="btn sm ghost" data-ai="update"${busy || a.running ? ' disabled' : ''}>${icon('refresh')}${T('Update')}</button>` : '',
+        `<button class="btn sm ghost" data-ai="folder" title="${esc(a.dir)}">${icon('folder')}</button>`,
+        a.fromLauncherBat ? '' : `<button class="btn sm ghost danger" data-ai="remove" title="${T('Remove')}"${busy || a.running ? ' disabled' : ''}>${icon('trash')}</button>`].join('');
+    card.querySelector('[data-part="status"]').innerHTML = `<div class="row" style="gap:8px">
+        <span class="tag ${tagCls}">${esc(STATUS()[a.status] || a.status)}</span>
+        ${a.installed ? `<span class="muted small">${esc(a.version && a.version !== '?' ? a.version : '')}${a.fromLauncherBat ? ` · ${T('installed by SillyTavern-Launcher')}` : ''}</span>` : ''}
+      </div>
+      ${a.status === 'installing' ? `<div class="row" style="margin-top:8px"><div class="progress${a.progress == null ? ' wait' : ''}"><i style="width:${a.progress || 0}%"></i></div><span class="muted small" style="min-width:160px">${esc(a.step || '')}${a.progress != null ? ` ${a.progress}%` : ''}</span></div>` : ''}
+      ${a.error ? `<p class="err" style="margin-top:6px">${esc(a.error)}</p>` : ''}
+      <div class="acts" style="margin-top:8px">${acts}</div>`;
+    card.querySelector('[data-part="settings"]').hidden = !a.installed;
+    card.querySelector('[data-part="connect"]').innerHTML = a.installed ? `<div class="ai-connect">
+        <span class="muted">${T('In SillyTavern')}</span><span>${esc(a.connect.api)}</span><span></span>
+        <span class="muted">${T('Address')}</span><span class="mono">${esc(a.connect.url)}</span><button class="btn sm ghost" data-copy="${esc(a.connect.url)}">${icon('copy')}</button>
+        ${a.connect.key ? `<span class="muted">${T('API key')}</span><span class="mono">${esc(a.connect.key.slice(0, 6))}…</span><button class="btn sm ghost" data-copy="${esc(a.connect.key)}">${icon('copy')}</button>` : ''}
+      </div><p class="muted small" style="margin-top:4px">${T('In SillyTavern: the plug icon (API Connections) → API, then paste the address and click Connect.')}</p>` : '';
+    card.querySelectorAll('[data-ai]').forEach(b => b.onclick = () => aiAction(a.id, b.dataset.ai, b));
+    card.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => { await navigator.clipboard.writeText(b.dataset.copy); b.innerHTML = icon('check'); setTimeout(() => { b.innerHTML = icon('copy'); }, 1200); });
+  }
+  function wireApp(a) {
+    const card = document.querySelector(`[data-app="${a.id}"]`);
+    renderApp(a);
+    card.querySelector('[data-ai-auto]').onchange = e => D.aiAutostart(a.id, e.target.checked);
+    card.querySelectorAll('[data-opt]').forEach(el => el.onchange = async () => renderApp(await D.aiOptions(a.id, { [el.dataset.opt]: el.value })));
+    const dlBtn = card.querySelector('[data-tabby-dl]');
+    if (dlBtn) dlBtn.onclick = async () => {
+      const repo = card.querySelector('[data-tabby-repo]').value.trim();
+      if (!repo) return;
+      const pick = card.querySelector('[data-tabby-ref]');
+      dlBtn.disabled = true;
+      const r = await D.aiModelDownloadRepo(a.id, repo, pick?.value || '');
+      dlBtn.disabled = false;
+      if (r.branches) {
+        // EXL3/EXL2: one size per branch; choose, then Download again.
+        pick?.remove();
+        dlBtn.insertAdjacentHTML('beforebegin', `<select data-tabby-ref style="width:auto" title="${esc(T('Size (bits per weight): bigger is better and needs more memory'))}">${r.branches.map(b => `<option>${esc(b)}</option>`).join('')}</select>`);
+        return;
+      }
+      if (r.error) { append(`${T('ERROR:')} ${r.error}`); $('aiDlText').textContent = r.error; }
+      if (r.ok) { await D.aiOptions(a.id, { tabbyModel: r.folder }); loadAi(); }
+    };
+  }
+  async function aiAction(id, what, btn) {
+    btn.disabled = true;
+    if (what === 'install') renderApp(await D.aiInstall(id));
+    else if (what === 'start') renderApp(await D.aiStart(id));
+    else if (what === 'stop') renderApp(await D.aiStop(id));
+    else if (what === 'open') D.aiOpen(id);
+    else if (what === 'folder') D.aiFolder(id);
+    else if (what === 'remove') renderApp(await D.aiUninstall(id));
+    else if (what === 'update') {
+      const a = ai.apps.get(id);
+      const latest = await D.aiLatest(id);
+      if (latest && latest === a.version) { btn.lastChild.textContent = T('Up to date'); setTimeout(() => renderApp(ai.apps.get(id)), 1800); return; }
+      renderApp(await D.aiUpdate(id));
+    }
+    btn.disabled = false;
+  }
+  D.onAiApp(a => { if (ai.loaded) { const was = ai.apps.get(a.id); renderApp(a); if (was && was.installed !== a.installed) loadAi(); } });
+  D.onAiLog(({ id, line }) => {
+    const el = document.querySelector(`[data-app="${id}"] .ai-log`);
+    if (!el) return;
+    const atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    el.textContent += (el.textContent ? '\n' : '') + line;
+    if (el.textContent.length > 60000) el.textContent = el.textContent.slice(-50000);
+    if (atEnd) el.scrollTop = el.scrollHeight;
+  });
+  // ----- models -----
+  function renderModels() {
+    $('aiModels').innerHTML = ai.models.length ? ai.models.map(m => `<div class="item"><div class="main"><div class="title">${esc(m.name)}</div><div class="meta">${GB1(m.size)}</div></div>
+        <button class="btn sm ghost danger" data-mdel="${esc(m.path)}" title="${T('Remove')}">${icon('trash')}</button></div>`).join('')
+      : `<div class="empty">${T('No models yet. Download one below, or put .gguf files in the models folder.')}</div>`;
+    $('aiModels').querySelectorAll('[data-mdel]').forEach(b => b.onclick = async () => { ai.models = await D.aiModelRemove(b.dataset.mdel); renderModels(); });
+  }
+  D.onAiModels(list => { ai.models = list; if (state.page === 'aiapps') loadAi(); });
+  function renderDl(p) {
+    $('aiDlBox').hidden = !p;
+    if (!p) return;
+    const pct = p.total ? Math.floor((p.done * 100) / p.total) : 0;
+    $('aiDlBar').firstElementChild.style.width = `${pct}%`;
+    $('aiDlText').textContent = T('{name}: {done} of {total} ({pct}%)', { name: p.name, done: GB1(p.done), total: GB1(p.total), pct: String(pct) });
+  }
+  D.onModelProgress(renderDl);
+  $('btnAiDlCancel').onclick = () => D.aiModelCancel();
+  const fitTag = f => (f === 'fits' ? `<span class="tag good">${T('fits')}</span>` : f === 'slow' ? `<span class="tag warn">${T('slow')}</span>` : `<span class="tag">${T('too large')}</span>`);
+  async function loadSuggested() {
+    const r = await D.aiModelsSuggested();
+    $('aiSuggest').innerHTML = r.models.map(m => `<div class="item" data-repo-row="${esc(m.repo)}"><div class="main"><div class="title">${esc(m.repo.split('/')[1].replace(/-GGUF$/i, ''))} ${fitTag(m.fit)}</div><div class="meta">${m.size}B · ${esc(m.note)}</div><div data-files></div></div>
+        <div class="acts"><button class="btn sm" data-mdl="${esc(m.repo)}">${icon('download')}${T('Download')}</button><button class="btn sm ghost" data-mfiles="${esc(m.repo)}">${T('Choose file…')}</button></div></div>`).join('');
+    wireRepoRows($('aiSuggest'));
+  }
+  function wireRepoRows(box) {
+    box.querySelectorAll('[data-mdl]').forEach(b => b.onclick = () => startModelDownload(b.dataset.mdl, null, b));
+    box.querySelectorAll('[data-mfiles]').forEach(b => b.onclick = async () => {
+      const row = b.closest('[data-repo-row]').querySelector('[data-files]');
+      row.innerHTML = `<div class="muted small">${T('Loading…')}</div>`;
+      const r = await D.aiModelFiles(b.dataset.mfiles);
+      if (r.error) { row.innerHTML = `<div class="err">${esc(r.error)}</div>`; return; }
+      row.innerHTML = `<div class="list" style="margin-top:6px">${r.files.map(f => `<div class="item"><div class="main"><div class="title mono">${esc(f.name)}</div><div class="meta">${GB1(f.size)} ${f.fits ? `<span class="tag good">${T('fits')}</span>` : `<span class="tag warn">${T('larger than the graphics card')}</span>`}${f.best ? ` <span class="tag fox">${T('suggested')}</span>` : ''}</div></div><button class="btn sm ghost" data-mfile="${esc(f.name)}">${icon('download')}</button></div>`).join('') || `<div class="empty">${T('No GGUF files in it.')}</div>`}</div>`;
+      row.querySelectorAll('[data-mfile]').forEach(x => x.onclick = () => startModelDownload(b.dataset.mfiles, x.dataset.mfile, x));
+    });
+  }
+  async function startModelDownload(repo, name, btn) {
+    btn.disabled = true;
+    const r = await D.aiModelDownload(repo, name);
+    btn.disabled = false;
+    if (r.error) append(`${T('ERROR:')} ${r.error}`);
+    if (r.error) $('aiDlText').textContent = r.error;
+  }
+  $('btnAiSearch').onclick = async () => {
+    const q = $('aiSearch').value.trim();
+    if (!q) return;
+    $('aiResults').innerHTML = `<div class="empty">${T('Searching…')}</div>`;
+    const r = await D.aiModelSearch(q);
+    $('aiResults').innerHTML = r.error ? `<div class="empty err">${esc(r.error)}</div>` : r.results.length ? r.results.map(m => `<div class="item" data-repo-row="${esc(m.repo)}"><div class="main"><div class="title">${esc(m.repo)}</div><div class="meta">${T('{n} downloads', { n: m.downloads })}</div><div data-files></div></div>
+        <div class="acts"><button class="btn sm" data-mdl="${esc(m.repo)}">${icon('download')}${T('Download')}</button><button class="btn sm ghost" data-mfiles="${esc(m.repo)}">${T('Choose file…')}</button></div></div>`).join('') : `<div class="empty">${T('Nothing found. Try other words.')}</div>`;
+    wireRepoRows($('aiResults'));
+  };
+  $('aiSearch').onkeydown = e => { if (e.key === 'Enter') $('btnAiSearch').click(); };
+  $('btnAiDir').onclick = async () => { const r = await D.aiAppsDir(); if (r.error) { $('aiDirInfo').textContent = r.error; return; } current.appsDir = r.appsDir; loadAi(); };
+  $('btnAiDirReset').onclick = async () => { await D.aiAppsDirReset(); current.appsDir = ''; loadAi(); };
+  document.querySelector('[data-ai-folder="models"]').onclick = () => D.aiFolder('');
 
   // ---------- language ----------
   // The globe in the header (and on the welcome screen) opens the picker; a

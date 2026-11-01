@@ -36,6 +36,7 @@ import https from 'https';
 import * as so from './serveropts.js';
 import * as tunnel from './tunnel.js';
 import * as pc from './pccheck.js';
+import * as ai from './aiapps.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -107,6 +108,9 @@ const DEFAULT_SETTINGS = {
     serverOverrides: {},        // SillyTavern options the app sets as SILLYTAVERN_* variables (serveropts.js); config.yaml is never written
     https: false,               // serve SillyTavern over https with the app's own certificate (serveropts.certificate)
     companions: [],             // [{ id, name, path, args, stop }] programs started with SillyTavern ("Start with SillyTavern")
+    appsDir: '',                // AI apps and models (aiapps.js); '' = "ai-apps" next to the SillyTavern folder
+    appOptions: {},             // app id → { model, ctx, layers, port, … }
+    appAutostart: {},           // app id → true: started with SillyTavern
 };
 function loadSettings() {
     try {
@@ -373,6 +377,7 @@ async function startServer() {
     serverState.startedAt = Date.now();
     broadcast('server-started');
     for (const c of settings.companions) startCompanion(c);
+    for (const id of ai.autostartIds()) ai.start(id);
 
     // If node can't even be spawned (ENOENT etc.) we get 'error', not 'exit'.
     child.on('error', err => {
@@ -1760,6 +1765,122 @@ ipcMain.handle('profile-trash', async (_e, id) => {
     return true;
 });
 
+// ---------- AI apps (aiapps.js) ----------
+const aiOverview = async () => ({
+    apps: ai.list(), appsDir: ai.appsDir(), modelsDir: ai.modelsDir(), models: ai.models(), free: ai.freeSpace(),
+    gpu: await ai.gpuKind(), downloading: ai.downloading(),
+});
+const appById = id => ai.APPS.find(a => a.id === id);
+ipcMain.handle('ai-apps', () => aiOverview());
+ipcMain.handle('ai-install', async (_e, id) => {
+    const app = appById(id);
+    if (!app) return null;
+    const free = ai.freeSpace();
+    if (free != null && free < 6e9 && !(await confirm(t('Only {free} free where the apps go. Install anyway?', { free: `${(free / 1e9).toFixed(1)} GB` }), ai.appsDir(), t('Install')))) return ai.view(app);
+    return ai.install(id);
+});
+ipcMain.handle('ai-update', (_e, id) => ai.install(id, { update: true }));
+ipcMain.handle('ai-latest', (_e, id) => ai.latestVersion(id));
+ipcMain.handle('ai-start', (_e, id) => ai.start(id));
+ipcMain.handle('ai-stop', (_e, id) => ai.stop(id));
+ipcMain.handle('ai-log', (_e, id) => ai.logOf(id));
+ipcMain.handle('ai-options', (_e, id, values) => ai.saveOptions(id, values || {}));
+ipcMain.handle('ai-autostart', (_e, id, on) => ai.setAutostart(id, on));
+ipcMain.handle('ai-open', (_e, id) => { const v = ai.view(appById(id)); openWebTab(v.url); return true; });
+ipcMain.handle('ai-folder', (_e, id) => { const app = appById(id); shell.openPath(app ? ai.dirOf(app) : ai.modelsDir()); });
+ipcMain.handle('ai-uninstall', async (_e, id) => {
+    const app = appById(id);
+    if (!app) return null;
+    const v = ai.view(app);
+    if (!(await confirm(t('Remove {name}?', { name: app.name }), `${v.dir}\n\n${t('Its folder goes to the Recycle Bin. Your models (in the models folder) stay.')}`, t('Move to Recycle Bin')))) return v;
+    try { return await ai.uninstall(id); } catch (e) { return { ...v, error: e.message }; }
+});
+ipcMain.handle('ai-apps-dir', async () => {
+    if (ai.running().length) return { error: t('Stop the running AI apps first.') };
+    const r = await dialog.showOpenDialog(launcherWin, { title: t('Choose a folder for AI apps and models (they need a lot of space)'), defaultPath: ai.appsDir(), properties: ['openDirectory', 'createDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return aiOverview();
+    settings.appsDir = r.filePaths[0];
+    saveSettings(settings);
+    logLine(`AI apps and models now go to ${settings.appsDir} (apps already installed elsewhere stay there).`);
+    return aiOverview();
+});
+ipcMain.handle('ai-apps-dir-reset', () => { settings.appsDir = ''; saveSettings(settings); return aiOverview(); });
+// Models: suggestions picked for this PC, search, files, downloads.
+async function usableVram() {
+    const cards = await pc.gpus();
+    const main = [...cards].sort((a, b) => (a.integrated - b.integrated) || b.vramGB - a.vramGB)[0];
+    return main && !main.integrated ? Math.max(0, main.vramGB - 0.8) : 0;
+}
+// The best file of a repo for this PC: the largest of the usual quants that fits, else the smallest.
+function bestFile(files, usable) {
+    const fit = files.filter(f => f.size / 1e9 + 1.5 <= usable && /Q[4-8]_|Q4_K|Q5_K|Q6_K|Q8_0|IQ4/.test(f.quant));
+    return fit.at(-1) || files.find(f => f.quant === 'Q4_K_M') || files[0] || null;
+}
+ipcMain.handle('ai-models-suggested', async () => {
+    const usable = await usableVram();
+    const fits = pc.advice(usable + 0.8, Math.round(os.totalmem() / 1024 ** 3)).fits;
+    return { usable: Math.round(usable * 10) / 10, models: ai.SUGGESTED.map(m => {
+        const f = fits.find(x => x.size >= m.size) || fits.at(-1);
+        return { ...m, note: t(m.note), fit: f.quant ? 'fits' : f.slowQuant ? 'slow' : 'too large' };
+    }) };
+});
+ipcMain.handle('ai-model-search', async (_e, q) => { try { return { results: await ai.searchModels(String(q || '').slice(0, 100)) }; } catch (e) { return { error: e.message }; } });
+ipcMain.handle('ai-model-files', async (_e, repo) => {
+    try {
+        const files = await ai.repoFiles(String(repo));
+        const usable = await usableVram();
+        const best = bestFile(files, usable);
+        return { files: files.map(f => ({ name: f.name, size: f.size, quant: f.quant, fits: f.size / 1e9 + 1.5 <= usable, best: f === best })), usable };
+    } catch (e) { return { error: e.message }; }
+});
+// The launcher names the repo and file; parts and hashes come from Hugging Face again here.
+ipcMain.handle('ai-model-download', async (_e, repo, name) => {
+    try {
+        const files = await ai.repoFiles(String(repo));
+        const usable = await usableVram();
+        const f = name ? files.find(x => x.name === name) : bestFile(files, usable);
+        if (!f) return { error: t('That file is not in {repo}.', { repo }) };
+        const free = ai.freeSpace();
+        if (free != null && free < f.size + 1e9) return { error: t('Not enough free space for it ({size} needed, {free} free).', { size: `${(f.size / 1e9).toFixed(1)} GB`, free: `${(free / 1e9).toFixed(1)} GB` }) };
+        logLine(`Downloading the model ${repo} / ${f.name} (${(f.size / 1e9).toFixed(1)} GB) into ${ai.modelsDir()} …`);
+        const r = await ai.downloadModel({ repo, parts: f.parts });
+        logLine(r.ok ? `Model ready: ${r.path}` : r.cancelled ? 'Model download stopped (start it again to continue).' : `ERROR: model download failed: ${r.error}`);
+        broadcast('ai-models', ai.models());
+        return r;
+    } catch (e) { return { error: e.message }; }
+});
+// TabbyAPI's models are whole repositories (EXL3/EXL2 folders).
+ipcMain.handle('ai-model-download-repo', async (_e, appId, repo, ref) => {
+    const app = appById(appId);
+    if (!app?.modelFolder) return { error: 'no model folder' };
+    try {
+        // A size per branch (4.0bpw, 6.0bpw…): the launcher asks which one first.
+        if (!ref) {
+            const branches = await ai.repoBranches(String(repo));
+            if (branches.length) return { branches };
+        }
+        ref = ref || 'main';
+        const parts = await ai.repoAll(String(repo), ref);
+        if (!parts.some(p => /\.safetensors$/i.test(p.path))) return { error: t('No model files in it (pick one of its sizes, or another model).') };
+        const total = parts.reduce((n, p) => n + p.size, 0);
+        const free = ai.freeSpace();
+        if (free != null && free < total + 1e9) return { error: t('Not enough free space for it ({size} needed, {free} free).', { size: `${(total / 1e9).toFixed(1)} GB`, free: `${(free / 1e9).toFixed(1)} GB` }) };
+        const folder = path.join(app.modelFolder(ai.dirOf(app)), `${String(repo).split('/')[1]}${ref === 'main' ? '' : `-${ref}`}`);
+        logLine(`Downloading ${repo} (${ref}, ${(total / 1e9).toFixed(1)} GB) into ${folder} …`);
+        const r = await ai.downloadModel({ repo, parts, folder, ref });
+        // The first model becomes the one it starts with.
+        if (r.ok && !ai.optionsOf(app).tabbyModel) ai.saveOptions(appId, { tabbyModel: path.basename(folder) });
+        return r.ok ? { ok: true, folder: path.basename(folder) } : r;
+    } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('ai-model-cancel', () => { ai.cancelDownload(); return true; });
+ipcMain.handle('ai-models', () => ai.models());
+ipcMain.handle('ai-model-remove', async (_e, file) => {
+    if (!(await confirm(t('Move this model to the Recycle Bin?'), String(file), t('Move to Recycle Bin')))) return ai.models();
+    try { await ai.removeModel(String(file)); } catch (e) { logLine(`ERROR: ${e.message}`); }
+    return ai.models();
+});
+
 // ---------- app updates ----------
 ipcMain.handle('app-update-state', () => appUpdate.getState());
 ipcMain.handle('app-update-check', () => appUpdate.check({ fresh: true }));
@@ -2368,6 +2489,11 @@ if (gotLock) {
         // Before anything starts node or git.
         rt.initRuntime({ logLine, userData: USER_DATA });
         tunnel.initTunnel({ userData: USER_DATA, logLine, changed: s => broadcast('tunnel', tunnelView(s)) });
+        ai.initAiApps({
+            userData: USER_DATA, settings: () => settings, save: () => saveSettings(settings), stRoot,
+            changed: (_id, v) => broadcast('ai-app', v), logged: (id, line) => broadcast('ai-log', { id, line }),
+            modelProgress: p => broadcast('model-progress', p),
+        });
         if (settings.ownRuntime && !rt.apply(true)) logLine('WARNING: "use this app\'s own Node.js and Git" is on, but they are missing. Download them again under Maintenance → Back end.');
         setup.initSetup({ logLine, onPathRefresh: () => rt.reapply() });
         dl.initDownloader({ logLine, userData: USER_DATA });
@@ -2455,6 +2581,7 @@ if (gotLock) {
     app.on('will-quit', () => {
         tunnel.stop({ wait: true });
         stopCompanions({ wait: true });
+        ai.stopAll({ wait: true });
         if (serverState.child) stopServer();
         instances.stopAll();
         flushLog({ sync: true });

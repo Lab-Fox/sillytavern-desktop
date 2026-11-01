@@ -29,6 +29,7 @@
       "locales/*.json",
       "i18n-dom.js",
       "i18n.js",
+      "aiapps.js",
       "pccheck.js",
       "tunnel.js",
       "serveropts.js",
