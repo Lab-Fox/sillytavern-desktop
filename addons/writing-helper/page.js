@@ -351,8 +351,10 @@
         if (!c) return hide();
         const my = ++seq;
         const before = snapshot(el, at);
-        const scene = cfg.scene ? [isValueField(el) ? el.value.slice(Math.max(0, at.caret - 1500), at.caret) : at.before.slice(-1500), chatTail()] : ['', ''];
-        const r = (await call('suggest', c.prefix, c.prev, ...scene)) || { words: [], fixes: 0, adult: [] };
+        // The text before the cursor and the last chat messages: the story's
+        // own words get suggested, and an explicit scene is noticed.
+        const near = isValueField(el) ? el.value.slice(Math.max(0, at.caret - 1500), at.caret) : at.before.slice(-1500);
+        const r = (await call('suggest', c.prefix, c.prev, near, chatTail())) || { words: [], fixes: 0, adult: [] };
         const now = cursorText(el);
         if (my !== seq || fieldOf(document.activeElement) !== el || !now || now.caret !== at.caret || now.node !== at.node || snapshot(el, now) !== before) return;
         const fixes = r.words.slice(0, r.fixes);

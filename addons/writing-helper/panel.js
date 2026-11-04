@@ -7,7 +7,8 @@ const SWITCHES = [
     ['adultRow', 'Second row of explicit words', 'Up to three explicit words above the normal suggestions. ↑ twice reaches them, or Alt+4/5/6.'],
     ['sceneBoost', 'Notice explicit scenes', 'When what you write and the last chat messages are explicit, explicit words come first in the normal suggestions (marked 18+). It fades as soon as the scene moves on.'],
     ['names', 'Names from SillyTavern', 'Character, persona and group names and lorebook keywords count as words.'],
-    ['learnTyping', 'Learn from what I send', 'Remembers the words you use and which words follow which, for better suggestions. Saved only on this PC.'],
+    ['learnTyping', 'Learn from what I send', 'Remembers the words you use (also new ones, like names, once you used them twice) and which words follow which, for better suggestions. Saved only on this PC.'],
+    ['learnCharacters', 'Also learn from the characters\' messages', 'When it learns from your chats, the characters\' messages count too: the words and phrasing of your stories. Use "Learn from my chats again" after turning it on.'],
 ];
 
 panel.innerHTML = `
@@ -51,7 +52,7 @@ panel.innerHTML = `
     <input type="text" id="whSearch" placeholder="Search my words" style="margin-top:8px">
     <div id="whList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:220px;overflow:auto"></div>
   </div>
-  <p class="muted small" style="margin-top:12px">Word lists: <a style="color:var(--accent)" href="https://github.com/en-wl/wordlist">SCOWL / en-wl wordlist</a> (MIT-like licence), word frequencies from <a style="color:var(--accent)" href="https://github.com/hermitdave/FrequencyWords">FrequencyWords</a> by Hermit Dave (CC BY-SA 4.0, from OpenSubtitles). The adult and roleplay packs were written for this add-on.</p>`;
+  <p class="muted small" style="margin-top:12px">Word lists: <a style="color:var(--accent)" href="https://github.com/en-wl/wordlist">SCOWL / en-wl wordlist</a> (MIT-like licence), word frequencies from <a style="color:var(--accent)" href="https://github.com/hermitdave/FrequencyWords">FrequencyWords</a> by Hermit Dave (CC BY-SA 4.0, from OpenSubtitles), which words follow which counted in public-domain books from <a style="color:var(--accent)" href="https://www.gutenberg.org/">Project Gutenberg</a>. The adult, roleplay and scene word lists were written for this add-on.</p>`;
 
 const $ = id => panel.querySelector('#' + id);
 let state = null;
@@ -185,8 +186,8 @@ async function load() {
 
     const c = state.chats;
     $('whLearn').textContent = `Knows ${state.learned.toLocaleString('en-US')} of your words and ${state.pairs.toLocaleString('en-US')} word pairs`
-        + (c ? `, including ${c.messages.toLocaleString('en-US')} of your messages from ${c.files} chats.` : '.')
-        + ' "Learn from my chats" reads your own messages (not the characters\') in your newest 400 saved chats, on this PC only.';
+        + (c ? `, including ${c.messages.toLocaleString('en-US')} of your messages${c.characters ? ` and ${c.characters.toLocaleString('en-US')} of the characters'` : ''} from ${c.files} chats.` : '.')
+        + (s.learnCharacters ? ' "Learn from my chats" reads your messages and the characters\' in your newest 400 saved chats, on this PC only.' : ' "Learn from my chats" reads your own messages (not the characters\') in your newest 400 saved chats, on this PC only.');
     $('whChats').disabled = state.learning || state.state !== 'ready';
     $('whChats').textContent = state.learning ? 'Learning…' : c ? 'Learn from my chats again' : 'Learn from my chats';
     renderWords();

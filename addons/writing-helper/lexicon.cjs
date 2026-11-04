@@ -137,6 +137,45 @@ function deletes(word, depth) {
     return out;
 }
 
+// ---------- typos near on the keyboard ----------
+// QWERTY neighbours (same row ±1, rows above/below that touch the key).
+const ROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+const NEAR = new Map();
+ROWS.forEach((row, y) => [...row].forEach((c, x) => {
+    const set = new Set();
+    ROWS.forEach((row2, y2) => [...row2].forEach((c2, x2) => {
+        if (c2 !== c && Math.abs(y - y2) <= 1 && Math.abs((x + y * 0.5) - (x2 + y2 * 0.5)) <= 1) set.add(c2);
+    }));
+    NEAR.set(c, set);
+}));
+const neighbours = (a, b) => !!NEAR.get(a)?.has(b);
+// One substitution of neighbouring keys ("gome" → "home")?
+function neighbourSwap(a, b) {
+    if (a.length !== b.length) return false;
+    let diff = -1;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { if (diff >= 0) return false; diff = i; }
+    return diff >= 0 && neighbours(a[diff], b[diff]);
+}
+// Word starts one typo away from `p`, with how unlikely each typo is:
+// swapped letters and neighbouring keys are the usual ones.
+const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
+function variants(p) {
+    const out = new Map();
+    const put = (v, cost) => { if (v && v !== p && (!out.has(v) || out.get(v) > cost)) out.set(v, cost); };
+    for (let i = 0; i < p.length; i++) {
+        put(p.slice(0, i) + p.slice(i + 1), 1.6);                                  // one letter too many
+        if (i < p.length - 1) put(p.slice(0, i) + p[i + 1] + p[i] + p.slice(i + 2), 1.0); // swapped
+        for (const c of ALPHA) if (c !== p[i]) put(p.slice(0, i) + c + p.slice(i + 1), neighbours(p[i], c) ? 1.1 : 2.2); // wrong key
+    }
+    for (let i = 0; i <= p.length; i++) for (const c of ALPHA) put(p.slice(0, i) + c + p.slice(i), 1.5); // a letter missing
+    return out;
+}
+const EMPTY_CTX = { words: new Map(), pairs: new Map(), extra: [] };
+// Weight of the book word pairs (tuned with the keystroke benchmark).
+const PAIR_WEIGHT = 3.5, PAIR_SCALE = 100;
+// Typo-corrected word starts come after real ones of about the same score.
+const FUZZY_EXTRA = 1.2;
+
 // Contractions people type without the apostrophe. Only ones that are never
 // a real word on their own ("cant", "wont", "its", "were", "ill", "id",
 // "well", "lets", "hell", "shell", "wed" are words, so they're left alone).
@@ -182,6 +221,8 @@ class Lexicon {
         this.blocked = new Set(); // lower: never suggested, completed or corrected to (still spelled right)
         this.learned = new Map(); // lower → count (words the user writes)
         this.bigrams = new Map(); // prev lower → Map next lower → count
+        this.fresh = new Map();   // lower → { form, n }: words you write that the dictionary lacks
+        this.general = new Map(); // prev lower → Map next lower → count (+ .total): word pairs from books
         this.dirty = true;
     }
     addBase(w, nosuggest) {
@@ -226,6 +267,7 @@ class Lexicon {
         if (!word) return true;
         const l = word.toLowerCase();
         if (this.ignored.has(l) || this.names.has(l)) return true;
+        if (this.fresh.get(l)?.n >= 3) return true; // written three times: meant that way
         if (this.user.has(l)) {
             const forms = this.user.get(l);
             if (forms.has(word) || forms.has(l) || word === word.toUpperCase()) return true;
@@ -255,6 +297,8 @@ class Lexicon {
         for (const l of this.adult) if (this.base.has(l) && !this.nosug.has(l) && !this.blocked.has(l)) add(l, this.preferred(l), Math.max(3.6, Math.log10((this.freq.get(l) || 0) + 1)), true);
         for (const [l, forms] of this.user) if (!this.blocked.has(l)) add(l, forms.has(l) ? l : [...forms][0], 6, true);
         for (const [l, n] of this.names) if (!this.blocked.has(l)) add(l, n, 6.5, true);
+        // Your own new words, once you used them twice.
+        for (const [l, e] of this.fresh) if (e.n >= 2 && !this.blocked.has(l) && !vocab.has(l)) add(l, e.form, 4.3 + Math.min(2, Math.log10(e.n + 1)), true);
         for (const [l, c] of this.learned) if (vocab.has(l)) vocab.get(l)[1] += Math.min(2, Math.log10(c + 1));
         this.vocab = vocab;
         this.sorted = [...vocab.keys()].sort();
@@ -289,39 +333,128 @@ class Lexicon {
         return Math.min(1, (this.sceneHits(near, 80) + this.sceneCache.hits * 0.5) / 3);
     }
 
+    // ---------- the story on screen ----------
+    // Words and word pairs of the open chat and of the message being written:
+    // what this story uses gets suggested more, and its own words (names,
+    // places, made-up words the dictionary lacks) can be suggested at all.
+    // Unknown words count when capitalized (names) or seen twice.
+    setContext(chat = '', near = '') {
+        if (this.ctxChat !== chat) {
+            this.ctxChat = chat;
+            this.ctxBase = this.contextOf(tokens(chat).slice(-1500));
+        }
+        const nearToks = tokens(near).slice(-300);
+        this.ctx = nearToks.length ? this.contextOf(nearToks, this.ctxBase) : this.ctxBase;
+    }
+    contextOf(toks, from = null) {
+        const words = new Map(from ? [...from.words].map(([l, v]) => [l, { ...v }]) : []);
+        const pairs = new Map(from ? [...from.pairs].map(([p, m]) => [p, new Map(m)]) : []);
+        let prev = '';
+        for (const w of toks) {
+            const l = w.toLowerCase();
+            const e = words.get(l);
+            if (e) e.n++; else words.set(l, { form: w, n: 1, caps: /^\p{Lu}/u.test(w) });
+            if (e && e.caps && !/^\p{Lu}/u.test(w)) e.caps = false;
+            if (prev) {
+                if (!pairs.has(prev)) pairs.set(prev, new Map());
+                const m = pairs.get(prev);
+                m.set(l, (m.get(l) || 0) + 1);
+            }
+            prev = l;
+        }
+        // Story words the dictionary doesn't have, sorted for prefix lookups.
+        const extra = [];
+        for (const [l, e] of words) {
+            if (l.length < 3 || this.blocked.has(l) || this.base.has(l) || this.names.has(l) || this.user.has(l)) continue;
+            if (e.caps || e.n >= 2) { e.story = true; extra.push(l); }
+        }
+        extra.sort();
+        return { words, pairs, extra };
+    }
+
     // Suggestions in rows: `words` (the normal row, explicit words move up
     // in it the more explicit the scene is) and `adult` (explicit words not
-    // in the normal row, for the second row).
-    completeRows(prefix, prev = '', n = 3, { explicit = 0, adultRow = false } = {}) {
+    // in the normal row, for the second row). With `fuzzy`, word starts one
+    // typo away count too ("chco" → chocolate), a bit lower.
+    completeRows(prefix, prev = '', n = 3, { explicit = 0, adultRow = false, fuzzy = false } = {}) {
         const vocab = this.suggestable();
+        const ctx = this.ctx || EMPTY_CTX;
         const p = prefix.toLowerCase();
-        const next = prev ? this.bigrams.get(prev.toLowerCase()) : null;
-        const found = [];
-        const consider = (l, base) => {
-            const v = vocab.get(l);
-            if (!v) return;
+        const pl = prev.toLowerCase();
+        const next = prev ? this.bigrams.get(pl) : null;
+        const cnext = prev ? ctx.pairs.get(pl) : null;
+        const gnext = prev ? this.general.get(pl) : null;
+        const gtotal = gnext ? gnext.total : 1;
+        const found = new Map();
+        const consider = (l, base, penalty = 0) => {
+            if (this.blocked.has(l)) return;
+            const v = vocab.get(l), c = ctx.words.get(l);
+            if (!v && !c?.story) return;
+            let score = base - penalty;
+            if (c) score += 0.6 + 0.35 * Math.log2(1 + c.n);
+            if (cnext?.get(l)) score += 1.2 + Math.log10(cnext.get(l));
+            if (next?.get(l)) score += 2 + Math.log10(next.get(l));
+            // How often it follows `prev` in books: by its share among the
+            // words that follow `prev`.
+            const g = gnext?.get(l);
+            if (g) score += PAIR_WEIGHT * Math.log10(1 + PAIR_SCALE * g / gtotal);
             const strong = this.explicit.has(l);
-            const boost = explicit * (strong ? 2.5 : this.mild.has(l) ? 1.2 : 0);
-            found.push({ l, word: v[0], score: base, boosted: base + boost, strong });
+            const boosted = score + explicit * (strong ? 2.5 : this.mild.has(l) ? 1.2 : 0);
+            const old = found.get(l);
+            if (!old || old.boosted < boosted) found.set(l, { l, word: v ? v[0] : c.form, score, boosted, strong });
         };
+        // A story word the dictionary lacks: about as likely as a common word.
+        const unigram = l => vocab.get(l)?.[1] ?? (ctx.words.get(l)?.caps ? 4.8 : 4.2);
         if (!p) {
-            // Nothing typed yet: what usually comes after `prev`.
-            if (!next) return { words: [], adult: [] };
-            for (const [l, c] of next) consider(l, Math.log10(c + 1) * 2 + (vocab.get(l)?.[1] || 0) * 0.1);
+            // Nothing typed yet: what usually comes after `prev` (in what you
+            // write, and in this story).
+            const cands = new Set([...(next?.keys() || []), ...(cnext?.keys() || []), ...(gnext?.keys() || [])]);
+            cands.delete('total');
+            for (const l of cands) consider(l, unigram(l) * 0.1);
         } else {
-            let lo = 0, hi = this.sorted.length;
-            while (lo < hi) { const m = (lo + hi) >> 1; if (this.sorted[m] < p) lo = m + 1; else hi = m; }
-            for (let i = lo; i < this.sorted.length && this.sorted[i].startsWith(p); i++) {
-                const l = this.sorted[i];
-                if (l === p) continue;
-                consider(l, vocab.get(l)[1] + (next?.get(l) ? 2 + Math.log10(next.get(l)) : 0) - (l.length - p.length) * 0.02);
-            }
+            const scan = (list, start, penalty, max = Infinity) => {
+                let lo = 0, hi = list.length;
+                while (lo < hi) { const m = (lo + hi) >> 1; if (list[m] < start) lo = m + 1; else hi = m; }
+                for (let i = lo, k = 0; i < list.length && list[i].startsWith(start) && k < max; i++, k++) {
+                    const l = list[i];
+                    if (l === p) continue;
+                    consider(l, unigram(l) - (l.length - start.length) * 0.02, penalty);
+                }
+            };
+            scan(this.sorted, p, 0);
+            scan(ctx.extra, p, 0);
+            if (fuzzy) for (const [v, cost] of variants(p)) { scan(this.sorted, v, cost + FUZZY_EXTRA, 60); scan(ctx.extra, v, cost + FUZZY_EXTRA, 20); }
         }
-        const words = [...found].sort((a, b) => b.boosted - a.boosted).slice(0, n);
+        const all = [...found.values()];
+        const words = [...all].sort((a, b) => b.boosted - a.boosted).slice(0, n);
         const taken = new Set(words.map(f => f.l));
-        const adult = adultRow ? found.filter(f => f.strong && !taken.has(f.l)).sort((a, b) => b.score - a.score).slice(0, n) : [];
+        const adult = adultRow ? all.filter(f => f.strong && !taken.has(f.l)).sort((a, b) => b.score - a.score).slice(0, n) : [];
         const out = list => list.map(f => (p ? matchCase(prefix, f.word) : f.word));
         return { words: out(words), adult: out(adult) };
+    }
+
+    // What the strip shows for the word being typed: { words, fixes, adult,
+    // explicit }. The first `fixes` words are corrections of a misspelled word.
+    // opts: { near (text before the cursor), chat (last messages on screen),
+    // autocorrect, adultRow, sceneBoost }
+    suggest(prefix, prev = '', { near = '', chat = '', autocorrect = true, adultRow = false, sceneBoost = false } = {}) {
+        const p = String(prefix || '');
+        const before = near.endsWith(p) ? near.slice(0, near.length - p.length) : near; // not the half-typed word itself
+        this.setContext(chat, before);
+        const explicit = sceneBoost ? this.explicitness(before, chat) : 0;
+        const unknown = p.length >= 3 && !this.known(p) && !this.ctx.words.get(p.toLowerCase())?.story;
+        const rows = this.completeRows(p, prev, 3, { explicit, adultRow, fuzzy: unknown });
+        const extra = { adult: rows.adult, explicit: explicit >= 0.5 };
+        if (unknown) {
+            // What a space would correct it to comes first ("teh" → the, "dont" → don't).
+            const sure = autocorrect ? this.autocorrect(p, prev) : null;
+            if (!rows.words.length) {
+                const fixes = [...new Set([sure, ...this.corrections(p, 3).map(c => c.word)].filter(Boolean))].slice(0, 3);
+                return { words: fixes, fixes: fixes.length, ...extra };
+            }
+            if (sure) return { words: [sure, ...rows.words.filter(w => w !== sure)].slice(0, 3), fixes: 1, ...extra };
+        }
+        return { words: rows.words, fixes: 0, ...extra };
     }
 
     // Words starting with `prefix` (the part of the word typed so far).
@@ -365,7 +498,7 @@ class Lexicon {
                 if (dist > 2) continue;
                 const v = vocab.get(c);
                 const swapped = c.length === l.length && [...c].sort().join('') === sortedL;
-                out.push({ word: matchCase(word, v[0]), dist, score: v[1] + (swapped ? 0.8 : 0), special: v[2] });
+                out.push({ word: matchCase(word, v[0]), dist, score: v[1] + (swapped ? 0.8 : neighbourSwap(l, c) ? 0.6 : 0), special: v[2] });
             }
         }
         return out.sort((a, b) => a.dist - b.dist || b.score - a.score).slice(0, n);
@@ -407,9 +540,16 @@ class Lexicon {
     learn(text) {
         const words = tokens(text);
         for (let i = 0; i < words.length; i++) {
-            const l = words[i].toLowerCase();
-            if (!this.known(words[i]) || this.blocked.has(l)) continue;
-            this.learned.set(l, (this.learned.get(l) || 0) + 1);
+            const w = words[i], l = w.toLowerCase();
+            if (this.blocked.has(l)) continue;
+            if (this.known(w)) this.learned.set(l, (this.learned.get(l) || 0) + 1);
+            else {
+                // A word the dictionary lacks (a name, a made-up word): remembered,
+                // suggested once it was written twice. Lower case wins as its form.
+                if (l.length < 3 || l.length > 30 || /^\p{Lu}{2,}$/u.test(w)) continue;
+                const e = this.fresh.get(l);
+                if (e) { e.n++; if (w === l) e.form = l; } else this.fresh.set(l, { form: w, n: 1 });
+            }
             if (i > 0) {
                 const p = words[i - 1].toLowerCase();
                 if (!this.bigrams.has(p)) this.bigrams.set(p, new Map());
@@ -419,11 +559,26 @@ class Lexicon {
         }
         this.dirty = true;
     }
+    // Word pairs from books (data/pairs.txt.gz, see addons/tools/build-pairs.cjs).
+    setGeneralPairs(text) {
+        this.general = new Map();
+        for (const line of String(text).split('\n')) {
+            const tab = line.indexOf('\t');
+            if (tab < 1) continue;
+            const parts = line.slice(tab + 1).split(' ');
+            const m = new Map();
+            let total = 0;
+            for (let i = 0; i + 1 < parts.length; i += 2) { const c = Number(parts[i + 1]) || 0; m.set(parts[i], c); total += c; }
+            m.total = total;
+            this.general.set(line.slice(0, tab), m);
+        }
+    }
     // Words never to suggest; what was learned about them is forgotten.
     setBlocked(words) {
         this.blocked = new Set(words.map(w => w.toLowerCase()));
         for (const l of this.blocked) {
             this.learned.delete(l);
+            this.fresh.delete(l);
             this.bigrams.delete(l);
             for (const m of this.bigrams.values()) m.delete(l);
         }
@@ -437,10 +592,12 @@ class Lexicon {
         for (const [p, m] of this.bigrams) for (const [n, c] of m) pairs.push([p, n, c]);
         pairs.sort((a, b) => b[2] - a[2]);
         const words = [...this.learned.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30000);
-        return { v: 1, words, pairs: pairs.slice(0, maxPairs) };
+        const fresh = [...this.fresh].sort((a, b) => b[1].n - a[1].n).slice(0, 5000).map(([l, e]) => [l, e.form, e.n]);
+        return { v: 2, words, pairs: pairs.slice(0, maxPairs), fresh };
     }
     importLearned(d) {
         this.learned = new Map(d?.words || []);
+        this.fresh = new Map((d?.fresh || []).map(([l, form, n]) => [l, { form, n }]));
         this.bigrams = new Map();
         for (const [p, n, c] of d?.pairs || []) {
             if (!this.bigrams.has(p)) this.bigrams.set(p, new Map());

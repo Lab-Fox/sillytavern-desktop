@@ -36,6 +36,7 @@ const DEFAULTS = {
     names: true,         // character, persona, group and lorebook names count as words
     learnTyping: true,   // remember words and word pairs from what you send
     learnChats: false,   // also learn from your messages in saved chats (asked first)
+    learnCharacters: false, // …and from the characters' messages in them (word use of the stories)
 };
 
 // Keys per action, like Windows' own suggestions: ↑ into the strip, ← →
@@ -115,6 +116,7 @@ async function build() {
         lex.setUser(userWords.words);
         for (const w of userWords.ignored) lex.ignored.add(w.toLowerCase());
         lex.importLearned(readJson(userFile('learned.json'), null));
+        try { lex.setGeneralPairs(require('zlib').gunzipSync(fs.readFileSync(path.join(__dirname, 'data', 'pairs.txt.gz'))).toString('utf8')); } catch (e) { api.log(`Word pairs not loaded: ${e.message}`); }
         lex.setBlocked(userWords.blocked);
         await scanNames();
         lex.suggestable();
@@ -235,6 +237,9 @@ function saveLearnedSoon() {
 let chatJob = null;
 function learnFromChats() {
     if (chatJob || !lex) return chatJob;
+    // With "learnCharacters" the characters' messages count too: the words
+    // and word pairs of your stories (their names, how scenes are written).
+    const characters = settings().learnCharacters;
     chatJob = (async () => {
         const chats = path.join(api.sillytavern.folder() || '', 'data', 'default-user', 'chats');
         const files = [];
@@ -248,7 +253,7 @@ function learnFromChats() {
             }
         } catch (e) { api.log(`Could not read the chats folder: ${e.message}`); }
         files.sort((a, b) => b.t - a.t);
-        let bytes = 0, done = 0, messages = 0;
+        let bytes = 0, done = 0, messages = 0, theirs = 0;
         for (const f of files) {
             if (done >= 400 || bytes > 40e6) break;
             bytes += f.size;
@@ -256,16 +261,23 @@ function learnFromChats() {
             let text = '';
             try { text = await fs.promises.readFile(f.p, 'utf8'); } catch { continue; }
             for (const line of text.split('\n')) {
-                if (!line.includes('"is_user":true')) continue;
-                try { const m = JSON.parse(line); if (m.is_user && typeof m.mes === 'string') { lex.learn(m.mes); messages++; } } catch { /* broken line */ }
+                if (!characters && !line.includes('"is_user":true')) continue;
+                try {
+                    const m = JSON.parse(line);
+                    if (typeof m.mes !== 'string' || m.is_system) continue;
+                    if (m.is_user) { lex.learn(m.mes); messages++; } else if (characters && m.name !== undefined) { lex.learn(m.mes.slice(0, 8000)); theirs++; }
+                } catch { /* broken line or the chat's header */ }
             }
+            // Keep it small while it grows (the characters write a lot).
+            if (characters && done % 25 === 0) lex.importLearned(lex.exportLearned());
             setStatus('ready', `Learning from your chats… ${done} of ${Math.min(files.length, 400)}`);
             await new Promise(r => setImmediate(r));
         }
+        lex.importLearned(lex.exportLearned());
         writeJson(userFile('learned.json'), lex.exportLearned());
-        writeJson(userFile('chats-learned.json'), { at: new Date().toISOString(), files: done, messages });
-        setStatus('ready', `Learned from ${messages.toLocaleString('en-US')} of your messages in ${done} chats.`);
-        api.log(`Learned from ${messages} messages in ${done} chats.`);
+        writeJson(userFile('chats-learned.json'), { at: new Date().toISOString(), files: done, messages, characters: theirs });
+        setStatus('ready', `Learned from ${messages.toLocaleString('en-US')} of your messages${theirs ? ` and ${theirs.toLocaleString('en-US')} of the characters'` : ''} in ${done} chats.`);
+        api.log(`Learned from ${messages} of your messages and ${theirs} character messages in ${done} chats.`);
     })().finally(() => { chatJob = null; });
     return chatJob;
 }
@@ -317,26 +329,13 @@ exports.activate = function (a) {
         // → { words, fixes, adult, explicit }: the first `fixes` words are
         // corrections of a misspelled word; `adult` is the second row;
         // `explicit` says the scene counts as explicit (explicit words moved up).
+        // near: the text before the cursor; chat: the last messages on screen.
         const s = settings();
         if (!lex || s.mode !== 'helper' || !s.suggestions) return { words: [], fixes: 0, adult: [] };
-        const p = String(prefix || ''), pv = String(prev || '');
-        const adultOn = s.adult && (s.adultRow || s.sceneBoost);
-        const explicit = adultOn && s.sceneBoost ? lex.explicitness(String(near || '').slice(-2000), String(chat || '').slice(-6000)) : 0;
-        // Endings of the word being typed ("har" → harbor, hard). Only when no
-        // word starts like that is it a typo: then corrections ("wierd" → weird).
-        const rows = lex.completeRows(p, pv, 3, { explicit, adultRow: s.adult && s.adultRow });
-        const endings = rows.words;
-        const extra = { adult: rows.adult, explicit: explicit >= 0.5 };
-        if (p.length >= 3 && !lex.known(p)) {
-            // What a space would correct it to comes first ("teh" → the, "dont" → don't).
-            const sure = s.autocorrect ? lex.autocorrect(p, pv) : null;
-            if (!endings.length) {
-                const fixes = [...new Set([sure, ...lex.corrections(p, 3).map(c => c.word)].filter(Boolean))].slice(0, 3);
-                return { words: fixes, fixes: fixes.length, adult: [] };
-            }
-            if (sure) return { words: [sure, ...endings.filter(w => w !== sure)].slice(0, 3), fixes: 1, ...extra };
-        }
-        return { words: endings, fixes: 0, ...extra };
+        return lex.suggest(String(prefix || ''), String(prev || ''), {
+            near: String(near || '').slice(-2000), chat: String(chat || '').slice(-6000),
+            autocorrect: s.autocorrect, adultRow: s.adult && s.adultRow, sceneBoost: s.adult && s.sceneBoost,
+        });
     });
     api.pages.handle('correct', (_page, word, prev) => {
         const s = settings();
