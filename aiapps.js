@@ -14,6 +14,7 @@ import { fetchTo, unzip, swapIn } from './runtime.js';
 import { onLines } from './maintenance.js';
 import * as pc from './pccheck.js';
 import { t, N } from './i18n.js';
+import { mediaApps } from './aiapps-media.js';
 
 let ctx = null; // { userData, settings(), save(), stRoot(), changed(id, view), logged(id, line), modelProgress(p) }
 const state = new Map(); // id → { status, error, progress, log: [], child }
@@ -31,6 +32,9 @@ export function appsDir() {
     return st ? path.join(path.dirname(st), 'ai-apps') : path.join(ctx.userData, 'ai-apps');
 }
 export const modelsDir = () => path.join(appsDir(), 'models');
+// Picture models are shared by every image app (ComfyUI's folder names).
+export const imageModelsDir = () => path.join(appsDir(), 'image-models');
+export const IMAGE_KINDS = ['checkpoints', 'loras', 'vae', 'embeddings', 'upscale_models'];
 const launcherBatRoot = () => (ctx.stRoot() ? path.dirname(ctx.stRoot()) : '');
 
 // ---------- downloads ----------
@@ -213,15 +217,17 @@ export const APPS = [
                 if (r.code !== 0) throw new Error(t('git clone failed'));
             }
             await uvInstall(id, uv, dir);
+            writeMeta(dir, { version: await gitHead(dir) });
         },
         async update(dir, id) {
             const r = await gitRun(id, ['pull', '--ff-only'], dir);
             if (r.code !== 0) throw new Error(t('git pull failed'));
             await uvInstall(id, await ensureUv(id), dir);
+            writeMeta(dir, { version: await gitHead(dir) });
         },
         latest: null,
         async command(dir, o, port) {
-            const py = path.join(dir, '.venv', 'Scripts', 'python.exe');
+            const py = pyOf(dir, 'tabbyapi');
             const args = [path.join(dir, 'main.py'), '--host', '127.0.0.1', '--port', String(port)];
             if (o.tabbyModel) args.push('--model-name', o.tabbyModel);
             return { cmd: py, args: [...args, ...splitArgs(o.extra)], cwd: dir };
@@ -259,23 +265,81 @@ async function ensureUv(id) {
     return uvExe();
 }
 // Python and the package cache live in the apps folder (gigabytes, not on C: by force).
-const uvEnv = () => ({ ...process.env, UV_PYTHON_INSTALL_DIR: path.join(appsDir(), '.python'), UV_CACHE_DIR: path.join(appsDir(), '.uv-cache'), UV_LINK_MODE: 'copy' });
-async function uvInstall(id, uv, dir) {
+const pathKey = () => Object.keys(process.env).find(k => k.toUpperCase() === 'PATH') || 'Path';
+// process.env with more folders in front of PATH (keeps Windows' own spelling of the key).
+const withPath = (dirs, env = process.env) => ({ ...env, [pathKey()]: [...dirs, env[pathKey()] || ''].join(path.delimiter) });
+const uvEnv = () => withPath([path.dirname(uvExe())], { ...process.env, UV_PYTHON_INSTALL_DIR: path.join(appsDir(), '.python'), UV_CACHE_DIR: path.join(appsDir(), '.uv-cache'), UV_LINK_MODE: 'copy' });
+// A Python environment in <dir>/.venv. "seed" adds pip (for apps that install
+// their own packages when they start); "relocatable" keeps its programs
+// working if the folder moves.
+async function uvVenv(id, dir, python, { seed = false } = {}) {
     set(id, { step: t('Setting up Python (uv)…'), progress: null });
-    let r = await runLogged(id, uv, ['venv', '--python', '3.12', '--allow-existing', path.join(dir, '.venv')], dir, uvEnv());
+    const r = await runLogged(id, uvExe(), ['venv', '--python', python, '--allow-existing', '--relocatable', ...(seed ? ['--seed'] : []), path.join(dir, '.venv')], dir, uvEnv());
     if (r.code !== 0) throw new Error(t('uv could not set up Python'));
-    set(id, { step: t('Installing its packages (several GB)…'), progress: null });
-    r = await runLogged(id, uv, ['pip', 'install', '--python', path.join(dir, '.venv', 'Scripts', 'python.exe'), '-e', `${dir}[cu12]`], dir, uvEnv());
-    if (r.code !== 0) throw new Error(t('installing its packages failed (see its log)'));
-    // The download cache doubles the space (several GB) and isn't needed afterwards.
-    await runLogged(id, uv, ['cache', 'clean'], dir, uvEnv());
+    return path.join(dir, '.venv', 'Scripts', 'python.exe');
 }
+async function uvPip(id, dir, args, step = t('Installing its packages (several GB)…')) {
+    set(id, { step, progress: null });
+    const r = await runLogged(id, uvExe(), ['pip', 'install', '--python', path.join(dir, '.venv', 'Scripts', 'python.exe'), ...args], dir, uvEnv());
+    if (r.code !== 0) throw new Error(t('installing its packages failed (see its log)'));
+}
+// The download cache doubles the space (several GB) and isn't needed afterwards.
+const uvCacheClean = (id, dir) => runLogged(id, uvExe(), ['cache', 'clean'], dir, uvEnv());
+async function uvInstall(id, uv, dir) {
+    await uvVenv(id, dir, '3.12');
+    await uvPip(id, dir, ['-e', `${dir}[cu12]`]);
+    await uvCacheClean(id, dir);
+}
+// The Python an app runs with: its own environment (ours: .venv; its own
+// scripts: venv), else the Miniconda environment SillyTavern-Launcher made.
+export function pyOf(dir, condaEnv) {
+    const tries = [path.join(dir, '.venv', 'Scripts', 'python.exe'), path.join(dir, 'venv', 'Scripts', 'python.exe')];
+    if (condaEnv) tries.push(path.join(process.env.USERPROFILE || '', 'miniconda3', 'envs', condaEnv, 'python.exe'));
+    return tries.find(p => fs.existsSync(p)) || tries[0];
+}
+// Git apps: a clone (kept when an earlier install stopped half way), its branch optional.
+async function gitClone(id, url, dir, branch) {
+    if (fs.existsSync(path.join(dir, '.git'))) return;
+    if (fs.existsSync(dir) && fs.readdirSync(dir).length) throw new Error(t('{dir} is not empty.', { dir }));
+    fs.mkdirSync(path.dirname(dir), { recursive: true });
+    set(id, { step: t('Downloading {name}', { name: url.split('/').pop().replace(/\.git$/, '') }), progress: null });
+    const r = await gitRun(id, ['clone', '--depth', '1', ...(branch ? ['-b', branch] : []), url, dir], path.dirname(dir));
+    if (r.code !== 0) throw new Error(t('git clone failed'));
+}
+async function gitPull(id, dir) {
+    const r = await gitRun(id, ['pull', '--ff-only'], dir);
+    if (r.code !== 0) throw new Error(t('git pull failed'));
+}
+function gitHead(dir) {
+    return new Promise(resolve => {
+        const kid = spawn('git', ['log', '-1', '--format=%cs %h'], { cwd: dir, windowsHide: true });
+        let out = '';
+        kid.stdout.on('data', d => { out += d; });
+        kid.on('error', () => resolve(''));
+        kid.on('close', () => resolve(out.trim()));
+    });
+}
+// Runs a step of an app's own setup (e.g. "launch.py --exit") and fails on a non-zero exit.
+async function runStep(id, cmd, args, cwd, env, step) {
+    set(id, { step, progress: null });
+    const r = await runLogged(id, cmd, args, cwd, env);
+    if (r.code !== 0) throw new Error(t('installing its packages failed (see its log)'));
+}
+
+// For the image and voice apps (aiapps-media.js).
+APPS.push(...mediaApps({
+    t, N, latestRelease, releaseWith, assetOf, download, flatten, gpuKind, ensureUv, uvEnv, uvVenv, uvPip, uvCacheClean,
+    gitClone, gitPull, gitHead, runStep, runLogged, log, set, splitArgs, writeMeta, meta, withPath, pyOf,
+    appsDir, imageModelsDir, comfyYaml, launcherBatRoot, fetchTo, unzip, swapIn,
+}));
 
 // ---------- processes ----------
 function splitArgs(s) { return (String(s || '').match(/"[^"]*"|\S+/g) || []).map(a => a.replace(/^"|"$/g, '')); }
 function log(id, line) {
     const st = getState(id);
-    const l = `[${new Date().toLocaleTimeString('en-GB')}] ${line}`;
+    // Without terminal colour codes (ComfyUI, uv and others colour their output).
+    // eslint-disable-next-line no-control-regex
+    const l = `[${new Date().toLocaleTimeString('en-GB')}] ${String(line).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')}`;
     st.log.push(l);
     if (st.log.length > LOG_MAX) st.log.splice(0, st.log.length - LOG_MAX);
     ctx.logged(id, l);
@@ -314,19 +378,26 @@ export function optionsOf(app) {
 export function view(app) {
     const st = getState(app.id);
     const dir = dirOf(app);
-    const installed = fs.existsSync(app.exe(dir));
+    const fromLauncherBat = !dir.startsWith(appsDir());
+    const exists = fs.existsSync(app.exe(dir));
+    const m = exists ? meta(dir) : null;
+    // Apps set up in several steps count as installed once the last step wrote desktop-app.json.
+    const installed = exists && (!app.resumable || fromLauncherBat || !!m);
     const o = optionsOf(app);
-    const m = installed ? meta(dir) : null;
+    const port = Number(o.port) || app.port;
     return {
         id: app.id, name: app.name, group: app.group, desc: t(app.desc), site: app.site, nvidiaOnly: !!app.nvidiaOnly,
-        dir, installed, fromLauncherBat: installed && !dir.startsWith(appsDir()), version: m?.version || (installed ? '?' : ''),
+        note: app.note ? t(app.note) : '', size: app.size ? t(app.size) : '', extraFolder: app.extraFolder ? { sub: app.extraFolder.sub, label: t(app.extraFolder.label) } : null, license: app.license ? { name: app.license.name, url: app.license.url } : null,
+        dir, installed, incomplete: exists && !installed, fromLauncherBat: installed && fromLauncherBat, version: m?.version || (installed ? '?' : ''),
         status: st.status || (installed ? 'installed' : 'missing'), error: st.error, progress: st.progress, step: st.step,
-        running: !!st.server, port: Number(o.port) || app.port,
-        url: app.page ? app.page(Number(o.port) || app.port, dir) : `http://127.0.0.1:${Number(o.port) || app.port}/`,
-        connect: { api: app.st.api, url: app.st.url(Number(o.port) || app.port, o), key: app.st.key ? app.st.key(dir) : '' },
+        running: !!st.server, port,
+        url: app.page ? app.page(port, dir) : `http://127.0.0.1:${port}/`,
+        connect: app.st ? { api: app.st.api, url: app.st.url(port, o), key: app.st.key ? app.st.key(dir) : '', how: t(app.st.how || N('In SillyTavern: the plug icon (API Connections) → API, then paste the address and click Connect.')) } : null,
+        noConnect: app.st ? '' : t(app.noConnect || N('SillyTavern cannot use this app directly. Use its own page.')),
         opts: app.opts.map(x => ({ ...x, label: t(x.label), hint: x.hint ? t(x.hint) : '' })), values: o,
         autostart: !!S().appAutostart?.[app.id],
-        canUpdate: installed && !!(app.latest || app.update), modelFolder: app.modelFolder ? app.modelFolder(dir) : null,
+        // Python apps from SillyTavern-Launcher use its Miniconda: they are updated there, not here.
+        canUpdate: installed && !!(app.latest || app.update) && !(app.resumable && fromLauncherBat), modelFolder: app.modelFolder ? app.modelFolder(dir) : null,
         folders: app.modelFolder ? listFolders(app.modelFolder(dir)) : null,
     };
 }
@@ -368,12 +439,14 @@ export async function start(id) {
     const st = getState(id);
     if (!app || st.server) return view(app);
     const dir = dirOf(app);
-    if (!fs.existsSync(app.exe(dir))) { set(id, { error: t('{name} is not installed.', { name: app.name }) }); return view(app); }
+    if (!view(app).installed) { set(id, { error: t('{name} is not installed.', { name: app.name }) }); return view(app); }
+    // Its license is accepted in the launcher (main.js asks); started any other way, it would wait for an answer nobody sees.
+    if (app.license && !S().appOptions?.[id]?.licenseOk) { set(id, { error: t('Start it once from the AI apps page to accept its model\'s license.') }); return view(app); }
     const o = optionsOf(app);
     if (o.model && !fs.existsSync(o.model)) o.model = '';
     const port = Number(o.port) || app.port;
     let c;
-    try { c = await app.command(dir, o, port); } catch (e) { set(id, { error: e.message }); return view(app); }
+    try { c = await app.command(dir, o, port, !!S().appOptions?.[id]?.licenseOk); } catch (e) { set(id, { error: e.message }); return view(app); }
     log(id, `Starting ${app.name}: ${path.basename(c.cmd)} ${c.args.join(' ')}`);
     let kid;
     try { kid = spawn(c.cmd, c.args, { cwd: c.cwd, windowsHide: true, env: { ...process.env, PYTHONUNBUFFERED: '1', ...(c.env || {}) } }); } catch (e) { set(id, { error: e.message }); return view(app); }
@@ -435,13 +508,18 @@ export function saveOptions(id, values) {
     ctx.save();
     return view(app);
 }
+export function acceptLicense(id) {
+    const s = S();
+    s.appOptions = { ...(s.appOptions || {}), [id]: { ...(s.appOptions?.[id] || {}), licenseOk: true } };
+    ctx.save();
+}
 export function setAutostart(id, on) {
     const s = S();
     s.appAutostart = { ...(s.appAutostart || {}), [id]: !!on };
     ctx.save();
     return view(byId(id));
 }
-export const autostartIds = () => APPS.filter(a => S().appAutostart?.[a.id] && fs.existsSync(a.exe(dirOf(a)))).map(a => a.id);
+export const autostartIds = () => APPS.filter(a => S().appAutostart?.[a.id] && view(a).installed).map(a => a.id);
 
 // Removing goes to the Recycle Bin; models (in their own folder) stay.
 export async function uninstall(id) {
@@ -557,7 +635,7 @@ export async function downloadModel({ repo, parts, folder, ref = 'main' }) {
             if (!path.resolve(file).startsWith(path.resolve(destDir) + path.sep)) throw new Error('bad file name');
             fs.mkdirSync(path.dirname(file), { recursive: true });
             if (fs.existsSync(file) && fs.statSync(file).size === p.size) { dl.done += p.size; report(); continue; }
-            await fetchResume(`${HF}/${repo}/resolve/${encodeURIComponent(ref)}/${p.path.split('/').map(encodeURIComponent).join('/')}`, file, p, report);
+            await fetchResume(p.url || `${HF}/${repo}/resolve/${encodeURIComponent(ref)}/${p.path.split('/').map(encodeURIComponent).join('/')}`, file, p, report);
         }
         return { ok: true, path: path.join(destDir, parts[0].path) };
     } catch (e) {
@@ -570,11 +648,14 @@ export async function downloadModel({ repo, parts, folder, ref = 'main' }) {
 async function fetchResume(url, file, p, report) {
     const tmp = `${file}.partial`;
     let have = fs.existsSync(tmp) ? fs.statSync(tmp).size : 0;
-    if (have > p.size) { fs.rmSync(tmp); have = 0; }
+    if (p.size && have > p.size) { fs.rmSync(tmp); have = 0; }
     dl.abort = new AbortController();
-    const res = await net.fetch(url, { headers: have ? { Range: `bytes=${have}-` } : {}, signal: dl.abort.signal });
-    if (!res.ok) throw new Error(t('Hugging Face answered {status}', { status: String(res.status) }));
+    const res = await net.fetch(url, { headers: { ...(p.headers || {}), ...(have ? { Range: `bytes=${have}-` } : {}) }, signal: dl.abort.signal });
+    if (!res.ok) throw new Error(t('{site} answered {status}', { site: new URL(url).hostname, status: String(res.status) }));
+    if (/text\/html/i.test(res.headers.get('content-type') || '')) throw new Error(t('{site} sent a web page instead of the file (it may need a sign-in or an API key).', { site: new URL(url).hostname }));
     if (have && res.status !== 206) have = 0; // no resume: start over
+    // Civitai only tells the size roughly: take it from the answer.
+    if (!p.size) { p.size = have + Number(res.headers.get('content-length') || 0); dl.total += p.size; }
     const out = fs.createWriteStream(tmp, { flags: have ? 'a' : 'w' });
     const base = dl.done;
     let got = have, last = 0;
@@ -588,7 +669,7 @@ async function fetchResume(url, file, p, report) {
     } finally {
         await new Promise(r => out.end(r));
     }
-    if (got !== p.size) throw new Error(t('the download stopped early ({got} of {size} bytes); start it again to continue', { got: String(got), size: String(p.size) }));
+    if (p.size && got !== p.size) throw new Error(t('the download stopped early ({got} of {size} bytes); start it again to continue', { got: String(got), size: String(p.size) }));
     if (p.sha256) {
         const hash = crypto.createHash('sha256');
         await new Promise((resolve, reject) => fs.createReadStream(tmp).on('data', d => hash.update(d)).on('end', resolve).on('error', reject));
@@ -597,6 +678,97 @@ async function fetchResume(url, file, p, report) {
     fs.renameSync(tmp, file);
     dl.done = base + got;
     report();
+}
+
+// ---------- picture models (shared by the image apps) ----------
+const IMAGE_FILE = /\.(safetensors|ckpt|pt|pth|bin|gguf)$/i;
+export function imageModels() {
+    const out = [];
+    for (const kind of IMAGE_KINDS) {
+        const dir = path.join(imageModelsDir(), kind);
+        let items = [];
+        try { items = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+        for (const it of items) {
+            if (it.isFile() && IMAGE_FILE.test(it.name)) out.push({ kind, name: it.name, path: path.join(dir, it.name), size: fs.statSync(path.join(dir, it.name)).size });
+        }
+    }
+    return out.sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
+}
+export async function removeImageModel(file) {
+    const p = path.resolve(file);
+    if (!p.toLowerCase().startsWith(path.resolve(imageModelsDir()).toLowerCase() + path.sep)) return false;
+    await shell.trashItem(p);
+    return true;
+}
+// ComfyUI (and Forge Neo) read the shared folders from this file; it lives in
+// the apps folder, so installs made by SillyTavern-Launcher stay untouched.
+export function comfyYaml() {
+    const base = imageModelsDir();
+    for (const k of IMAGE_KINDS) fs.mkdirSync(path.join(base, k), { recursive: true });
+    const file = path.join(base, 'comfyui-paths.yaml');
+    const text = `# Written by SillyTavern Desktop: the shared picture-model folders.\nsillytavern_desktop:\n    base_path: ${JSON.stringify(base.replace(/\\/g, '/'))}\n${IMAGE_KINDS.map(k => `    ${k}: ${k}`).join('\n')}\n`;
+    if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== text) fs.writeFileSync(file, text);
+    return file;
+}
+// Checkpoints that run on most cards (checked on Hugging Face 2026-11-04, none gated).
+export const SUGGESTED_IMAGE = [
+    { repo: 'stable-diffusion-v1-5/stable-diffusion-v1-5', file: 'v1-5-pruned-emaonly.safetensors', base: 'SD 1.5', vram: 4, note: N('The classic. Small and quick; 512×512 pictures.') },
+    { repo: 'stabilityai/stable-diffusion-xl-base-1.0', file: 'sd_xl_base_1.0.safetensors', base: 'SDXL', vram: 8, note: N('Stability AI\'s own SDXL; 1024×1024 pictures.') },
+    { repo: 'RunDiffusion/Juggernaut-XL-v9', file: 'Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors', base: 'SDXL', vram: 8, note: N('Photos and realistic pictures.') },
+    { repo: 'cagliostrolab/animagine-xl-4.0', file: 'animagine-xl-4.0-opt.safetensors', base: 'SDXL', vram: 8, note: N('Anime characters; knows many by name.') },
+    { repo: 'OnomaAIResearch/Illustrious-XL-v2.0', file: 'Illustrious-XL-v2.0.safetensors', base: 'SDXL', vram: 8, note: N('Anime and illustration; base of many community models.') },
+    { repo: 'Laxhar/noobai-XL-1.1', file: 'NoobAI-XL-v1.1.safetensors', base: 'SDXL', vram: 8, note: N('Anime, based on Illustrious; its own license.') },
+];
+// A link the user pasted → one checked file. Hugging Face: …/resolve|blob/<branch>/<file>;
+// Civitai: a model page (?modelVersionId=…) or an /api/download/models/<version> link.
+const CIVITAI_KIND = { Checkpoint: 'checkpoints', LORA: 'loras', LoCon: 'loras', DoRA: 'loras', TextualInversion: 'embeddings', VAE: 'vae', Upscaler: 'upscale_models' };
+export async function resolveImageLink(input, civitaiKey = '') {
+    let u;
+    try { u = new URL(String(input).trim()); } catch { throw new Error(t('That is not a link.')); }
+    if (u.protocol !== 'https:') throw new Error(t('Only https links work.'));
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'huggingface.co') {
+        const m = /^\/([\w.-]+\/[\w.-]+)\/(?:resolve|blob)\/([\w.-]+)\/(.+)$/.exec(decodeURIComponent(u.pathname));
+        if (!m) throw new Error(t('Use the link of one file (it has /resolve/ or /blob/ in it).'));
+        const [, repo, ref, file] = m;
+        const f = (await repoAll(repo, ref)).find(x => x.path === file);
+        if (!f) throw new Error(t('That file is not in {repo}.', { repo }));
+        return { name: path.basename(file), size: f.size, sha256: f.sha256, url: `${HF}/${repo}/resolve/${encodeURIComponent(ref)}/${file.split('/').map(encodeURIComponent).join('/')}`, kind: guessKind(file, f.size), source: repo };
+    }
+    if (host === 'civitai.com') {
+        let version = u.searchParams.get('modelVersionId') || /^\/api\/download\/models\/(\d+)/.exec(u.pathname)?.[1];
+        const model = /^\/models\/(\d+)/.exec(u.pathname)?.[1];
+        const headers = civitaiKey ? { Authorization: `Bearer ${civitaiKey}` } : {};
+        const cj = async api => {
+            const res = await net.fetch(`https://civitai.com/api/v1/${api}`, { headers, cache: 'no-store' });
+            if (!res.ok) throw new Error(t('{site} answered {status}', { site: 'civitai.com', status: String(res.status) }));
+            return res.json();
+        };
+        let v;
+        if (version) v = await cj(`model-versions/${encodeURIComponent(version)}`);
+        else if (model) { const mj = await cj(`models/${encodeURIComponent(model)}`); v = { ...mj.modelVersions?.[0], model: { type: mj.type, name: mj.name } }; }
+        else throw new Error(t('Use the link of a Civitai model page.'));
+        const f = (v.files || []).find(x => x.primary) || v.files?.[0];
+        const sha = /^[0-9a-f]{64}$/i.exec(f?.hashes?.SHA256 || '')?.[0];
+        if (!f || !sha || !/^https:\/\/(www\.)?civitai\.com\//.test(f.downloadUrl || '')) throw new Error(t('Civitai lists no checked file for it.'));
+        return { name: f.name, size: 0, approx: Math.round((f.sizeKB || 0) * 1024), sha256: sha.toLowerCase(), url: f.downloadUrl, headers, kind: CIVITAI_KIND[v.model?.type] || guessKind(f.name, (f.sizeKB || 0) * 1024), source: v.model?.name || 'Civitai' };
+    }
+    throw new Error(t('Only Hugging Face and Civitai links work here.'));
+}
+function guessKind(name, size) {
+    if (/vae/i.test(name)) return 'vae';
+    if (/upscal|esrgan|\b\dx[-_]/i.test(name)) return 'upscale_models';
+    return size > 1.5e9 ? 'checkpoints' : 'loras';
+}
+export async function suggestedImageFile(s) {
+    const f = (await repoAll(s.repo)).find(x => x.path === s.file);
+    if (!f) throw new Error(t('That file is not in {repo}.', { repo: s.repo }));
+    return { name: s.file, size: f.size, sha256: f.sha256, url: `${HF}/${s.repo}/resolve/main/${encodeURIComponent(s.file)}`, kind: 'checkpoints', source: s.repo };
+}
+export function downloadImageModel(f, kind) {
+    if (!IMAGE_KINDS.includes(kind)) kind = f.kind;
+    const name = path.basename(f.name).replace(/[<>:"|?*\\/]/g, '_');
+    return downloadModel({ repo: f.source, parts: [{ path: name, size: f.size, sha256: f.sha256, url: f.url, headers: f.headers }], folder: path.join(imageModelsDir(), kind) });
 }
 
 // Free space where the models go (for the launcher's hint).

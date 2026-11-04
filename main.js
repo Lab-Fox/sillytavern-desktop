@@ -1,7 +1,7 @@
 // SillyTavern Desktop — main process
 // Wraps the SillyTavern server as a hidden child process and
 // renders it in a dedicated Chromium window. No cmd, ever.
-import { app, BrowserWindow, Menu, Tray, ipcMain, shell, dialog, clipboard, session, screen } from 'electron';
+import { app, BrowserWindow, Menu, Tray, ipcMain, shell, dialog, clipboard, session, screen, safeStorage } from 'electron';
 import { spawn, execFileSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -37,6 +37,7 @@ import * as so from './serveropts.js';
 import * as tunnel from './tunnel.js';
 import * as pc from './pccheck.js';
 import * as ai from './aiapps.js';
+import { TOOLS } from './aiapps-media.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
@@ -111,6 +112,7 @@ const DEFAULT_SETTINGS = {
     appsDir: '',                // AI apps and models (aiapps.js); '' = "ai-apps" next to the SillyTavern folder
     appOptions: {},             // app id → { model, ctx, layers, port, … }
     appAutostart: {},           // app id → true: started with SillyTavern
+    civitaiKey: null,           // { enc } (safeStorage) — Civitai API key for picture-model downloads; never sent to the launcher
 };
 function loadSettings() {
     try {
@@ -129,7 +131,7 @@ let settings = loadSettings();
 if (prof.normalize(settings)) saveSettings(settings);
 // What the launcher gets: everything but the phone-access password and the
 // remote logins (the launcher asks for remote.list() instead).
-const publicSettings = () => ({ ...settings, remotes: undefined, lanPassword: settings.lanPassword ? '********' : '' });
+const publicSettings = () => ({ ...settings, remotes: undefined, civitaiKey: undefined, lanPassword: settings.lanPassword ? '********' : '' });
 let userscriptsDir = path.join(USER_DATA, 'userscripts');
 const systemLanguage = () => { try { return i18n.detect(app.getPreferredSystemLanguages()); } catch { return 'en'; } };
 i18n.setLanguage(settings.language || systemLanguage());
@@ -1769,8 +1771,16 @@ ipcMain.handle('profile-trash', async (_e, id) => {
 const aiOverview = async () => ({
     apps: ai.list(), appsDir: ai.appsDir(), modelsDir: ai.modelsDir(), models: ai.models(), free: ai.freeSpace(),
     gpu: await ai.gpuKind(), downloading: ai.downloading(),
+    imageDir: ai.imageModelsDir(), imageModels: ai.imageModels(), civitaiKey: !!settings.civitaiKey,
 });
 const appById = id => ai.APPS.find(a => a.id === id);
+// The Civitai API key is kept encrypted (like remote logins) and never sent to the launcher.
+const civitaiKey = () => {
+    const k = settings.civitaiKey;
+    if (!k) return '';
+    if (k.plain) return k.plain;
+    try { return safeStorage.decryptString(Buffer.from(k.enc, 'base64')); } catch { return ''; }
+};
 ipcMain.handle('ai-apps', () => aiOverview());
 ipcMain.handle('ai-install', async (_e, id) => {
     const app = appById(id);
@@ -1781,13 +1791,84 @@ ipcMain.handle('ai-install', async (_e, id) => {
 });
 ipcMain.handle('ai-update', (_e, id) => ai.install(id, { update: true }));
 ipcMain.handle('ai-latest', (_e, id) => ai.latestVersion(id));
-ipcMain.handle('ai-start', (_e, id) => ai.start(id));
+ipcMain.handle('ai-start', async (_e, id) => {
+    const app = appById(id);
+    if (!app) return null;
+    // A model under its own license (XTTS v2): asked once, before its first download.
+    if (app.license && !settings.appOptions?.[id]?.licenseOk) {
+        const { response } = await dialog.showMessageBox(...(launcherWin && !launcherWin.isDestroyed() ? [launcherWin] : []), {
+            type: 'question', buttons: [t('I agree'), t('Read the license'), t('Cancel')], defaultId: 0, cancelId: 2,
+            message: t('{name} downloads a model with its own license', { name: app.name }), detail: `${t(app.license.text)}\n\n${app.license.name}: ${app.license.url}`,
+        });
+        if (response === 1) openExternalSafe(app.license.url);
+        if (response !== 0) return ai.view(app);
+        ai.acceptLicense(id);
+    }
+    return ai.start(id);
+});
 ipcMain.handle('ai-stop', (_e, id) => ai.stop(id));
 ipcMain.handle('ai-log', (_e, id) => ai.logOf(id));
 ipcMain.handle('ai-options', (_e, id, values) => ai.saveOptions(id, values || {}));
 ipcMain.handle('ai-autostart', (_e, id, on) => ai.setAutostart(id, on));
 ipcMain.handle('ai-open', (_e, id) => { const v = ai.view(appById(id)); openWebTab(v.url); return true; });
-ipcMain.handle('ai-folder', (_e, id) => { const app = appById(id); shell.openPath(app ? ai.dirOf(app) : ai.modelsDir()); });
+ipcMain.handle('ai-folder', (_e, id, sub) => {
+    if (id === 'image-models') { ai.comfyYaml(); shell.openPath(ai.imageModelsDir()); return; }
+    const app = appById(id);
+    if (!app) { fs.mkdirSync(ai.modelsDir(), { recursive: true }); shell.openPath(ai.modelsDir()); return; }
+    // A named folder inside the app (e.g. XTTS's speakers).
+    const dir = sub && app.extraFolder?.sub === sub ? path.join(ai.dirOf(app), sub) : ai.dirOf(app);
+    fs.mkdirSync(dir, { recursive: true });
+    shell.openPath(dir);
+});
+// ----- picture models (shared by the image apps) -----
+const imageFileOf = async src => (Number.isInteger(src?.suggested) && ai.SUGGESTED_IMAGE[src.suggested] ? ai.suggestedImageFile(ai.SUGGESTED_IMAGE[src.suggested]) : ai.resolveImageLink(String(src?.link || ''), civitaiKey()));
+ipcMain.handle('ai-image-suggested', async () => {
+    const usable = await usableVram();
+    return { usable: Math.round(usable * 10) / 10, models: ai.SUGGESTED_IMAGE.map((m, i) => ({ i, repo: m.repo, file: m.file, base: m.base, note: t(m.note), fit: usable + 0.8 >= m.vram ? 'fits' : usable + 0.8 >= m.vram - 2 ? 'slow' : 'too large' })) };
+});
+ipcMain.handle('ai-image-link', async (_e, link) => {
+    try { const f = await ai.resolveImageLink(String(link || ''), civitaiKey()); return { name: f.name, size: f.size || f.approx, kind: f.kind, source: f.source }; } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('ai-image-download', async (_e, src, kind) => {
+    try {
+        const f = await imageFileOf(src);
+        const size = f.size || f.approx || 0;
+        const free = ai.freeSpace();
+        if (free != null && free < size + 1e9) return { error: t('Not enough free space for it ({size} needed, {free} free).', { size: `${(size / 1e9).toFixed(1)} GB`, free: `${(free / 1e9).toFixed(1)} GB` }) };
+        logLine(`Downloading the picture model ${f.source} / ${f.name}${size ? ` (${(size / 1e9).toFixed(1)} GB)` : ''} …`);
+        const r = await ai.downloadImageModel(f, String(kind || ''));
+        logLine(r.ok ? `Picture model ready: ${r.path}` : r.cancelled ? 'Model download stopped (start it again to continue).' : `ERROR: picture model download failed: ${r.error}`);
+        broadcast('ai-image-models', ai.imageModels());
+        return r;
+    } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('ai-image-models', () => ai.imageModels());
+ipcMain.handle('ai-image-remove', async (_e, file) => {
+    if (!(await confirm(t('Move this model to the Recycle Bin?'), String(file), t('Move to Recycle Bin')))) return ai.imageModels();
+    try { await ai.removeImageModel(String(file)); } catch (e) { logLine(`ERROR: ${e.message}`); }
+    return ai.imageModels();
+});
+ipcMain.handle('ai-civitai-key', (_e, key) => {
+    key = String(key || '').trim().slice(0, 200);
+    settings.civitaiKey = !key ? null : safeStorage.isEncryptionAvailable() ? { enc: safeStorage.encryptString(key).toString('base64') } : { plain: key };
+    saveSettings(settings);
+    return !!settings.civitaiKey;
+});
+// ----- helper tools (winget) -----
+const toolsView = () => TOOLS.map(x => ({ id: x.id, name: x.name, why: t(x.why), found: !!x.found(), nvidia: !!x.nvidia, winget: x.winget }));
+ipcMain.handle('ai-tools', () => toolsView());
+ipcMain.handle('ai-tool-install', async (_e, id) => {
+    const tool = TOOLS.find(x => x.id === id);
+    if (!tool) return toolsView();
+    if (!(await confirm(t('Install {name}?', { name: tool.name }), t('Installs it from Windows\' package manager (winget) and accepts its license. Windows may ask for permission.'), t('Install')))) return toolsView();
+    await runTask(t('Installing {name}', { name: tool.name }), async () => {
+        const r = await mx.run('winget', ['install', '--id', tool.winget, '-e', '--source', 'winget', '--accept-package-agreements', '--accept-source-agreements', ...(tool.override ? ['--override', tool.override] : [])], process.cwd());
+        logLine(r.code === 0 ? `${tool.name} is installed.` : `ERROR: winget could not install ${tool.name}.`);
+        await setup.refreshPath();
+        return r.code === 0;
+    }, { needsStopped: false });
+    return toolsView();
+});
 ipcMain.handle('ai-uninstall', async (_e, id) => {
     const app = appById(id);
     if (!app) return null;

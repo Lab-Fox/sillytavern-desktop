@@ -238,7 +238,9 @@ Only devices on your own home network can connect. Your `config.yaml` is never c
 
 ### AI apps
 
-The **AI apps** page runs a model on this PC instead of an online service:
+The **AI apps** page runs a model on this PC instead of an online service. Its tabs are **Text**, **Pictures**, **Voices** and **Helper tools**.
+
+**Text:**
 
 | App | What it is | In SillyTavern |
 |---|---|---|
@@ -249,7 +251,27 @@ The **AI apps** page runs a model on this PC instead of an online service:
 
 **Install** downloads the build for your graphics card (CUDA for NVIDIA, Vulkan for AMD and Intel, else the processor) from the project's GitHub release and checks it against the SHA256 GitHub publishes. TabbyAPI gets its own Python through [uv](https://github.com/astral-sh/uv) (no Miniconda). Then **Start**, **Open its page** (as a tab in the SillyTavern window), **Stop**, **Update** (keeps the web UI's `user_data`), the folder, and **Remove** (to the Recycle Bin; models stay). **Settings** per app: the model, context size, GPU layers, ports and extra command-line options. **Start with SillyTavern** starts an app with the server; every app stops when this app quits. Each app's output is in its **Log**, and the card shows what to choose and paste in SillyTavern's API Connections.
 
-Apps go to an `ai-apps` folder next to your SillyTavern folder (**Change…** picks another one, for example a big second drive). Apps that SillyTavern-Launcher's `Launcher.bat` installed (in `text-completion\`) are found and used where they are.
+**Pictures and voices:**
+
+| App | What it is | In SillyTavern |
+|---|---|---|
+| **ComfyUI** | The most flexible picture app (workflows of connected boxes), with ComfyUI-Manager. | Image Generation → ComfyUI, `http://127.0.0.1:8188` |
+| **Forge Neo** | The maintained successor of Forge and AUTOMATIC1111, with newer models (Flux, Qwen-Image, Wan). NVIDIA only. | Image Generation → Stable Diffusion Web UI (AUTOMATIC1111), `http://127.0.0.1:7863` |
+| **Forge** | AUTOMATIC1111 made faster and lighter on memory (no longer updated). | Image Generation → Stable Diffusion Web UI (AUTOMATIC1111), `http://127.0.0.1:7862` |
+| **Stable Diffusion web UI (AUTOMATIC1111)** | The original web UI (no longer updated). | Image Generation → Stable Diffusion Web UI (AUTOMATIC1111), `http://127.0.0.1:7861` |
+| **Fooocus** | Pictures from a prompt with almost no settings. NVIDIA only. | — (its own page) |
+| **InvokeAI** | A polished studio with canvas, layers and a model manager. | — (its own page) |
+| **SwarmUI** | A friendly page with ComfyUI underneath; installs its back end on first start. | — (its own page) |
+| **AllTalk TTS v2** | Voices for replies: Piper, XTTS, VITS, F5-TTS, voice cloning, RVC voices. | TTS → AllTalk, `http://127.0.0.1:7851` |
+| **XTTSv2 API server** | Coqui's XTTS v2 voice model (voice cloning, 17 languages). Asks you to accept the model's non-commercial license before its first start. | TTS → XTTSv2, `http://127.0.0.1:8020` |
+
+The Python apps are set up the way their own instructions do it, with [uv](https://github.com/astral-sh/uv) instead of Miniconda: a git clone (or, for InvokeAI, its package from PyPI), its own Python environment in the app's folder, and PyTorch for your graphics card. AUTOMATIC1111 and Forge install their packages with their own `launch.py`; AUTOMATIC1111 gets the copy of Stability AI's removed repository that its own developers point to. SwarmUI is built with the .NET 8 SDK, which goes into the apps folder (checked against Microsoft's SHA512; no installer, no admin rights). An install that stops half way (closed app, lost connection) shows **Finish installing** and continues where it stopped.
+
+**Picture models:** one folder (`image-models` in the apps folder, with `checkpoints`, `loras`, `vae`, `embeddings` and `upscale_models`) that ComfyUI, Forge Neo, Forge, AUTOMATIC1111 and Fooocus all read; InvokeAI can scan it from its Model Manager. **Suggested for this PC** lists SD 1.5 and SDXL checkpoints (general, photo and anime) marked for your graphics memory; **From a link** takes a Hugging Face file link or a Civitai model page, finds the file and its kind, and downloads it checked against the SHA256 that Hugging Face or Civitai publishes. A **Civitai API key** (for models that need a sign-in) is stored encrypted with Windows' data protection and never shown again.
+
+**Helper tools** shows whether FFmpeg, 7-Zip, the NVIDIA CUDA Toolkit and Visual Studio's C++ Build Tools are installed and installs them with winget. None of them is needed for the apps on the page; some add-ons and custom nodes use them.
+
+Apps go to an `ai-apps` folder next to your SillyTavern folder (**Change…** picks another one, for example a big second drive). Apps that SillyTavern-Launcher's `Launcher.bat` installed (in `text-completion\`, `image-generation\` and `voice-generation\`) are found and started where they are, with Launcher.bat's Miniconda environments; update those Python apps in Launcher.bat.
 
 **Models:** one folder of GGUF models for KoboldCpp, llama.cpp and the web UI. **Suggested for this PC** lists well-known models (small to 24B, several made for roleplay) marked *fits*, *slow* or *too large* for your graphics memory; **Download** picks the best size of it for your card, **Choose file…** lists every file with its size. **Find on Hugging Face** searches all GGUF models. Downloads are checked against Hugging Face's SHA256, can be stopped, and continue where they stopped. TabbyAPI's card downloads EXL3/EXL2 models by name and lets you pick the size (bits per weight).
 
@@ -493,7 +515,8 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `i18n.js`, `i18n-dom.js`, `locales/` | Languages: `t()` for the main process, the page translator and `T()` for the launcher and top bar, one JSON file per language (English text is the key; see `locales/README.md`) |
 | `serveropts.js` | SillyTavern options passed as `SILLYTAVERN_*` variables (reads `config.yaml` without writing it) and the HTTPS certificate (made with Node's crypto) |
 | `tunnel.js` | Remote link (downloads and runs `cloudflared`, reads its address) and Tailscale (status, addresses) |
-| `aiapps.js` | AI apps: the app list (KoboldCpp, llama.cpp, Text generation web UI, TabbyAPI), install/update from GitHub releases (SHA256-checked) or git + uv, start/stop/logs, options, models (Hugging Face search, files, resumable checked downloads) |
+| `aiapps.js` | AI apps: the text apps (KoboldCpp, llama.cpp, Text generation web UI, TabbyAPI), install/update from GitHub releases (SHA256-checked) or git + uv, start/stop/logs, options, models (Hugging Face search, files, resumable checked downloads), picture models (shared folder, suggestions, Hugging Face and Civitai links) |
+| `aiapps-media.js` | The picture and voice apps (ComfyUI, Forge Neo, Forge, AUTOMATIC1111, Fooocus, InvokeAI, SwarmUI, AllTalk v2, XTTS) and the helper tools installed with winget |
 | `pccheck.js` | Graphics cards and memory, model-size advice, which program holds a port, VPN adapters, the system report |
 | `tools/i18n-check.mjs` | `npm run i18n`: finds every translatable string and checks each language file (missing, broken placeholders or markup, plural forms); `--new` and `--fill` for translators |
 | `setup.js` | Finding SillyTavern, installing Node.js and Git, moving an install |
@@ -572,7 +595,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] Languages: English, Indonesian, Japanese, Korean, Chinese (Simplified and Traditional); more from contributors
 - [x] Launcher.bat's SillyTavern tools: remote link, Tailscale, HTTPS, server options, start with SillyTavern, PC check, troubleshooting
 - [x] AI apps for text: KoboldCpp, llama.cpp, Text generation web UI, TabbyAPI, with model downloads
-- [ ] AI apps for images and voice (ComfyUI, Forge, SwarmUI, AllTalk, XTTS, RVC…)
+- [x] AI apps for pictures and voices: ComfyUI, Forge Neo, Forge, AUTOMATIC1111, Fooocus, InvokeAI, SwarmUI, AllTalk v2, XTTS, with shared picture models
 - [ ] Linux and macOS ([help wanted](#windows-only-for-now))
 - [ ] Code signing (no more SmartScreen warning)
 

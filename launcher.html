@@ -901,8 +901,37 @@
           <div class="path" id="aiDir"></div>
           <p class="muted small" id="aiDirInfo" style="margin-top:6px"></p>
         </div>
+        <div class="seg" id="aiGroup">
+          <button data-g="text" class="on">Text</button>
+          <button data-g="image">Pictures</button>
+          <button data-g="voice">Voices</button>
+          <button data-g="tools">Helper tools</button>
+        </div>
         <div class="grid g2" id="aiList"></div>
-        <div class="card stack">
+        <div class="card stack" data-ai-group="image" hidden>
+          <h2>Picture models<span class="act row" style="gap:8px"><button class="btn sm ghost" data-ai-folder="image-models"><svg class="i"><use href="#i-folder"/></svg>Open folder</button></span></h2>
+          <p class="muted small">Checkpoints, LoRAs, VAEs, embeddings and upscalers in one folder that ComfyUI, Forge Neo, Forge, AUTOMATIC1111 and Fooocus all use. Download one below or put your own files in its subfolders.</p>
+          <div class="list" id="aiImgModels"></div>
+          <div class="row" id="aiImgDlBox" hidden style="margin-top:6px"><div class="progress" id="aiImgDlBar"><i></i></div><span class="muted small" id="aiImgDlText" style="flex:1;min-width:200px"></span><button class="btn sm danger" id="btnAiImgDlCancel">Stop</button></div>
+          <h3 class="sub-h">Suggested for this PC</h3>
+          <div class="list" id="aiImgSuggest"><div class="empty">Loading…</div></div>
+          <h3 class="sub-h">From a link</h3>
+          <div class="row"><input type="url" id="aiImgLink" placeholder="A Hugging Face file link or a Civitai model page" spellcheck="false" style="flex:1;min-width:220px">
+            <select id="aiImgKind" style="width:auto" title="Which kind of model it is"></select>
+            <button class="btn sm" id="btnAiImgLink">Check</button></div>
+          <div id="aiImgLinkInfo"></div>
+          <div class="row" style="align-items:flex-end">
+            <div class="field" style="flex:1;min-width:220px;max-width:420px"><label>Civitai API key (for downloads that need a sign-in)</label><input type="password" id="aiCivitaiKey" autocomplete="off" spellcheck="false" placeholder="Paste it from Civitai → Account settings → API keys"></div>
+            <button class="btn sm" id="btnAiCivitaiSave">Save</button><button class="btn sm ghost" id="btnAiCivitaiClear" hidden>Remove</button>
+          </div>
+          <p class="muted small">The key is stored encrypted on this PC. Every download is checked against the SHA256 that Hugging Face or Civitai publishes. Models come with their own licenses.</p>
+        </div>
+        <div class="card stack" data-ai-group="tools" hidden>
+          <h2>Helper tools</h2>
+          <p class="muted small">Programs some apps or their add-ons use. None of them is needed to install the apps on this page. They come from Windows' package manager (winget); Windows may ask for permission.</p>
+          <div class="list" id="aiTools"><div class="empty">Loading…</div></div>
+        </div>
+        <div class="card stack" data-ai-group="text">
           <h2>Models<span class="act row" style="gap:8px"><button class="btn sm ghost" data-ai-folder="models"><svg class="i"><use href="#i-folder"/></svg>Open folder</button></span></h2>
           <p class="muted small">GGUF models for KoboldCpp, llama.cpp and the Text generation web UI, all in one folder. Download one below or put your own .gguf files in the folder.</p>
           <div class="list" id="aiModels"></div>
@@ -3334,12 +3363,14 @@
   $('btnReport').onclick = async () => { await D.systemReport(); $('btnReport').lastChild.textContent = T('Copied'); setTimeout(() => { $('btnReport').lastChild.textContent = T('Copy system report'); }, 1500); };
 
   // ---------- AI apps ----------
-  const ai = { apps: new Map(), models: [], gpu: '', loaded: false };
-  const GB1 = n => `${(n / 1e9).toFixed(n < 1e10 ? 1 : 0)} GB`;
+  const ai = { apps: new Map(), models: [], imageModels: [], gpu: '', loaded: false, group: recall('aiGroup') || 'text' };
+  const GB1 = n => (n < 1e9 ? `${Math.round(n / 1e6)} MB` : `${(n / 1e9).toFixed(n < 1e10 ? 1 : 0)} GB`);
   const STATUS = () => ({ missing: T('not installed'), installed: T('installed'), installing: T('installing…'), starting: T('starting…'), running: T('running'), stopping: T('stopping…') });
   async function loadAi() {
     const r = await D.aiApps();
-    Object.assign(ai, { models: r.models, gpu: r.gpu, appsDir: r.appsDir, loaded: true });
+    Object.assign(ai, { models: r.models, imageModels: r.imageModels, imageDir: r.imageDir, gpu: r.gpu, appsDir: r.appsDir, loaded: true });
+    $('btnAiCivitaiClear').hidden = !r.civitaiKey;
+    $('aiCivitaiKey').placeholder = r.civitaiKey ? T('Saved (type a new one to replace it)') : T('Paste it from Civitai → Account settings → API keys');
     $('aiDir').textContent = r.appsDir;
     $('aiDirInfo').textContent = `${r.free != null ? T('{free} free there.', { free: GB1(r.free) }) : ''} ${T('Builds for: {kind}.', { kind: { cuda: T('NVIDIA (CUDA)'), vulkan: T('AMD or Intel (Vulkan)'), cpu: T('the processor (no suitable graphics card)') }[r.gpu] })} ${T('Apps that SillyTavern-Launcher (Launcher.bat) installed are found and used where they are.')}`;
     $('btnAiDirReset').hidden = !current.appsDir;
@@ -3347,13 +3378,27 @@
     r.apps.forEach(a => { ai.apps.set(a.id, a); wireApp(a); });
     for (const a of r.apps) D.aiLog(a.id).then(lines => { const el = document.querySelector(`[data-app="${a.id}"] .ai-log`); if (el) { el.textContent = lines.join('\n'); el.scrollTop = el.scrollHeight; } });
     renderModels();
+    renderImageModels();
     renderDl(r.downloading);
-    loadSuggested();
+    showAiGroup(ai.group);
   }
+  // Text / Pictures / Voices / Helper tools: one group of cards at a time.
+  function showAiGroup(g) {
+    ai.group = g;
+    remember('aiGroup', g);
+    $('aiGroup').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.g === g));
+    document.querySelectorAll('#aiList [data-app]').forEach(c => { c.hidden = c.dataset.group !== g; });
+    document.querySelectorAll('[data-ai-group]').forEach(c => { c.hidden = c.dataset.aiGroup !== g; });
+    if (g === 'text' && !ai.suggestedLoaded) { ai.suggestedLoaded = true; loadSuggested(); }
+    if (g === 'image' && !ai.imgSuggestedLoaded) { ai.imgSuggestedLoaded = true; loadImageSuggested(); }
+    if (g === 'tools') loadTools();
+  }
+  $('aiGroup').querySelectorAll('button').forEach(b => b.onclick = () => showAiGroup(b.dataset.g));
   function appCard(a) {
-    return `<div class="card ai-card" data-app="${esc(a.id)}">
+    return `<div class="card ai-card" data-app="${esc(a.id)}" data-group="${esc(a.group)}">
       <h2>${esc(a.name)}<span class="act row" style="gap:8px"><button class="link" data-xurl="${esc(a.site)}">${T('Project page')}</button></span></h2>
-      <p class="muted small">${esc(a.desc)}</p>
+      <p class="muted small">${esc(a.desc)}${a.size ? ` <span class="tag">${esc(a.size)}</span>` : ''}</p>
+      ${a.note ? `<p class="muted small">${esc(a.note)}</p>` : ''}
       <div data-part="status"></div>
       <label class="switch" style="border:0;padding:0"><input type="checkbox" data-ai-auto${a.autostart ? ' checked' : ''}><div><b>${T('Start with SillyTavern')}</b><span>${T('Starts when the SillyTavern server starts. AI apps always stop when this app quits.')}</span></div></label>
       <details${a.installed ? '' : ' hidden'} data-part="settings"><summary>${T('Settings')}</summary><div class="ai-opts">${a.opts.map(o => optField(a, o)).join('')}</div></details>
@@ -3380,11 +3425,13 @@
     const blocked = a.nvidiaOnly && ai.gpu !== 'cuda';
     const tagCls = a.status === 'running' ? 'good' : a.status === 'missing' ? '' : busy ? 'warn' : 'fox';
     const acts = !a.installed
-      ? `<button class="btn sm primary" data-ai="install"${busy || blocked ? ' disabled' : ''}>${icon('download')}${T('Install')}</button>${blocked ? `<span class="muted small">${T('Needs an NVIDIA graphics card.')}</span>` : ''}`
+      ? `<button class="btn sm primary" data-ai="install"${busy || blocked ? ' disabled' : ''}>${icon('download')}${a.incomplete ? T('Finish installing') : T('Install')}</button>${blocked ? `<span class="muted small">${T('Needs an NVIDIA graphics card.')}</span>` : ''}
+        ${a.incomplete && !busy ? `<button class="btn sm ghost danger" data-ai="remove" title="${T('Remove')}">${icon('trash')}</button><span class="muted small">${T('The last install stopped before the end; it continues where it stopped.')}</span>` : ''}`
       : [a.running ? `<button class="btn sm danger" data-ai="stop"${a.status === 'stopping' ? ' disabled' : ''}>${icon('stop')}${T('Stop')}</button>` : `<button class="btn sm primary" data-ai="start"${busy ? ' disabled' : ''}>${icon('play')}${T('Start')}</button>`,
         a.status === 'running' ? `<button class="btn sm" data-ai="open">${icon('external')}${T('Open its page')}</button>` : '',
         a.canUpdate ? `<button class="btn sm ghost" data-ai="update"${busy || a.running ? ' disabled' : ''}>${icon('refresh')}${T('Update')}</button>` : '',
         `<button class="btn sm ghost" data-ai="folder" title="${esc(a.dir)}">${icon('folder')}</button>`,
+        a.extraFolder ? `<button class="btn sm ghost" data-ai="subfolder" data-sub="${esc(a.extraFolder.sub)}">${icon('folder')}${esc(a.extraFolder.label)}</button>` : '',
         a.fromLauncherBat ? '' : `<button class="btn sm ghost danger" data-ai="remove" title="${T('Remove')}"${busy || a.running ? ' disabled' : ''}>${icon('trash')}</button>`].join('');
     card.querySelector('[data-part="status"]').innerHTML = `<div class="row" style="gap:8px">
         <span class="tag ${tagCls}">${esc(STATUS()[a.status] || a.status)}</span>
@@ -3394,11 +3441,11 @@
       ${a.error ? `<p class="err" style="margin-top:6px">${esc(a.error)}</p>` : ''}
       <div class="acts" style="margin-top:8px">${acts}</div>`;
     card.querySelector('[data-part="settings"]').hidden = !a.installed;
-    card.querySelector('[data-part="connect"]').innerHTML = a.installed ? `<div class="ai-connect">
+    card.querySelector('[data-part="connect"]').innerHTML = !a.installed ? '' : !a.connect ? `<p class="muted small">${esc(a.noConnect)}</p>` : `<div class="ai-connect">
         <span class="muted">${T('In SillyTavern')}</span><span>${esc(a.connect.api)}</span><span></span>
         <span class="muted">${T('Address')}</span><span class="mono">${esc(a.connect.url)}</span><button class="btn sm ghost" data-copy="${esc(a.connect.url)}">${icon('copy')}</button>
         ${a.connect.key ? `<span class="muted">${T('API key')}</span><span class="mono">${esc(a.connect.key.slice(0, 6))}…</span><button class="btn sm ghost" data-copy="${esc(a.connect.key)}">${icon('copy')}</button>` : ''}
-      </div><p class="muted small" style="margin-top:4px">${T('In SillyTavern: the plug icon (API Connections) → API, then paste the address and click Connect.')}</p>` : '';
+      </div><p class="muted small" style="margin-top:4px">${esc(a.connect.how)}</p>`;
     card.querySelectorAll('[data-ai]').forEach(b => b.onclick = () => aiAction(a.id, b.dataset.ai, b));
     card.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => { await navigator.clipboard.writeText(b.dataset.copy); b.innerHTML = icon('check'); setTimeout(() => { b.innerHTML = icon('copy'); }, 1200); });
   }
@@ -3432,6 +3479,7 @@
     else if (what === 'stop') renderApp(await D.aiStop(id));
     else if (what === 'open') D.aiOpen(id);
     else if (what === 'folder') D.aiFolder(id);
+    else if (what === 'subfolder') D.aiFolder(id, btn.dataset.sub);
     else if (what === 'remove') renderApp(await D.aiUninstall(id));
     else if (what === 'update') {
       const a = ai.apps.get(id);
@@ -3441,7 +3489,7 @@
     }
     btn.disabled = false;
   }
-  D.onAiApp(a => { if (ai.loaded) { const was = ai.apps.get(a.id); renderApp(a); if (was && was.installed !== a.installed) loadAi(); } });
+  D.onAiApp(a => { if (ai.loaded) { const was = ai.apps.get(a.id); renderApp(a); if (was && (was.installed !== a.installed || was.incomplete !== a.incomplete)) loadAi(); } });
   D.onAiLog(({ id, line }) => {
     const el = document.querySelector(`[data-app="${id}"] .ai-log`);
     if (!el) return;
@@ -3458,15 +3506,79 @@
     $('aiModels').querySelectorAll('[data-mdel]').forEach(b => b.onclick = async () => { ai.models = await D.aiModelRemove(b.dataset.mdel); renderModels(); });
   }
   D.onAiModels(list => { ai.models = list; if (state.page === 'aiapps') loadAi(); });
+  // One download at a time (text or picture model): both cards show it.
   function renderDl(p) {
-    $('aiDlBox').hidden = !p;
-    if (!p) return;
-    const pct = p.total ? Math.floor((p.done * 100) / p.total) : 0;
-    $('aiDlBar').firstElementChild.style.width = `${pct}%`;
-    $('aiDlText').textContent = T('{name}: {done} of {total} ({pct}%)', { name: p.name, done: GB1(p.done), total: GB1(p.total), pct: String(pct) });
+    for (const k of ['aiDl', 'aiImgDl']) {
+      $(`${k}Box`).hidden = !p;
+      if (!p) continue;
+      const pct = p.total ? Math.floor((p.done * 100) / p.total) : 0;
+      $(`${k}Bar`).firstElementChild.style.width = `${pct}%`;
+      $(`${k}Text`).textContent = T('{name}: {done} of {total} ({pct}%)', { name: p.name, done: GB1(p.done), total: GB1(p.total), pct: String(pct) });
+    }
   }
   D.onModelProgress(renderDl);
-  $('btnAiDlCancel').onclick = () => D.aiModelCancel();
+  $('btnAiDlCancel').onclick = $('btnAiImgDlCancel').onclick = () => D.aiModelCancel();
+  // ----- picture models -----
+  const IMG_KIND = () => ({ checkpoints: T('Checkpoint'), loras: T('LoRA'), vae: T('VAE'), embeddings: T('Embedding'), upscale_models: T('Upscaler') });
+  // (Option texts aren't translated by i18n-dom, so the list is built here.)
+  $('aiImgKind').innerHTML = `<option value="">${esc(T('Kind: automatic'))}</option>${Object.entries(IMG_KIND()).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}`;
+  function renderImageModels() {
+    $('aiImgModels').innerHTML = ai.imageModels.length ? ai.imageModels.map(m => `<div class="item"><div class="main"><div class="title">${esc(m.name)} <span class="tag">${esc(IMG_KIND()[m.kind] || m.kind)}</span></div><div class="meta">${GB1(m.size)}</div></div>
+        <button class="btn sm ghost danger" data-imdel="${esc(m.path)}" title="${T('Remove')}">${icon('trash')}</button></div>`).join('')
+      : `<div class="empty">${T('No picture models yet. Download one below, or put files in the folder\'s subfolders (checkpoints, loras, …).')}</div>`;
+    $('aiImgModels').querySelectorAll('[data-imdel]').forEach(b => b.onclick = async () => { ai.imageModels = await D.aiImageRemove(b.dataset.imdel); renderImageModels(); });
+  }
+  D.onAiImageModels(list => { ai.imageModels = list; renderImageModels(); if (ai.imgSuggested) renderImageSuggested(); });
+  async function loadImageSuggested() {
+    ai.imgSuggested = await D.aiImageSuggested();
+    renderImageSuggested();
+  }
+  function renderImageSuggested() {
+    const have = new Set(ai.imageModels.filter(m => m.kind === 'checkpoints').map(m => m.name));
+    $('aiImgSuggest').innerHTML = ai.imgSuggested.models.map(m => `<div class="item"><div class="main"><div class="title">${esc(m.repo.split('/')[1])} ${fitTag(m.fit)}</div><div class="meta">${esc(m.base)} · ${esc(m.note)}</div></div>
+        ${have.has(m.file) ? `<span class="tag good">${T('downloaded')}</span>` : `<button class="btn sm" data-imsug="${m.i}">${icon('download')}${T('Download')}</button>`}</div>`).join('');
+    $('aiImgSuggest').querySelectorAll('[data-imsug]').forEach(b => b.onclick = () => imageDownload({ suggested: Number(b.dataset.imsug) }, '', b));
+  }
+  async function imageDownload(src, kind, btn) {
+    btn.disabled = true;
+    const r = await D.aiImageDownload(src, kind);
+    btn.disabled = false;
+    if (r.error) { append(`${T('ERROR:')} ${r.error}`); $('aiImgDlBox').hidden = false; $('aiImgDlText').textContent = r.error; }
+  }
+  $('btnAiImgLink').onclick = async () => {
+    const link = $('aiImgLink').value.trim();
+    if (!link) return;
+    const box = $('aiImgLinkInfo');
+    box.innerHTML = `<div class="muted small">${T('Loading…')}</div>`;
+    const r = await D.aiImageLink(link);
+    if (r.error) { box.innerHTML = `<p class="err">${esc(r.error)}</p>`; return; }
+    const kind = $('aiImgKind').value || r.kind;
+    box.innerHTML = `<div class="list"><div class="item"><div class="main"><div class="title mono">${esc(r.name)} <span class="tag">${esc(IMG_KIND()[kind] || kind)}</span></div><div class="meta">${esc(r.source)}${r.size ? ` · ${GB1(r.size)}` : ''}</div></div>
+      <button class="btn sm" id="btnAiImgLinkDl">${icon('download')}${T('Download')}</button></div></div>`;
+    $('btnAiImgLinkDl').onclick = () => imageDownload({ link }, kind, $('btnAiImgLinkDl'));
+  };
+  $('aiImgLink').onkeydown = e => { if (e.key === 'Enter') $('btnAiImgLink').click(); };
+  $('btnAiCivitaiSave').onclick = async () => {
+    const key = $('aiCivitaiKey').value.trim();
+    if (!key) return;
+    $('btnAiCivitaiClear').hidden = !(await D.aiCivitaiKey(key));
+    $('aiCivitaiKey').value = '';
+    $('aiCivitaiKey').placeholder = T('Saved (type a new one to replace it)');
+  };
+  $('btnAiCivitaiClear').onclick = async () => {
+    await D.aiCivitaiKey('');
+    $('btnAiCivitaiClear').hidden = true;
+    $('aiCivitaiKey').placeholder = T('Paste it from Civitai → Account settings → API keys');
+  };
+  // ----- helper tools -----
+  async function loadTools() {
+    renderTools(await D.aiTools());
+  }
+  function renderTools(list) {
+    $('aiTools').innerHTML = list.map(x => `<div class="item"><div class="main"><div class="title">${esc(x.name)} ${x.found ? `<span class="tag good">${T('installed')}</span>` : ''}</div><div class="meta">${esc(x.why)}</div></div>
+      ${x.found ? '' : x.nvidia && ai.gpu !== 'cuda' ? `<span class="muted small">${T('Needs an NVIDIA graphics card.')}</span>` : `<button class="btn sm" data-tool="${esc(x.id)}">${icon('download')}${T('Install')}</button>`}</div>`).join('');
+    $('aiTools').querySelectorAll('[data-tool]').forEach(b => b.onclick = async () => { b.disabled = true; renderTools(await D.aiToolInstall(b.dataset.tool)); });
+  }
   const fitTag = f => (f === 'fits' ? `<span class="tag good">${T('fits')}</span>` : f === 'slow' ? `<span class="tag warn">${T('slow')}</span>` : `<span class="tag">${T('too large')}</span>`);
   async function loadSuggested() {
     const r = await D.aiModelsSuggested();
@@ -3505,6 +3617,7 @@
   $('btnAiDir').onclick = async () => { const r = await D.aiAppsDir(); if (r.error) { $('aiDirInfo').textContent = r.error; return; } current.appsDir = r.appsDir; loadAi(); };
   $('btnAiDirReset').onclick = async () => { await D.aiAppsDirReset(); current.appsDir = ''; loadAi(); };
   document.querySelector('[data-ai-folder="models"]').onclick = () => D.aiFolder('');
+  document.querySelector('[data-ai-folder="image-models"]').onclick = () => D.aiFolder('image-models');
 
   // ---------- language ----------
   // The globe in the header (and on the welcome screen) opens the picker; a

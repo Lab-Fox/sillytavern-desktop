@@ -30,6 +30,7 @@
       "i18n-dom.js",
       "i18n.js",
       "aiapps.js",
+      "aiapps-media.js",
       "pccheck.js",
       "tunnel.js",
       "serveropts.js",

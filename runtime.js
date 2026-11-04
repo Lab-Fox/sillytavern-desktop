@@ -103,7 +103,8 @@ export async function fetchTo(src, file, onProgress = () => {}) {
     const res = await net.fetch(src.url);
     if (!res.ok) throw new Error(`the download answered ${res.status}`);
     const total = src.size || Number(res.headers.get('content-length')) || 0;
-    const hash = crypto.createHash('sha256');
+    // SHA256 from GitHub and nodejs.org; SHA512 from Microsoft (.NET).
+    const hash = crypto.createHash(src.sha512 ? 'sha512' : 'sha256');
     let got = 0;
     let shown = -1;
     const meter = new Transform({
@@ -117,7 +118,7 @@ export async function fetchTo(src, file, onProgress = () => {}) {
         },
     });
     await pipeline(Readable.fromWeb(res.body), meter, fs.createWriteStream(file));
-    if (hash.digest('hex') !== src.sha256) throw new Error(t('the file does not match its published SHA256'));
+    if (hash.digest('hex') !== (src.sha512 || src.sha256)) throw new Error(t('the file does not match its published SHA256'));
 }
 
 export async function unzip(file, dest, strip) {
