@@ -177,9 +177,11 @@
 #desktop-writing-helper:not(:popover-open):not([popover]) { display: flex; }
 #desktop-writing-helper[hidden], #desktop-writing-helper[popover]:not(:popover-open) { display: none; }
 #desktop-writing-helper button { all: unset; cursor: pointer; padding: 2px 10px; border-radius: 6px; white-space: nowrap; }
-#desktop-writing-helper button:hover, #desktop-writing-helper button.first { background: var(--SmartThemeQuoteColor, rgba(255,255,255,.12)); color: var(--SmartThemeBodyColor, #fff); }
-#desktop-writing-helper button.first { outline: 1px solid var(--SmartThemeBorderColor, #777); }
-#desktop-writing-helper kbd { opacity: .55; font: inherit; font-size: .8em; margin-left: 6px; }
+#desktop-writing-helper button:hover { background: color-mix(in srgb, var(--SmartThemeBodyColor, #fff) 10%, transparent); }
+#desktop-writing-helper button.first { outline: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor, #fff) 35%, transparent); outline-offset: -1px; }
+#desktop-writing-helper button.sel { background: var(--SmartThemeQuoteColor, #e18a24); color: var(--SmartThemeBlurTintColor, #111); outline: none; }
+#desktop-writing-helper kbd, #desktop-writing-helper .hint { all: unset; opacity: .55; font-size: .78em; margin-left: 6px; }
+#desktop-writing-helper .hint { margin: 0 2px 0 4px; align-self: center; }
 #desktop-writing-helper .fix::before { content: '✎ '; opacity: .6; }`;
     document.head.append(style);
     document.body.append(strip);
@@ -191,7 +193,7 @@
         if (!isOpen()) return;
         if (canPopover && strip.hasAttribute('popover')) { try { strip.hidePopover(); } catch { /* already closed */ } } else strip.hidden = true;
     }
-    function hide() { current = null; close(); }
+    function hide() { current = null; sel = -1; close(); }
     function open(el) {
         // Inside a modal dialog the strip must be part of it, or the dialog
         // makes it unclickable.
@@ -209,23 +211,62 @@
         strip.style.left = `${Math.max(4, Math.min(c.left - 10, innerWidth - w - 4))}px`;
         strip.style.top = `${c.top - h - 6 < 4 ? c.bottom + 6 : c.top - h - 6}px`;
     }
+    // ---------- keys ----------
+    // "Ctrl+Alt+Shift+Meta+<key>" — the same form main.cjs stores.
+    function comboOf(e) {
+        let k = e.key === ' ' ? 'Space' : e.key;
+        if (k.length === 1) k = k.toUpperCase();
+        // Shift changes digits and marks ("!" for 1): use the key's place then.
+        if (e.shiftKey && /^Digit\d$/.test(e.code)) k = e.code.slice(5);
+        return `${e.ctrlKey ? 'Ctrl+' : ''}${e.altKey ? 'Alt+' : ''}${e.shiftKey ? 'Shift+' : ''}${e.metaKey ? 'Meta+' : ''}${k}`;
+    }
+    const keysFor = action => cfg.keys?.[action] || [];
+    const bound = (action, combo) => keysFor(action).includes(combo);
+    const PRETTY = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc', Space: 'Space' };
+    const pretty = combo => combo.split('+').map(p => PRETTY[p] || p).join('+');
+
+    // The highlighted word (↑ moves into the strip), -1 = none: typing goes on.
+    let sel = -1;
+    function select(i) {
+        sel = i;
+        strip.querySelectorAll('button').forEach((b, j) => { b.classList.toggle('sel', j === i); b.setAttribute('aria-selected', String(j === i)); });
+        const hint = strip.querySelector('.hint');
+        if (hint) {
+            const k = sel >= 0 ? keysFor('pick')[0] : keysFor('enter')[0];
+            hint.textContent = k ? pretty(k) : '';
+            hint.hidden = !k;
+        }
+    }
+
     function show(el, at, start, end, words, fixes) {
         if (!words.length) return hide();
         current = { el, node: at.node, start, end, words };
-        strip.replaceChildren(...words.map((w, i) => {
+        const items = words.map((w, i) => {
             const b = document.createElement('button');
             b.type = 'button';
             b.tabIndex = -1;
             b.setAttribute('role', 'option');
             b.textContent = w;
             if (fixes.includes(w)) b.className = 'fix';
-            if (i === 0) b.classList.add('first');
-            const k = document.createElement('kbd');
-            k.textContent = i === 0 && cfg.tabAccepts ? 'Tab' : `Alt+${i + 1}`;
-            b.append(k);
+            // The word a single key takes without moving into the strip.
+            if (i === 0 && keysFor('pickFirst').length) b.classList.add('first');
+            const direct = (i === 0 && keysFor('pickFirst')[0]) || keysFor(`pick${i + 1}`)[0];
+            if (cfg.keyHints && direct) {
+                const k = document.createElement('kbd');
+                k.textContent = pretty(direct);
+                b.append(k);
+            }
             b.addEventListener('mousedown', e => { e.preventDefault(); accept(i); }); // keep the focus in the text box
             return b;
-        }));
+        });
+        if (cfg.keyHints) {
+            const hint = document.createElement('span');
+            hint.className = 'hint';
+            hint.setAttribute('aria-hidden', 'true');
+            items.unshift(hint);
+        }
+        strip.replaceChildren(...items);
+        select(-1);
         open(el);
         place(el);
     }
@@ -351,14 +392,30 @@
         }
         if (!['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) last = null;
         if (current && isOpen()) {
-            if (e.key === 'Tab' && cfg.tabAccepts && !e.shiftKey && !e.ctrlKey && !e.altKey) { if (accept(0)) { e.preventDefault(); e.stopPropagation(); } return; }
-            if (e.altKey && !e.ctrlKey && /^[1-3]$/.test(e.key)) { if (current.words[Number(e.key) - 1] && accept(Number(e.key) - 1)) { e.preventDefault(); e.stopPropagation(); } return; }
-            if (e.key === 'Escape') { hide(); e.preventDefault(); e.stopPropagation(); return; }
+            const combo = comboOf(e);
+            const n = current.words.length;
+            const take = () => { e.preventDefault(); e.stopPropagation(); taken = e.key; };
+            if (sel >= 0) {
+                // A word is highlighted: these keys move or take it.
+                if (bound('next', combo)) { select((sel + 1) % n); return take(); }
+                if (bound('prev', combo)) { select((sel + n - 1) % n); return take(); }
+                if (bound('pick', combo)) { accept(sel); return take(); }
+                if (bound('leave', combo)) { select(-1); return take(); }
+                if (bound('close', combo)) { hide(); return take(); }
+                select(-1); // any other key: back to typing (the key does its usual thing)
+            } else {
+                if (bound('enter', combo)) { select(0); return take(); }
+                if (bound('pickFirst', combo)) { accept(0); return take(); }
+                for (let i = 1; i <= 3; i++) if (bound(`pick${i}`, combo) && i <= n) { accept(i - 1); return take(); }
+                if (bound('close', combo)) { hide(); return take(); }
+            }
             if (NAV.has(e.key)) hide(); // the cursor moves: new words after the key
         }
         if (e.key === 'Enter' && !e.shiftKey && el.id === 'send_textarea') sending();
     }
+    let taken = ''; // a key this add-on used: its keyup must not refresh the words
     function onKeyUp(e) {
+        if (taken && e.key === taken) { taken = ''; return; }
         const el = fieldOf(e.target);
         if (el && NAV.has(e.key)) suggestSoon(el);
     }

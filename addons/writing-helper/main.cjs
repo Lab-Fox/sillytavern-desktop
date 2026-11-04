@@ -28,12 +28,34 @@ const DEFAULTS = {
     mode: 'helper',      // 'helper' (this add-on), 'windows' (Windows' own suggestions), 'off'
     suggestions: true,   // the strip of words above the text box
     autocorrect: true,   // fix clear typos when you type a space or punctuation
-    tabAccepts: true,    // Tab takes the first suggestion (while the strip shows)
-    adult: true,         // the adult word pack
+    keys: null,          // the keys for picking words (null = KEYS below); see setKeys
+    keyHints: true,      // show the keys in the strip
+    adult: true,        // the adult word pack
     names: true,         // character, persona, group and lorebook names count as words
     learnTyping: true,   // remember words and word pairs from what you send
     learnChats: false,   // also learn from your messages in saved chats (asked first)
 };
+
+// Keys per action, like Windows' own suggestions: ↑ into the strip, ← →
+// to choose, Enter to take it, ↓ back to the text. The first four only
+// work while a word is highlighted; the others whenever the strip shows.
+// A key is "Ctrl+Alt+Shift+Meta+<KeyboardEvent.key>" (letters upper case,
+// " " = Space), modifiers in that order.
+const KEYS = {
+    enter: ['ArrowUp'], next: ['ArrowRight'], prev: ['ArrowLeft'], pick: ['Enter'], leave: ['ArrowDown'],
+    close: ['Escape'], pickFirst: [], pick1: ['Alt+1'], pick2: ['Alt+2'], pick3: ['Alt+3'],
+};
+const KEY = /^(?:Ctrl\+)?(?:Alt\+)?(?:Shift\+)?(?:Meta\+)?(?:[A-Z0-9]|F\d{1,2}|Space|Enter|Tab|Escape|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Arrow(?:Up|Down|Left|Right)|[`\-=[\]\\;',./])$/;
+function cleanKeys(v) {
+    if (!v || typeof v !== 'object') return null;
+    const out = {};
+    for (const a of Object.keys(KEYS)) {
+        const list = Array.isArray(v[a]) ? v[a] : KEYS[a];
+        out[a] = [...new Set(list.filter(k => typeof k === 'string' && KEY.test(k)))].slice(0, 3);
+    }
+    return out;
+}
+const keysOf = s => cleanKeys(s.keys) || KEYS;
 
 let api = null;
 let lex = null;
@@ -238,7 +260,7 @@ function readWindowsSuggestions() {
 const PAGE_CODE = fs.readFileSync(path.join(__dirname, 'page.js'), 'utf8');
 function config() {
     const s = settings();
-    return { mode: s.mode, suggestions: s.suggestions, autocorrect: s.autocorrect, tabAccepts: s.tabAccepts, learnTyping: s.learnTyping, ready: status.state === 'ready' };
+    return { mode: s.mode, suggestions: s.suggestions, autocorrect: s.autocorrect, keys: keysOf(s), keyHints: s.keyHints, learnTyping: s.learnTyping, ready: status.state === 'ready' };
 }
 function pushConfig() {
     if (!api) return;
@@ -319,12 +341,18 @@ exports.activate = function (a) {
 
     // The launcher panel.
     api.handle('status', async () => ({
-        ...status, settings: settings(), engine: api.spellcheck.engine(), windows: await windowsSuggestions(),
+        ...status, settings: { ...settings(), keys: keysOf(settings()) }, defaultKeys: KEYS, engine: api.spellcheck.engine(), windows: await windowsSuggestions(),
         words: userWords.words.length, ignored: userWords.ignored.length, names: nameList.length,
         learned: lex ? lex.learned.size : 0, pairs: lex ? [...lex.bigrams.values()].reduce((n, m) => n + m.size, 0) : 0,
         chats: readJson(userFile('chats-learned.json'), null), learning: !!chatJob,
     }));
     api.handle('set', async (key, value) => {
+        if (key === 'keys') {
+            // null = back to the defaults
+            api.storage.set('keys', value === null ? null : cleanKeys(value));
+            pushConfig();
+            return true;
+        }
         if (!(key in DEFAULTS) || typeof value !== typeof DEFAULTS[key]) return false;
         if (key === 'mode' && !['helper', 'windows', 'off'].includes(value)) return false;
         api.storage.set(key, value);
