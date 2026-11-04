@@ -2391,7 +2391,7 @@ ipcMain.handle('pick-parent', (_e, from) => pickFolder('Where should the new Sil
 ipcMain.handle('st-download', async (_e, o = {}) => {
     if (busyTask) return { error: t('Busy with "{task}" — wait for it to finish.', { task: busyTask }) };
     const req = await setup.checkRequirements();
-    if (!req.node.ok || !req.git.ok) return { error: t('Node.js and Git are needed first (Tools → Back end, or the welcome screen installs them).') };
+    if (!req.node.ok || !req.git.ok) return { error: t('Node.js and Git are needed first (Tools → Node.js and Git, or the welcome screen installs them).') };
     const name = String(o.name || '').trim();
     if (name && settings.profiles.some(p => p.name.toLowerCase() === name.toLowerCase())) return { error: t('There is already a profile called "{name}".', { name }) };
     const target = dl.targetInfo(String(o.parent || ''), String(o.folder || ''));
@@ -2597,7 +2597,7 @@ if (gotLock) {
             changed: (_id, v) => broadcast('ai-app', v), logged: (id, line) => broadcast('ai-log', { id, line }),
             modelProgress: p => broadcast('model-progress', p),
         });
-        if (settings.ownRuntime && !rt.apply(true)) logLine('WARNING: "use this app\'s own Node.js and Git" is on, but they are missing. Download them again under Tools → Back end.');
+        if (settings.ownRuntime && !rt.apply(true)) logLine('WARNING: "use this app\'s own Node.js and Git" is on, but they are missing. Download them again under Tools → Node.js and Git.');
         setup.initSetup({ logLine, onPathRefresh: () => rt.reapply() });
         dl.initDownloader({ logLine, userData: USER_DATA });
         hist.initHistory(USER_DATA);

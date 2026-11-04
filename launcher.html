@@ -2731,7 +2731,7 @@
     $('dlUse').checked = !st.ready;
     dl.parent = dl.parent || def.parent;
     $('dlParent').textContent = dl.parent;
-    if (!dl.reqOk) $('dlError').textContent = T('Node.js and Git are needed first: the welcome screen or Tools → Back end installs them.');
+    if (!dl.reqOk) $('dlError').textContent = T('Node.js and Git are needed first: the welcome screen or Tools → Node.js and Git installs them.');
     await loadVersions(false);
   }
   const closeDownload = () => $('dlModal').classList.remove('show');
