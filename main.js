@@ -1505,7 +1505,7 @@ ipcMain.handle('open-link', (_e, key) => {
     const link = Object.hasOwn(LINKS, key) ? LINKS[key] : null;
     if (link) shell.openExternal(typeof link === 'function' ? link() : link);
 });
-ipcMain.handle('copy-logs', () => { clipboard.writeText(serverState.logs.join('\n')); });
+ipcMain.handle('copy-logs', (_e, id) => { clipboard.writeText((id ? ai.logOf(id) : serverState.logs).join('\n')); });
 ipcMain.handle('set-layer', (_e, mode) => setLayer(mode));
 
 // ---------- phone & tablet access ----------
@@ -1808,6 +1808,7 @@ ipcMain.handle('ai-start', async (_e, id) => {
 });
 ipcMain.handle('ai-stop', (_e, id) => ai.stop(id));
 ipcMain.handle('ai-log', (_e, id) => ai.logOf(id));
+ipcMain.handle('ai-log-sources', () => ai.logSources());
 ipcMain.handle('ai-options', (_e, id, values) => ai.saveOptions(id, values || {}));
 ipcMain.handle('ai-autostart', (_e, id, on) => ai.setAutostart(id, on));
 ipcMain.handle('ai-open', (_e, id) => { const v = ai.view(appById(id)); openWebTab(v.url); return true; });
@@ -2369,7 +2370,7 @@ ipcMain.handle('pick-parent', (_e, from) => pickFolder('Where should the new Sil
 ipcMain.handle('st-download', async (_e, o = {}) => {
     if (busyTask) return { error: t('Busy with "{task}" — wait for it to finish.', { task: busyTask }) };
     const req = await setup.checkRequirements();
-    if (!req.node.ok || !req.git.ok) return { error: t('Node.js and Git are needed first (Maintenance → Back end, or the welcome screen installs them).') };
+    if (!req.node.ok || !req.git.ok) return { error: t('Node.js and Git are needed first (Tools → Back end, or the welcome screen installs them).') };
     const name = String(o.name || '').trim();
     if (name && settings.profiles.some(p => p.name.toLowerCase() === name.toLowerCase())) return { error: t('There is already a profile called "{name}".', { name }) };
     const target = dl.targetInfo(String(o.parent || ''), String(o.folder || ''));
@@ -2575,7 +2576,7 @@ if (gotLock) {
             changed: (_id, v) => broadcast('ai-app', v), logged: (id, line) => broadcast('ai-log', { id, line }),
             modelProgress: p => broadcast('model-progress', p),
         });
-        if (settings.ownRuntime && !rt.apply(true)) logLine('WARNING: "use this app\'s own Node.js and Git" is on, but they are missing. Download them again under Maintenance → Back end.');
+        if (settings.ownRuntime && !rt.apply(true)) logLine('WARNING: "use this app\'s own Node.js and Git" is on, but they are missing. Download them again under Tools → Back end.');
         setup.initSetup({ logLine, onPathRefresh: () => rt.reapply() });
         dl.initDownloader({ logLine, userData: USER_DATA });
         hist.initHistory(USER_DATA);

@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('desktop', {
     aiStart: id => invoke('ai-start', id),
     aiStop: id => invoke('ai-stop', id),
     aiLog: id => invoke('ai-log', id),
+    aiLogSources: () => invoke('ai-log-sources'),
     aiOptions: (id, values) => invoke('ai-options', id, values),
     aiAutostart: (id, on) => invoke('ai-autostart', id, on),
     aiOpen: id => invoke('ai-open', id),
@@ -188,7 +189,7 @@ contextBridge.exposeInMainWorld('desktop', {
     // places, links, misc
     openPlace: key => invoke('open-place', key),
     openLink: key => invoke('open-link', key),
-    copyLogs: () => invoke('copy-logs'),
+    copyLogs: id => invoke('copy-logs', id),
     saveSettings: s => invoke('save-settings', s),
     setLayer: mode => invoke('set-layer', mode),
     setTabs: on => invoke('set-tabs', on),

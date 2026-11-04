@@ -107,7 +107,7 @@ SillyTavern then opens in its own window. The very first start can take a minute
 Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 or newer and [Git](https://git-scm.com/). The app gets them for you in one of two ways:
 
 - **Install for me** installs both in Windows with winget, Windows' built-in installer (Windows may ask for permission once).
-- **Get them for this app only** downloads the official Node.js (LTS, from nodejs.org) and Git (MinGit, from Git for Windows) into the app's own folder, checks them against their published SHA256 checksums, and uses them for everything it runs. Nothing is installed in Windows and no admin permission is needed; about 70 MB to download, 210 MB on disk. Also under **Maintenance → Back end**, where you can switch between them and your PC's own, check for newer versions, or remove them.
+- **Get them for this app only** downloads the official Node.js (LTS, from nodejs.org) and Git (MinGit, from Git for Windows) into the app's own folder, checks them against their published SHA256 checksums, and uses them for everything it runs. Nothing is installed in Windows and no admin permission is needed; about 70 MB to download, 210 MB on disk. Also under **Tools → Back end**, where you can switch between them and your PC's own, check for newer versions, or remove them.
 
 ## Using the app
 
@@ -120,9 +120,10 @@ Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 o
 | **Migrate data** | Copy characters, chats, presets, extensions and more from one SillyTavern (or user) to another, and undo earlier migrations. |
 | **Backups** | Back up your data, scheduled or now; restore or delete a backup. |
 | **Extensions** | SillyTavern's extensions with their safety ratings; review and **Update all**, undo updates, find new extensions, Kits. Also extensions for this app (**Desktop app**). |
-| **Maintenance** | Node.js and Git (your PC's or the app's own), the health check, repair tools, ways to run SillyTavern without the app, and the release/staging switch. |
-| **Console** | Everything the server prints. Filter to problems, search, or copy it for a bug report. |
+| **Tools** | Node.js and Git (your PC's or the app's own), the health check, repair tools, "What can my PC run?", troubleshooting, ways to run SillyTavern without the app, and the release/staging switch. |
 | **Settings** | Themes, which SillyTavern to use, the port, the SillyTavern window, the console font, and how the app behaves. |
+
+**The console** sits under every page: everything the server prints, or the output of an AI app (pick it next to "Console"). Search it, show only problems, copy it for a bug report, drag its top edge to resize it, or make it bigger. **Ctrl+`** hides and shows it; when it's hidden, its last line stays visible and a red count shows new problems.
 
 **Updates are safe:** **Update now** stops the server, can back up your data first, runs `git pull` and `npm install`, and starts SillyTavern again. If something blocks the update, the console says why and which repair tool fixes it.
 
@@ -149,7 +150,7 @@ A profile is a name for a SillyTavern folder ("Main", "Testing staging", "SillyT
 |---|---|
 | **Latest release** (recommended, on top) | The stable version. Gets updates like any install. |
 | **Staging** | The newest changes, updated almost daily. Can break. |
-| **A specific version** (1.12.0 and newer, newest first, with release dates and notes) | Exactly that version, kept as it is: Home shows **Fixed version** and Update does nothing. Switch it to release or staging under **Maintenance → Release channel** to get updates again. |
+| **A specific version** (1.12.0 and newer, newest first, with release dates and notes) | Exactly that version, kept as it is: Home shows **Fixed version** and Update does nothing. Switch it to release or staging under **Tools → Release channel** to get updates again. |
 
 You choose the parent folder, the folder name and the profile name; the dialog shows where it goes and the free space there (about 600 MB is needed). Tick **Use it right away** to switch to it when it's done. Downloads take well under a minute on a fast connection (they skip old file versions), and **Cancel** removes the unfinished folder. Versions older than 1.13.2 ignore some of this app's settings: phone access doesn't work and a browser tab may open when the server starts.
 
@@ -277,9 +278,9 @@ Apps go to an `ai-apps` folder next to your SillyTavern folder (**Change…** pi
 
 ### What can my PC run? and troubleshooting
 
-**Maintenance → What can my PC run?** lists your graphics cards and their own memory, and for model sizes from 3B to 70B (GGUF, about 8K of context) whether they fit on the card, run slowly partly on the processor, or are too large. Below 4 GB it suggests an online service instead.
+**Tools → What can my PC run?** lists your graphics cards and their own memory, and for model sizes from 3B to 70B (GGUF, about 8K of context) whether they fit on the card, run slowly partly on the processor, or are too large. Below 4 GB it suggests an online service instead.
 
-**Maintenance → Troubleshooting:**
+**Tools → Troubleshooting:**
 - **Port:** which program uses SillyTavern's port, and **Use port … instead** with a free one. The health check also warns about a taken port, a VPN that may block connections, and an update that stopped halfway.
 - **Repair SillyTavern's files:** for "local changes" or a merge that stopped halfway. Changed files and own commits are kept on a `desktop-backup-…` branch, then the files are reset to the official version of the branch. The data folder is never touched.
 - **Clear npm's cache**, **SillyTavern's welcome tour** (show it again, per user, with the server stopped and a copy of the old settings kept), **Copy system report** (versions, settings and this PC's details; no passwords, your user folder as `%USERPROFILE%`), and links to report a problem.
@@ -392,7 +393,7 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | Get preview versions of this app | Off | Also offers test versions (pre-releases, marked **preview**) before they become a regular release. Off again: you get the next regular release |
 | Back up before updating | On | Back up your data before every update or channel switch |
 | Scheduled backups | Off | On the **Backups** page: when, which profiles, where to, how many to keep |
-| Use this app's own Node.js and Git | Off | Under **Maintenance → Back end** |
+| Use this app's own Node.js and Git | Off | Under **Tools → Back end** |
 | Confirm before quitting | On | Ask before quitting while the server runs |
 | Keep running in the tray | Off | Closing the launcher hides it to the tray and the server keeps running. Right-click the tray icon for more, including **Quit** |
 | Automatic backups to keep | 10 | Older automatic backups are removed; manual ones never are |
@@ -412,20 +413,20 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 |---|---|
 | `SillyTavern not found at …` | The welcome screen opens: pick your install or click **Find it myself…** |
 | `failed to launch node` | **Settings → Change…** shows what's missing; **Install for me** installs it, **Get them for this app only** downloads a private copy |
-| `Update blocked by a changed package-lock.json` | **Maintenance → Reset package-lock.json**, then update again |
-| `Cannot find module …` after an update | **Maintenance → Install missing dependencies** |
+| `Update blocked by a changed package-lock.json` | **Tools → Reset package-lock.json**, then update again |
+| `Cannot find module …` after an update | **Tools → Install missing dependencies** |
 | `plugins/<name>.user.js is a browser userscript…` | Move that file into the userscripts folder and restart |
-| `Timed out waiting for the server to respond.` | Read the lines above it, then try **Maintenance → Install missing dependencies** |
+| `Timed out waiting for the server to respond.` | Read the lines above it, then try **Tools → Install missing dependencies** |
 | The window never opens and another program uses the port | Change the **Port** in Settings |
 
-Still stuck? Copy the console (**Copy** on the Console page) into a new [issue](../../issues).
+Still stuck? Copy the console (**Copy** in the console) into a new [issue](../../issues).
 
 ### If the app stops working
 
 A new SillyTavern version might not work inside the app right away. You can always use SillyTavern the usual way:
 
-- **Open in browser** (on Home, or **Maintenance → If this app stops working**) starts the server if needed and opens SillyTavern in your normal web browser.
-- **Start with Start.bat** (Maintenance) runs SillyTavern's own `Start.bat` in a command window, without the app at all. Close that window to stop it.
+- **Open in browser** (on Home, or **Tools → If this app stops working**) starts the server if needed and opens SillyTavern in your normal web browser.
+- **Start with Start.bat** (Tools) runs SillyTavern's own `Start.bat` in a command window, without the app at all. Close that window to stop it.
 
 <details>
 <summary>Where things are stored</summary>

@@ -58,13 +58,22 @@
   /* ---------- sidebar ---------- */
   aside {
     width: 228px; flex-shrink: 0; background: var(--surface);
-    border-right: var(--px) solid var(--border); display: flex; flex-direction: column; padding: 18px 12px;
+    border-right: var(--px) solid var(--border); display: flex; flex-direction: column; padding: 18px 12px; overflow-y: auto;
   }
   .brand { display: flex; align-items: center; gap: 12px; padding: 2px 6px 20px; }
   .brand img.logo { width: 44px; height: 44px; }
   .brand b { display: block; font-size: 17px; font-weight: 700; color: var(--title); line-height: 1.15; }
   .brand span { font-size: 13px; color: var(--muted); }
-  nav { display: flex; flex-direction: column; gap: 3px; }
+  nav { display: flex; flex-direction: column; gap: 3px; flex: 1; min-height: 0; }
+  nav hr { border: 0; border-top: var(--px) dashed var(--border); margin: 5px 10px; }
+  nav .nav-end { margin-top: auto; }
+  @media (max-height: 700px) {
+    aside { padding-block: 12px; }
+    .brand { padding-bottom: 12px; }
+    .brand img.logo { width: 36px; height: 36px; }
+    nav button { padding-block: 5px; }
+    nav hr { margin-block: 3px; }
+  }
   nav button {
     display: flex; align-items: center; gap: 11px; width: 100%;
     background: none; border: var(--px) solid transparent; padding: 8px 10px;
@@ -74,11 +83,9 @@
   nav button.active { background: var(--panel2); color: var(--title); border-color: var(--border); box-shadow: inset calc(var(--px) * 2) 0 0 var(--accent); }
   nav button.active svg { color: var(--accent); }
   nav .badge { margin-left: auto; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; padding: 0 6px; line-height: 18px; }
-  .side-foot { margin-top: auto; border-top: var(--px) solid var(--border); padding-top: 12px; }
-  .side-foot .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--faint); padding: 0 10px 6px; }
-  .side-foot button { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; padding: 5px 10px; color: var(--muted); cursor: pointer; font-size: 14px; }
-  .side-foot button:hover { color: var(--accent2); background: var(--panel); }
-  .side-foot svg.i { width: 16px; height: 16px; }
+  .side-foot { margin-top: 10px; border-top: var(--px) solid var(--border); padding-top: 10px; display: flex; justify-content: space-around; }
+  .side-foot button { display: grid; place-items: center; width: 36px; height: 32px; background: none; border: 0; color: var(--muted); cursor: pointer; }
+  .side-foot button:hover, .side-foot button:focus-visible { color: var(--accent2); background: var(--panel); }
 
   /* ---------- main ---------- */
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -152,11 +159,20 @@
   }
   .hero img.logo { width: 88px; height: 88px; border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
   .hero h3 { font-size: 24px; color: var(--title); font-weight: 700; line-height: 1.2; }
-  .hero .sub { color: var(--muted); margin: 4px 0 14px; }
+  .hero-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .hero h3 .tip { margin-left: 4px; }
   .hero .btn.primary { padding: 9px 20px; font-size: 16px; }
-  .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; }
-  .kv dt { color: var(--muted); }
-  .kv dd { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero-ver { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding-top: 12px; border-top: var(--px) dashed var(--border); font-size: 14px; }
+  #infoVersion { color: var(--title); }
+  .hero-links { margin-left: auto; display: flex; gap: 14px; }
+  .quick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .quick .btn svg { color: var(--accent); width: 16px; height: 16px; }
+  .quick-lbl { color: var(--faint); font-size: 13px; margin-left: 10px; }
+  /* ⓘ: an explanation only where one is needed (text in aria-label, shown on hover, focus or click) */
+  .tip { display: inline-grid; place-items: center; width: 18px; height: 18px; border: var(--px) solid var(--border); background: var(--panel2); color: var(--muted); cursor: help; vertical-align: middle; flex-shrink: 0; }
+  .tip svg.i { width: 14px; height: 14px; stroke-width: 3; }
+  .tip:hover, .tip:focus-visible, .tip.open { color: var(--accent2); border-color: var(--accent); outline: none; }
+  #tipPop { position: fixed; z-index: 90; max-width: min(340px, calc(100vw - 24px)); background: var(--panel2); color: var(--text); border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); padding: 8px 11px; font-size: 14px; line-height: 1.45; pointer-events: none; white-space: normal; text-transform: none; letter-spacing: .2px; font-weight: 400; }
   .update-box { margin-top: 14px; padding-top: 14px; border-top: var(--px) dashed var(--border); display: flex; align-items: center; gap: 10px; }
   .notes summary { cursor: pointer; color: var(--muted); font-size: 14px; }
   .notes div { white-space: pre-wrap; max-height: 220px; overflow: auto; margin-top: 8px; font-size: 14px; }
@@ -166,9 +182,6 @@
   .qr { flex: none; width: 148px; background: #fff; border: var(--px) solid var(--border); line-height: 0; }
   .qr svg { width: 100%; height: auto; display: block; image-rendering: pixelated; }
   .lan-url { color: var(--title); font-size: 18px; user-select: text; }
-  .quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-  .quick .btn { justify-content: flex-start; padding: 8px 10px; }
-  .quick .btn svg { color: var(--accent); }
   .mini-log { font-family: var(--log-font); font-size: calc(var(--log-size) - 1px); color: var(--muted); line-height: 1.25; max-height: 160px; overflow: hidden; }
   .mini-log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -193,17 +206,37 @@
   .tool p { color: var(--muted); font-size: 14px; flex: 1; }
   .tool .btn { align-self: flex-start; margin-top: 6px; }
 
-  /* ---------- console ---------- */
-  .console-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
-  .console-bar input { flex: 1; }
+  /* ---------- console (docked under the pages) ---------- */
   .seg { display: flex; background: var(--panel); padding: 2px; }
   .seg button { background: none; border: 0; padding: 2px 11px; cursor: pointer; color: var(--muted); font-size: 14px; }
   .seg button.on { background: var(--accent); color: var(--on-accent); }
+  .dock { flex: none; height: var(--dock-h, min(240px, 32vh)); display: flex; flex-direction: column; position: relative; background: var(--surface); border-top: var(--px) solid var(--border); }
+  .dock.closed { height: auto; }
+  .dock:not(.closed):not(.max) { min-height: 110px; max-height: calc(100% - 230px); }
+  .dock.max { flex: 1; height: auto; border-top: 0; }
+  main.dock-max > .page { display: none !important; }
+  .dock-grip { position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; z-index: 2; }
+  .dock.closed .dock-grip, .dock.max .dock-grip { display: none; }
+  .dock-bar { display: flex; align-items: center; gap: 8px; padding: 5px 10px 5px 6px; min-height: 40px; }
+  .dock-toggle { display: flex; align-items: center; gap: 7px; background: none; border: 0; padding: 4px 6px; cursor: pointer; color: var(--title); font-size: 14px; flex-shrink: 0; }
+  .dock-toggle:hover, .dock-toggle:focus-visible { color: var(--accent2); }
+  .dock-toggle svg.i:first-child { width: 14px; height: 14px; transform: rotate(180deg); color: var(--muted); }
+  .dock.closed .dock-toggle svg.i:first-child { transform: none; }
+  .dock-toggle .badge { background: var(--bad); color: var(--on-accent); font-size: 12px; font-weight: 700; padding: 0 6px; line-height: 18px; }
+  #logSource { width: auto; max-width: 190px; padding: 2px 8px; font-size: 14px; flex-shrink: 1; min-width: 90px; }
+  .dock-last { flex: 1; min-width: 0; font-family: var(--log-font); font-size: calc(var(--log-size) - 2px); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: none; }
+  .dock.closed .dock-last { display: block; }
+  .dock-tools { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+  .dock-tools input { flex: 0 1 240px; min-width: 80px; padding: 2px 8px; font-size: 14px; margin-right: 6px; }
+  .dock.closed .dock-tools, .dock.closed #console { display: none; }
+  .btn.icon { padding: 4px 6px; }
+  .btn.icon[aria-pressed=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent2); }
   #console {
-    flex: 1; min-height: 0; overflow-y: auto; background: var(--well);
-    padding: 10px 14px; font-family: var(--log-font); font-size: var(--log-size); line-height: 1.25; letter-spacing: 0;
+    flex: 1; min-height: 0; overflow-y: auto; background: var(--well); border-width: var(--px) 0 0;
+    padding: 8px 14px; font-family: var(--log-font); font-size: var(--log-size); line-height: 1.25; letter-spacing: 0;
     white-space: pre-wrap; word-break: break-word; color: var(--text); user-select: text;
   }
+  #console .muted { color: var(--faint); }
   .l-err { color: var(--bad); }
   .l-warn { color: var(--warn); }
   .l-ok { color: var(--good); }
@@ -275,10 +308,10 @@
   /* ---------- AI apps ---------- */
   .ai-card { display: flex; flex-direction: column; gap: 10px; }
   .ai-card .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ai-card h2 { white-space: normal; }
   .ai-card details > summary { cursor: pointer; color: var(--muted); font-size: 14px; }
   .ai-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 8px; }
   .ai-opts .wide { grid-column: 1 / -1; }
-  .ai-log { font-family: var(--log-font); font-size: calc(var(--log-size) - 3px); line-height: 1.2; background: var(--well); padding: 6px 8px; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; color: var(--muted); user-select: text; }
   .ai-connect { background: var(--well); padding: 8px 10px; font-size: 14px; display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 4px 10px; align-items: center; }
   .ai-connect > span { overflow-wrap: anywhere; }
   .sub-h { font-size: 15px; color: var(--title); margin-top: 10px; }
@@ -396,21 +429,21 @@
     </div>
     <nav id="nav">
       <button data-page="home" class="active"><svg class="i"><use href="#i-home"/></svg>Home<span class="badge" id="navUpdate" hidden>1</span></button>
+      <hr>
       <button data-page="profiles"><svg class="i"><use href="#i-layers"/></svg>Profiles</button>
-      <button data-page="migrate"><svg class="i"><use href="#i-swap"/></svg>Migrate data</button>
-      <button data-page="backups"><svg class="i"><use href="#i-archive"/></svg>Backups</button>
       <button data-page="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions<span class="badge" id="navExt" hidden></span></button>
-      <button data-page="maintenance"><svg class="i"><use href="#i-pulse"/></svg>Maintenance</button>
       <button data-page="aiapps"><svg class="i"><use href="#i-chip"/></svg>AI apps</button>
-      <button data-page="console"><svg class="i"><use href="#i-terminal"/></svg>Console</button>
-      <button data-page="settings"><svg class="i"><use href="#i-sliders"/></svg>Settings</button>
+      <hr>
+      <button data-page="backups"><svg class="i"><use href="#i-archive"/></svg>Backups</button>
+      <button data-page="migrate"><svg class="i"><use href="#i-swap"/></svg>Migrate data</button>
+      <button data-page="maintenance"><svg class="i"><use href="#i-wrench"/></svg>Tools</button>
+      <button data-page="settings" class="nav-end"><svg class="i"><use href="#i-sliders"/></svg>Settings</button>
     </nav>
     <div class="side-foot">
-      <div class="lbl">Community</div>
-      <button data-link="docs"><svg class="i"><use href="#i-book"/></svg>Documentation</button>
-      <button data-link="discord" translate="no"><svg class="i"><use href="#i-chat"/></svg>Discord</button>
-      <button data-link="reddit" translate="no"><svg class="i"><use href="#i-users"/></svg>r/SillyTavernAI</button>
-      <button data-link="desktop"><svg class="i"><use href="#i-external"/></svg>About this app</button>
+      <button data-link="docs" title="SillyTavern documentation" aria-label="SillyTavern documentation"><svg class="i"><use href="#i-book"/></svg></button>
+      <button data-link="discord" title="Discord" aria-label="Discord"><svg class="i"><use href="#i-chat"/></svg></button>
+      <button data-link="reddit" title="r/SillyTavernAI" aria-label="r/SillyTavernAI"><svg class="i"><use href="#i-users"/></svg></button>
+      <button data-link="desktop" title="About this app" aria-label="About this app"><svg class="i"><use href="#i-external"/></svg></button>
     </div>
   </aside>
 
@@ -453,14 +486,22 @@
 
         <div class="card hero">
           <img class="logo" data-logo alt="">
-          <div style="flex:1">
-            <h3 id="heroTitle">Ready when you are</h3>
-            <div class="sub" id="heroSub">Start the server and open SillyTavern in its own window.</div>
+          <div class="hero-main">
+            <h3><span id="heroTitle">Ready when you are</span> <span class="tip" id="heroTip" tabindex="0" aria-label="Closing the SillyTavern window keeps the server running." hidden><svg class="i"><use href="#i-info"/></svg></span></h3>
             <div class="row">
               <button class="btn primary" id="btnOpen"><svg class="i"><use href="#i-play"/></svg><span>Open SillyTavern</span></button>
               <button class="btn" id="btnMinST" hidden><svg class="i"><use href="#i-minus"/></svg>Minimize</button>
               <button class="btn ghost" id="btnHomeBrowser" title="Open SillyTavern in your normal web browser"><svg class="i"><use href="#i-external"/></svg>Open in browser</button>
               <span class="muted small mono" id="heroUrl"></span>
+            </div>
+            <div class="hero-ver">
+              <span id="infoVersion">—</span>
+              <span id="infoBranch"></span>
+              <span id="updateTag" class="tag">Checking…</span>
+              <span class="muted small" id="updateHint"></span>
+              <button class="link" id="btnIncoming" hidden>What's in it?</button>
+              <button class="btn sm primary" id="btnUpdate" data-task hidden><svg class="i"><use href="#i-download"/></svg>Update now</button>
+              <span class="hero-links"><button class="link" id="btnCheck">Check for updates</button><button class="link" id="btnHistory">History</button></span>
             </div>
           </div>
         </div>
@@ -489,37 +530,14 @@
           </div>
         </div>
 
-        <div class="grid g2">
-          <div class="card">
-            <h2>Your SillyTavern<span class="act row" style="gap:14px"><button class="link" id="btnHistory">History</button><button class="link" id="btnCheck">Check for updates</button></span></h2>
-            <dl class="kv">
-              <dt>Version</dt><dd id="infoVersion">—</dd>
-              <dt>Branch</dt><dd id="infoBranch">—</dd>
-              <dt>Last change</dt><dd id="infoCommit">—</dd>
-            </dl>
-            <div class="update-box">
-              <span id="updateTag" class="tag">Checking…</span>
-              <span class="muted small" id="updateHint"></span>
-              <button class="link" id="btnIncoming" hidden>What's in it?</button>
-              <button class="btn sm primary" id="btnUpdate" data-task style="margin-left:auto" hidden><svg class="i"><use href="#i-download"/></svg>Update now</button>
-            </div>
-          </div>
-          <div class="card">
-            <h2>Quick access</h2>
-            <div class="quick">
-              <button class="btn" data-task id="btnQuickBackup"><svg class="i"><use href="#i-archive"/></svg>Back up</button>
-              <button class="btn" data-place="characters"><svg class="i"><use href="#i-user"/></svg>Characters</button>
-              <button class="btn" data-place="chats"><svg class="i"><use href="#i-chat"/></svg>Chats</button>
-              <button class="btn" data-place="data"><svg class="i"><use href="#i-folder"/></svg>Data folder</button>
-              <button class="btn" data-place="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions</button>
-              <button class="btn" data-place="config" translate="no"><svg class="i"><use href="#i-sliders"/></svg>config.yaml</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h2>Recent activity<button class="link act" data-goto="console">Open console</button></h2>
-          <div class="mini-log" id="miniLog"></div>
+        <div class="quick">
+          <button class="btn sm" data-task id="btnQuickBackup"><svg class="i"><use href="#i-archive"/></svg>Back up</button>
+          <span class="quick-lbl">Folders</span>
+          <button class="btn sm" data-place="characters"><svg class="i"><use href="#i-user"/></svg>Characters</button>
+          <button class="btn sm" data-place="chats"><svg class="i"><use href="#i-chat"/></svg>Chats</button>
+          <button class="btn sm" data-place="data"><svg class="i"><use href="#i-folder"/></svg>Data folder</button>
+          <button class="btn sm" data-place="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions</button>
+          <button class="btn sm" data-place="config" translate="no"><svg class="i"><use href="#i-sliders"/></svg>config.yaml</button>
         </div>
       </div>
     </section>
@@ -946,20 +964,6 @@
       </div>
     </section>
 
-    <!-- ===== Console ===== -->
-    <section class="page fill" id="page-console">
-      <div class="console-bar">
-        <div class="seg" id="logFilter">
-          <button data-f="all" class="on">All</button>
-          <button data-f="err">Problems</button>
-        </div>
-        <input type="search" id="logSearch" placeholder="Search the log…">
-        <button class="btn sm" id="btnCopyLog"><svg class="i"><use href="#i-copy"/></svg>Copy</button>
-        <button class="btn sm" data-place="logs"><svg class="i"><use href="#i-folder"/></svg>Log file</button>
-        <button class="btn sm ghost" id="btnClearLog">Clear view</button>
-      </div>
-      <div id="console"></div>
-    </section>
 
     <!-- ===== Settings ===== -->
     <section class="page" id="page-settings">
@@ -1127,6 +1131,25 @@
       </div>
       <div style="margin-top:16px"><button class="btn primary" id="btnSave"><svg class="i"><use href="#i-check"/></svg>Save settings</button></div>
     </section>
+
+    <!-- ===== Console (docked under every page) ===== -->
+    <section class="dock" id="dock">
+      <div class="dock-grip" id="dockGrip" title="Drag to resize"></div>
+      <div class="dock-bar">
+        <button class="dock-toggle" id="dockToggle" aria-controls="console"><svg class="i"><use href="#i-chev"/></svg><svg class="i"><use href="#i-terminal"/></svg>Console<span class="badge" id="dockProblems" hidden></span></button>
+        <select id="logSource" aria-label="Log" hidden></select>
+        <span class="dock-last" id="dockLast"></span>
+        <div class="dock-tools">
+          <input type="search" id="logSearch" placeholder="Search the log…">
+          <button class="btn sm ghost icon" id="btnLogProblems" aria-pressed="false" title="Only problems" aria-label="Only problems"><svg class="i"><use href="#i-warn"/></svg></button>
+          <button class="btn sm ghost icon" id="btnCopyLog" title="Copy" aria-label="Copy"><svg class="i"><use href="#i-copy"/></svg></button>
+          <button class="btn sm ghost icon" data-place="logs" id="btnLogFile" title="Log file" aria-label="Log file"><svg class="i"><use href="#i-folder"/></svg></button>
+          <button class="btn sm ghost icon" id="btnClearLog" title="Clear view" aria-label="Clear view"><svg class="i"><use href="#i-trash"/></svg></button>
+          <button class="btn sm ghost icon" id="btnDockMax" title="Bigger" aria-label="Bigger"><svg class="i"><use href="#i-max"/></svg></button>
+        </div>
+      </div>
+      <div id="console"></div>
+    </section>
   </main>
 
   <!-- ===== Welcome / choose install ===== -->
@@ -1263,6 +1286,7 @@
     <label class="switch"><input type="checkbox" id="langStSync"><div><b>Also switch SillyTavern's own language</b><span>Where SillyTavern has the language. Its pages switch when they reload.</span></div></label>
     <p class="note">Translations other than English were made with the help of AI and may sound off in places. <button class="link" data-link="translate">Help improve them</button></p>
   </div>
+  <div id="tipPop" role="tooltip" hidden></div>
   <div id="langToast" hidden>
     <span style="flex:1;min-width:200px">Open SillyTavern pages switch language when they reload.</span>
     <button class="btn sm primary" id="btnLangReload"><svg class="i"><use href="#i-refresh"/></svg>Reload SillyTavern now</button>
@@ -1311,6 +1335,11 @@
       <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></symbol>
       <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4M10 10h4v4h-4z"/></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M4 16V5a1 1 0 0 1 1-1h11"/></symbol>
+      <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 10v4M12 17h.01"/></symbol>
+      <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+      <symbol id="i-max" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><path d="M12 11v6M12 7h.01"/></symbol>
+      <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.5 4a5 5 0 0 0-4.6 6.9L3 17.8 6.2 21l6.9-6.9A5 5 0 0 0 20 9.5l-3 3-3.5-.9-.9-3.5 3-3a5 5 0 0 0-1.1-.1z"/></symbol>
     </defs>
   </svg>
 
@@ -1327,7 +1356,7 @@
   const state = { running: false, startedAt: 0, busy: '', url: '', windows: { open: 0, minimized: false }, page: 'home', logs: [], filter: 'all', search: '', extTab: 'st' };
 
   // ---------- navigation ----------
-  const TITLES = { home: T('Home'), profiles: T('Profiles'), migrate: T('Migrate data'), backups: T('Backups'), extensions: T('Extensions'), maintenance: T('Maintenance'), aiapps: T('AI apps'), console: T('Console'), settings: T('Settings') };
+  const TITLES = { home: T('Home'), profiles: T('Profiles'), migrate: T('Migrate data'), backups: T('Backups'), extensions: T('Extensions'), maintenance: T('Tools'), aiapps: T('AI apps'), settings: T('Settings') };
   // The page stays open across a language change (which reloads the launcher).
   const remember = (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* not available */ } };
   const recall = k => { try { return sessionStorage.getItem(k); } catch { return null; } };
@@ -1337,11 +1366,38 @@
     document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('show', p.id === `page-${page}`));
     $('pageTitle').textContent = TITLES[page];
+    if (dock.max) setDockMax(false);
     loadPage(page);
   }
   document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.page));
   document.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => go(b.dataset.goto));
   document.querySelectorAll('[data-link]').forEach(b => b.onclick = () => D.openLink(b.dataset.link));
+
+  // ⓘ explanations: <span class="tip" tabindex="0" aria-label="text">; shown on hover, keyboard focus or a click.
+  const tipHtml = text => `<span class="tip" tabindex="0" role="note" aria-label="${esc(text)}">${icon('info')}</span>`;
+  let tipFor = null;
+  function showTip(el) {
+    const pop = $('tipPop');
+    tipFor = el;
+    pop.textContent = el.getAttribute('aria-label');
+    pop.hidden = false;
+    const r = el.getBoundingClientRect();
+    const below = r.bottom + 8 + pop.offsetHeight < innerHeight;
+    pop.style.top = `${Math.round(below ? r.bottom + 6 : r.top - pop.offsetHeight - 6)}px`;
+    pop.style.left = `${Math.round(Math.max(12, Math.min(r.left - 10, innerWidth - pop.offsetWidth - 12)))}px`;
+  }
+  function hideTip() { $('tipPop').hidden = true; tipFor?.classList.remove('open'); tipFor = null; }
+  document.addEventListener('mouseover', e => { const t = e.target.closest?.('.tip'); if (t && t !== tipFor) showTip(t); else if (!t && tipFor && !tipFor.classList.contains('open')) hideTip(); });
+  document.addEventListener('focusin', e => { if (e.target.classList?.contains('tip')) showTip(e.target); });
+  document.addEventListener('focusout', e => { if (e.target === tipFor) hideTip(); });
+  document.addEventListener('click', e => {
+    const t = e.target.closest?.('.tip');
+    if (!t) { if (tipFor) hideTip(); return; }
+    e.preventDefault(); e.stopPropagation();
+    if (t.classList.contains('open')) hideTip(); else { showTip(t); t.classList.add('open'); }
+  }, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && tipFor) hideTip(); });
+  document.addEventListener('scroll', () => { if (tipFor) hideTip(); }, true);
   document.addEventListener('click', e => {
     const p = e.target.closest('[data-place]');
     if (p) D.openPlace(p.dataset.place);
@@ -1354,7 +1410,6 @@
     if (page === 'backups') loadBackups();
     if (page === 'extensions') { loadExtensions(false); loadKits(); if (state.extTab === 'desktop') loadDesktopExtensions(); }
     if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); loadPc(); loadTrouble(); }
-    if (page === 'console') renderConsole();
     if (page === 'aiapps') loadAi();
     if (page === 'settings') { loadSettingsForm({ fresh: true }); loadServerOptions(); loadCompanions(); loadTunnel(); loadTailscale(); }
   }
@@ -1371,9 +1426,7 @@
     $('btnPower').innerHTML = state.running ? `${icon('stop')}<span>${T('Stop')}</span>` : `${icon('play')}<span>${T('Start')}</span>`;
     $('btnPower').title = state.running ? T('Stop server') : T('Start server');
     $('heroTitle').textContent = state.running ? T('SillyTavern is running') : T('Ready when you are');
-    $('heroSub').textContent = state.running
-      ? T('Your server is up. Open the window any time — closing it keeps the server running.')
-      : T('Start the server and open SillyTavern in its own window.');
+    $('heroTip').hidden = !state.running;
     $('heroUrl').textContent = state.running ? state.url : '';
     const w = state.windows;
     $('btnOpen').lastElementChild.textContent = !w.open ? T('Open SillyTavern') : w.minimized ? T('Restore SillyTavern') : T('Show SillyTavern');
@@ -1382,7 +1435,7 @@
   function setBusy(label) {
     state.busy = label;
     $('busy').classList.toggle('show', !!label);
-    $('busyText').textContent = label ? T('{task}… you can watch progress in the Console.', { task: label }) : '';
+    $('busyText').textContent = label ? T('{task}…', { task: label }) : '';
     document.querySelectorAll('[data-task]').forEach(b => b.disabled = !!label);
     if (!label && $('setup').classList.contains('show')) loadSetup();
     if ($('dlModal').classList.contains('show') && !dl.running) checkTarget();
@@ -1396,9 +1449,9 @@
   async function loadInfo(info) {
     info = info || await D.stInfo();
     $('infoVersion').textContent = info.version ? `SillyTavern ${info.version}` : T('Not found');
-    $('infoBranch').innerHTML = info.branch ? `<span class="tag fox">${esc(info.branch)}</span>` : info.pinned ? `<span class="tag">${T('fixed at {version}', { version: esc(info.pinned) })}</span>` : '—';
+    $('infoVersion').title = info.commit ? T('Last change: {date} · {commit}', { date: info.commitDate, commit: info.commit }) : '';
+    $('infoBranch').innerHTML = info.branch ? `<span class="tag fox">${esc(info.branch)}</span>` : info.pinned ? `<span class="tag">${T('fixed at {version}', { version: esc(info.pinned) })}</span>` : '';
     $('branchTag').textContent = info.branch || (info.pinned ? T('version {version} (fixed)', { version: info.pinned }) : T('unknown'));
-    $('infoCommit').textContent = info.commit ? `${info.commitDate} · ${info.commit}` : '—';
     const tag = $('updateTag');
     const upd = $('btnUpdate');
     $('btnIncoming').hidden = true;
@@ -1409,7 +1462,7 @@
     } else if (info.pinned) {
       // Downloaded as a specific version: on no branch, so never "behind".
       tag.className = 'tag'; tag.textContent = T('Fixed version');
-      $('updateHint').textContent = T('Not updated. For updates, choose release or staging in Maintenance.');
+      $('updateHint').textContent = T('Not updated. For updates, choose release or staging in Tools.');
       upd.hidden = true;
     } else if (info.behind > 0) {
       tag.className = 'tag fox'; tag.textContent = T('Update available');
@@ -1960,14 +2013,39 @@
     if (state.filter === 'err' && !/l-(err|warn)/.test(lineClass(l))) return false;
     return !state.search || l.toLowerCase().includes(state.search);
   }
+  // The console shows this app's log (SillyTavern's server and the app's tasks) or one AI app's.
+  const dock = { src: '', lines: null, problems: 0, open: true, max: false, apps: new Map() };
+  const store = (k, v) => { try { localStorage.setItem(k, v); } catch { /* not available */ } };
+  const stored = k => { try { return localStorage.getItem(k); } catch { return null; } };
+  const dockLines = () => (dock.src ? dock.lines || [] : state.logs);
   function renderConsole() {
     const c = $('console');
-    c.replaceChildren(...state.logs.filter(visible).map(lineDiv));
+    c.replaceChildren(...dockLines().filter(visible).map(lineDiv));
+    if (!c.childElementCount) c.innerHTML = `<div class="muted">${T('Nothing yet.')}</div>`;
     c.scrollTop = c.scrollHeight;
+    renderDockLast();
   }
-  function renderMiniLog() {
-    $('miniLog').replaceChildren(...state.logs.slice(-7).map(lineDiv));
-    if (!state.logs.length) $('miniLog').innerHTML = `<div class="muted">${T('Nothing yet.')}</div>`;
+  function renderDockLast() {
+    const l = dockLines().at(-1) || '';
+    $('dockLast').textContent = l;
+    $('dockLast').className = `dock-last ${lineClass(l)}`;
+  }
+  function renderProblems() {
+    $('dockProblems').hidden = !dock.problems;
+    $('dockProblems').textContent = dock.problems > 99 ? '99+' : dock.problems;
+  }
+  // New lines of the source on show.
+  function addToConsole(lines) {
+    renderDockLast();
+    if (!dock.open) return;
+    const shown = lines.filter(visible);
+    if (!shown.length) return;
+    const c = $('console');
+    c.querySelector(':scope > .muted')?.remove();
+    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
+    c.append(...shown.map(lineDiv));
+    while (c.childElementCount > MAX_LOG_LINES) c.firstElementChild.remove();
+    if (atBottom) c.scrollTop = c.scrollHeight;
   }
   // One line or a batch of lines (the main process sends them in batches).
   const MAX_LOG_LINES = 2000;
@@ -1975,24 +2053,103 @@
     lines = [].concat(lines);
     state.logs.push(...lines);
     if (state.logs.length > MAX_LOG_LINES) state.logs.splice(0, state.logs.length - MAX_LOG_LINES);
-    renderMiniLog();
     if ($('setup').classList.contains('show')) $('setupLog').replaceChildren(...state.logs.slice(-8).map(lineDiv));
-    const shown = state.page === 'console' ? lines.filter(visible) : [];
-    if (!shown.length) return;
-    const c = $('console');
-    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
-    c.append(...shown.map(lineDiv));
-    while (c.childElementCount > MAX_LOG_LINES) c.firstElementChild.remove();
-    if (atBottom) c.scrollTop = c.scrollHeight;
+    if (!dock.src) addToConsole(lines);
+    if (!dock.open || dock.src) {
+      const n = lines.filter(l => lineClass(l) === 'l-err').length;
+      if (n) { dock.problems += n; renderProblems(); }
+    }
   }
-  document.querySelectorAll('#logFilter button').forEach(b => b.onclick = () => {
-    state.filter = b.dataset.f;
-    document.querySelectorAll('#logFilter button').forEach(x => x.classList.toggle('on', x === b));
+  function setDockOpen(open, save = true) {
+    dock.open = open;
+    if (!open && dock.max) setDockMax(false);
+    $('dock').classList.toggle('closed', !open);
+    $('dockToggle').setAttribute('aria-expanded', String(open));
+    $('dockToggle').title = open ? T('Hide the console (Ctrl+`)') : T('Show the console (Ctrl+`)');
+    if (save) store('dockOpen', open ? '1' : '0');
+    if (open) {
+      if (!dock.src) { dock.problems = 0; renderProblems(); }
+      renderConsole();
+    }
+  }
+  function setDockMax(max) {
+    dock.max = max;
+    if (max && !dock.open) setDockOpen(true);
+    $('dock').classList.toggle('max', max);
+    document.querySelector('main').classList.toggle('dock-max', max);
+    $('btnDockMax').title = max ? T('Smaller') : T('Bigger');
+    $('btnDockMax').setAttribute('aria-label', $('btnDockMax').title);
+    $('console').scrollTop = $('console').scrollHeight;
+  }
+  async function setSource(id) {
+    dock.src = id || '';
+    $('logSource').value = dock.src;
+    $('btnLogFile').hidden = !!dock.src;
+    dock.lines = [];
+    if (dock.src) {
+      const lines = await D.aiLog(dock.src);
+      if (dock.src === id) dock.lines = lines;
+    } else { dock.problems = 0; renderProblems(); }
     renderConsole();
+  }
+  function renderSources() {
+    const sel = $('logSource');
+    sel.hidden = !dock.apps.size;
+    sel.innerHTML = `<option value="">SillyTavern</option>${[...dock.apps].map(([id, name]) => `<option value="${esc(id)}">${esc(name)}</option>`).join('')}`;
+    sel.value = dock.src;
+  }
+  let sourcesPending = null;
+  function refreshSources() {
+    sourcesPending ||= D.aiLogSources().then(list => {
+      for (const a of list) dock.apps.set(a.id, a.name);
+      renderSources();
+    }).finally(() => { sourcesPending = null; });
+    return sourcesPending;
+  }
+  // From an AI app's card: its log in the console.
+  function showAppLog(id, name) {
+    if (name && !dock.apps.has(id)) { dock.apps.set(id, name); renderSources(); }
+    setSource(id);
+    setDockOpen(true);
+  }
+  D.onAiLog(({ id, line }) => {
+    if (!dock.apps.has(id)) refreshSources();
+    if (id !== dock.src || !dock.lines) return;
+    dock.lines.push(line);
+    if (dock.lines.length > MAX_LOG_LINES) dock.lines.splice(0, dock.lines.length - MAX_LOG_LINES);
+    addToConsole([line]);
   });
+  $('logSource').onchange = () => setSource($('logSource').value);
+  $('dockToggle').onclick = () => setDockOpen(!dock.open);
+  $('btnDockMax').onclick = () => setDockMax(!dock.max);
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'Backquote') { e.preventDefault(); setDockOpen(!dock.open); }
+  });
+  // Drag the top edge to resize; the height is kept for the next start.
+  const clampDock = h => Math.round(Math.max(110, Math.min(h, document.querySelector('main').clientHeight - 230)));
+  $('dockGrip').onpointerdown = e => {
+    e.preventDefault();
+    const grip = e.currentTarget;
+    grip.setPointerCapture(e.pointerId);
+    const y0 = e.clientY, h0 = $('dock').offsetHeight;
+    const move = ev => $('dock').style.setProperty('--dock-h', `${clampDock(h0 + y0 - ev.clientY)}px`);
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', () => { grip.removeEventListener('pointermove', move); store('dockH', String($('dock').offsetHeight)); }, { once: true });
+  };
+  function initDock() {
+    const h = Number(stored('dockH'));
+    if (h) $('dock').style.setProperty('--dock-h', `${clampDock(h)}px`);
+    setDockOpen(stored('dockOpen') !== '0', false);
+    refreshSources();
+  }
+  $('btnLogProblems').onclick = () => {
+    state.filter = state.filter === 'err' ? 'all' : 'err';
+    $('btnLogProblems').setAttribute('aria-pressed', String(state.filter === 'err'));
+    renderConsole();
+  };
   $('logSearch').oninput = e => { state.search = e.target.value.toLowerCase(); renderConsole(); };
-  $('btnCopyLog').onclick = async () => { await D.copyLogs(); $('btnCopyLog').innerHTML = `${icon('check')}${T('Copied')}`; setTimeout(() => $('btnCopyLog').innerHTML = `${icon('copy')}${T('Copy')}`, 1500); };
-  $('btnClearLog').onclick = () => { state.logs = []; renderConsole(); renderMiniLog(); };
+  $('btnCopyLog').onclick = async () => { await D.copyLogs(dock.src || undefined); $('btnCopyLog').innerHTML = icon('check'); setTimeout(() => { $('btnCopyLog').innerHTML = icon('copy'); }, 1500); };
+  $('btnClearLog').onclick = () => { if (dock.src) dock.lines = []; else state.logs = []; renderConsole(); };
 
   // ---------- settings ----------
   let current = {};
@@ -2293,7 +2450,7 @@
     if (!o) return '';
     const tip = `${o.fixes.length
       ? T('{n} newer release (latest {latest}), with security fixes this one doesn\'t have.|{n} newer releases (latest {latest}), with security fixes this one doesn\'t have.', { n: o.newer, latest: o.latest })
-      : T('{n} newer release (latest {latest}).|{n} newer releases (latest {latest}).', { n: o.newer, latest: o.latest })} ${p.branch ? (p.active ? T('Update it from Home.') : T('Switch to it, then update it from Home.')) : T('It is a fixed version: switch it to release or staging in Maintenance to get updates.')}`;
+      : T('{n} newer release (latest {latest}).|{n} newer releases (latest {latest}).', { n: o.newer, latest: o.latest })} ${p.branch ? (p.active ? T('Update it from Home.') : T('Switch to it, then update it from Home.')) : T('It is a fixed version: switch it to release or staging in Tools to get updates.')}`;
     return `<span class="tag warn" title="${esc(tip)}">${o.fixes.length ? `⚠ ${T('missing security fixes')}` : T('older version')}</span>`;
   }
   function renderProfiles() {
@@ -2386,7 +2543,7 @@
     $('dlUse').checked = !st.ready;
     dl.parent = dl.parent || def.parent;
     $('dlParent').textContent = dl.parent;
-    if (!dl.reqOk) $('dlError').textContent = T('Node.js and Git are needed first: the welcome screen or Maintenance → Back end installs them.');
+    if (!dl.reqOk) $('dlError').textContent = T('Node.js and Git are needed first: the welcome screen or Tools → Back end installs them.');
     await loadVersions(false);
   }
   const closeDownload = () => $('dlModal').classList.remove('show');
@@ -2421,7 +2578,7 @@
     const v = ref === 'release' ? latest : dl.versions.find(x => x.version === ref);
     $('dlVersionHint').textContent = ref === 'release' ? T('The stable version most people use. It gets updates (Home → Update now).')
       : ref === 'staging' ? T('Gets new features first and changes almost daily, but can break. For trying things out.')
-      : `${T('Exactly version {version}, kept as it is (no updates). Switch it to release later under Maintenance → Release channel if you want updates.', { version: ref })}${v?.limited ? ` ${T('Versions before 1.13.2 ignore some of this app\'s settings: phone access does not work, and a browser tab may open when the server starts.')}` : ''}`;
+      : `${T('Exactly version {version}, kept as it is (no updates). Switch it to release later under Tools → Release channel if you want updates.', { version: ref })}${v?.limited ? ` ${T('Versions before 1.13.2 ignore some of this app\'s settings: phone access does not work, and a browser tab may open when the server starts.')}` : ''}`;
     // An older version: what it misses, and an "I understand" before downloading.
     const older = !['release', 'staging'].includes(ref) && latest && vnum(ref) && vcmp(vnum(ref), vnum(latest.version)) < 0;
     dl.needsRisk = !!older;
@@ -2513,7 +2670,7 @@
       setDlBar(100, r.used ? T('Done — now using "{name}".', { name: r.profile.name }) : T('Done — added the profile "{name}".', { name: r.profile.name }));
       dl.lastNew = { src: dl.prevActive, dst: r.path };
       $('btnDlMigrate').hidden = !dl.prevActive;
-      if (r.depsFailed) $('dlError').textContent = T('Downloaded, but installing its dependencies failed. Switch to it and use Maintenance → "Install missing dependencies".');
+      if (r.depsFailed) $('dlError').textContent = T('Downloaded, but installing its dependencies failed. Switch to it and use Tools → "Install missing dependencies".');
       dl.folderEdited = dl.nameEdited = false;
       dl.onDone?.(r);
     }
@@ -3376,7 +3533,6 @@
     $('btnAiDirReset').hidden = !current.appsDir;
     $('aiList').innerHTML = r.apps.map(appCard).join('');
     r.apps.forEach(a => { ai.apps.set(a.id, a); wireApp(a); });
-    for (const a of r.apps) D.aiLog(a.id).then(lines => { const el = document.querySelector(`[data-app="${a.id}"] .ai-log`); if (el) { el.textContent = lines.join('\n'); el.scrollTop = el.scrollHeight; } });
     renderModels();
     renderImageModels();
     renderDl(r.downloading);
@@ -3396,14 +3552,13 @@
   $('aiGroup').querySelectorAll('button').forEach(b => b.onclick = () => showAiGroup(b.dataset.g));
   function appCard(a) {
     return `<div class="card ai-card" data-app="${esc(a.id)}" data-group="${esc(a.group)}">
-      <h2>${esc(a.name)}<span class="act row" style="gap:8px"><button class="link" data-xurl="${esc(a.site)}">${T('Project page')}</button></span></h2>
+      <h2>${esc(a.name)}<span class="act row" style="gap:14px"><button class="link" data-ai-log>${T('Log')}</button><button class="link" data-xurl="${esc(a.site)}">${T('Project page')}</button></span></h2>
       <p class="muted small">${esc(a.desc)}${a.size ? ` <span class="tag">${esc(a.size)}</span>` : ''}</p>
       ${a.note ? `<p class="muted small">${esc(a.note)}</p>` : ''}
       <div data-part="status"></div>
       <label class="switch" style="border:0;padding:0"><input type="checkbox" data-ai-auto${a.autostart ? ' checked' : ''}><div><b>${T('Start with SillyTavern')}</b><span>${T('Starts when the SillyTavern server starts. AI apps always stop when this app quits.')}</span></div></label>
       <details${a.installed ? '' : ' hidden'} data-part="settings"><summary>${T('Settings')}</summary><div class="ai-opts">${a.opts.map(o => optField(a, o)).join('')}</div></details>
       <div data-part="connect"></div>
-      <details data-part="logbox"><summary>${T('Log')}</summary><div class="ai-log"></div></details>
     </div>`;
   }
   function optField(a, o) {
@@ -3452,6 +3607,7 @@
   function wireApp(a) {
     const card = document.querySelector(`[data-app="${a.id}"]`);
     renderApp(a);
+    card.querySelector('[data-ai-log]').onclick = () => showAppLog(a.id, a.name);
     card.querySelector('[data-ai-auto]').onchange = e => D.aiAutostart(a.id, e.target.checked);
     card.querySelectorAll('[data-opt]').forEach(el => el.onchange = async () => renderApp(await D.aiOptions(a.id, { [el.dataset.opt]: el.value })));
     const dlBtn = card.querySelector('[data-tabby-dl]');
@@ -3474,6 +3630,8 @@
   }
   async function aiAction(id, what, btn) {
     btn.disabled = true;
+    // Its progress and output show in the console (open or not).
+    if (['install', 'start', 'update'].includes(what) && dock.src !== id) { dock.apps.set(id, ai.apps.get(id)?.name || id); renderSources(); setSource(id); }
     if (what === 'install') renderApp(await D.aiInstall(id));
     else if (what === 'start') renderApp(await D.aiStart(id));
     else if (what === 'stop') renderApp(await D.aiStop(id));
@@ -3490,14 +3648,6 @@
     btn.disabled = false;
   }
   D.onAiApp(a => { if (ai.loaded) { const was = ai.apps.get(a.id); renderApp(a); if (was && (was.installed !== a.installed || was.incomplete !== a.incomplete)) loadAi(); } });
-  D.onAiLog(({ id, line }) => {
-    const el = document.querySelector(`[data-app="${id}"] .ai-log`);
-    if (!el) return;
-    const atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
-    el.textContent += (el.textContent ? '\n' : '') + line;
-    if (el.textContent.length > 60000) el.textContent = el.textContent.slice(-50000);
-    if (atEnd) el.scrollTop = el.scrollHeight;
-  });
   // ----- models -----
   function renderModels() {
     $('aiModels').innerHTML = ai.models.length ? ai.models.map(m => `<div class="item"><div class="main"><div class="title">${esc(m.name)}</div><div class="meta">${GB1(m.size)}</div></div>
@@ -3684,7 +3834,7 @@
     state.appVersion = s.appVersion;
     renderAppUpdate(await D.appUpdateState());
     renderStatus();
-    renderMiniLog();
+    initDock();
     setBusy(s.busy);
     loadProfiles();
     const st = await loadSetup();

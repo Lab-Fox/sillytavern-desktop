@@ -113,7 +113,7 @@ export async function checkForUpdates(stRoot) {
 export async function update(stRoot, { backupFirst, keep }) {
     if (!(await git(stRoot, ['branch', '--show-current'], { quiet: true })).out.trim()) {
         const v = await pinnedVersion(stRoot);
-        log(`This SillyTavern is kept at ${v ? `version ${v}` : 'a fixed version'}, so there is nothing to update. To get updates, choose release or staging under Maintenance → Release channel.`);
+        log(`This SillyTavern is kept at ${v ? `version ${v}` : 'a fixed version'}, so there is nothing to update. To get updates, choose release or staging under Tools → Release channel.`);
         return false;
     }
     // No data folder (never started): nothing to back up, nothing to lose.
@@ -125,7 +125,7 @@ export async function update(stRoot, { backupFirst, keep }) {
     const pull = await git(stRoot, ['pull', '--ff-only']);
     if (pull.code !== 0) {
         if (/package-lock\.json/.test(pull.out)) {
-            log('ERROR: Update blocked by a changed package-lock.json. Use Maintenance → "Reset package-lock.json", then update again.');
+            log('ERROR: Update blocked by a changed package-lock.json. Use Tools → "Reset package-lock.json", then update again.');
         } else if (/overwritten|local changes/i.test(pull.out)) {
             log('ERROR: Update blocked by locally modified SillyTavern files (listed above). Your data/ folder is safe; those files must be restored before updating.');
         } else {
@@ -135,7 +135,7 @@ export async function update(stRoot, { backupFirst, keep }) {
     }
     log('Installing dependencies (npm install) ...');
     const inst = await npm(stRoot, NPM_INSTALL);
-    if (inst.code !== 0) { log('ERROR: npm install failed. Try Maintenance → "Reinstall dependencies".'); return false; }
+    if (inst.code !== 0) { log('ERROR: npm install failed. Try Tools → "Reinstall dependencies".'); return false; }
     log('Update finished. You are on the latest version.');
     return true;
 }
@@ -180,14 +180,14 @@ export async function switchBranch(stRoot, branch, { backupFirst, keep }) {
     const co = await git(stRoot, ['checkout', branch]);
     if (co.code !== 0) {
         log(/package-lock\.json/.test(co.out)
-            ? 'ERROR: Switch blocked by a changed package-lock.json. Use Maintenance → "Reset package-lock.json", then switch again.'
+            ? 'ERROR: Switch blocked by a changed package-lock.json. Use Tools → "Reset package-lock.json", then switch again.'
             : 'ERROR: could not switch branch (see above).');
         return false;
     }
     const pull = await git(stRoot, ['pull', '--ff-only']);
     if (pull.code !== 0) log(`WARNING: now on ${branch}, but getting its latest changes failed (see above). Try "Update now".`);
     const inst = await npm(stRoot, NPM_INSTALL);
-    log(inst.code === 0 ? `Now on ${branch}.` : 'Switched, but npm install failed. Try Maintenance → "Reinstall dependencies".');
+    log(inst.code === 0 ? `Now on ${branch}.` : 'Switched, but npm install failed. Try Tools → "Reinstall dependencies".');
     return inst.code === 0;
 }
 

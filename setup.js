@@ -166,7 +166,7 @@ export async function updateBackend(stRoot) {
     if (stRoot && isStRoot(stRoot)) {
         log('Reinstalling SillyTavern dependencies for this Node.js version (npm install) ...');
         const r = await npm(stRoot, NPM_INSTALL);
-        if (r.code !== 0) { log('ERROR: npm install failed. Try Maintenance → "Reinstall dependencies".'); ok = false; }
+        if (r.code !== 0) { log('ERROR: npm install failed. Try Tools → "Reinstall dependencies".'); ok = false; }
     }
     if (ok) log('Back end is up to date.');
     return ok;

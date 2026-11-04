@@ -403,6 +403,9 @@ export function view(app) {
 }
 export const list = () => APPS.map(view);
 export const logOf = id => getState(id).log.slice();
+// Apps with something to show in the launcher's console (cheap: no disk checks).
+export const logSources = () => APPS.filter(a => getState(a.id).log.length || ['installing', 'starting', 'running', 'stopping'].includes(getState(a.id).status))
+    .map(a => ({ id: a.id, name: a.name, status: getState(a.id).status }));
 
 export async function install(id, { update = false } = {}) {
     const app = byId(id);
