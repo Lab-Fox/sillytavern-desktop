@@ -1,58 +1,57 @@
 // Writing helper — the launcher panel (runs with `panel` and `ext` in scope).
+// Laid out like the launcher's Settings (needs SillyTavern Desktop 1.8.0):
+// headed groups of rows, explanations behind ⓘ.
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const tip = text => `<span class="tip" tabindex="0" role="note" aria-label="${esc(text)}"><svg class="i"><use href="#i-info"/></svg></span>`;
+// [setting, title, explanation (ⓘ), group]
 const SWITCHES = [
-    ['suggestions', 'Word suggestions', 'Up to three words next to the text cursor while you type. Pick one with the keys below or a click.'],
-    ['autocorrect', 'Autocorrect', 'Fixes clear typos when you finish a word ("teh" → "the", "dont" → "don\'t", "i" → "I"). Press Backspace right after to undo it.'],
-    ['adult', 'Adult words', 'Explicit and slang words count as spelled right and can be suggested.'],
-    ['adultRow', 'Second row of explicit words', 'Up to three explicit words above the normal suggestions. ↑ twice reaches them, or Alt+4/5/6.'],
-    ['sceneBoost', 'Notice explicit scenes', 'When what you write and the last chat messages are explicit, explicit words come first in the normal suggestions (marked 18+). It fades as soon as the scene moves on.'],
-    ['names', 'Names from SillyTavern', 'Character, persona and group names and lorebook keywords count as words.'],
-    ['learnTyping', 'Learn from what I send', 'Remembers the words you use (also new ones, like names, once you used them twice) and which words follow which, for better suggestions. Saved only on this PC.'],
-    ['learnCharacters', 'Also learn from the characters\' messages', 'When it learns from your chats, the characters\' messages count too: the words and phrasing of your stories. Use "Learn from my chats again" after turning it on.'],
+    ['suggestions', 'Word suggestions', 'Up to three words next to the text cursor while you type, in every SillyTavern text box and popup. Pick one with the keys below or a click.', 'main'],
+    ['autocorrect', 'Autocorrect', 'Fixes clear typos when you finish a word ("teh" → "the", "dont" → "don\'t", "i" → "I"). Press Backspace right after to undo it.', 'main'],
+    ['adult', 'Adult words', 'Explicit and slang words count as spelled right and can be suggested.', 'adult'],
+    ['adultRow', 'Second row of explicit words', 'Up to three explicit words above the normal suggestions, marked 18+. ↑ twice reaches them, or Alt+4/5/6.', 'adult'],
+    ['sceneBoost', 'Notice explicit scenes', 'When what you write and the last chat messages are explicit, explicit words come first in the normal suggestions (marked 18+). It fades as soon as the scene moves on.', 'adult'],
+    ['names', 'Names from SillyTavern', 'Character, persona and group names and lorebook keywords count as words.', 'learn'],
+    ['learnTyping', 'Learn from what I send', 'Remembers the words you use (also new ones, like names, once you used them twice) and which words follow which. Saved only on this PC.', 'learn'],
+    ['learnCharacters', 'Also learn from the characters\' messages', 'When it learns from your chats, the characters\' messages count too: the words and phrasing of your stories. Use "Learn from my chats again" after turning it on.', 'learn'],
 ];
+const box = (id, title, body, extra = '') => `<h3 class="set-h">${title}${extra}</h3><div class="set-group" id="${id}">${body}</div>`;
 
 panel.innerHTML = `
-  <p class="muted small" id="whStatus" style="margin-bottom:10px">…</p>
-  <div class="field"><label>Suggestions and autocorrect from</label>
-    <div class="seg" id="whMode" style="width:max-content;max-width:100%;flex-wrap:wrap">
-      <button data-mode="helper">This add-on</button><button data-mode="windows">Windows</button><button data-mode="off">Off</button>
-    </div>
-    <p class="muted small" id="whModeNote" style="margin-top:4px"></p>
-  </div>
-  <div id="whSwitches" class="stack" style="gap:0"></div>
-  <div class="field" id="whKeysBox" style="margin-top:12px;padding-top:10px;border-top:var(--px) dashed var(--border)"><label>Picking a word</label>
-    <div class="row" style="align-items:center">
-      <div class="seg" id="whPreset" style="width:max-content;max-width:100%;flex-wrap:wrap">
-        <button data-preset="windows">Like Windows</button><button data-preset="tab">Tab takes the first</button><button data-preset="custom" disabled>My own keys</button>
-      </div>
-      <label class="switch" style="margin:0"><input type="checkbox" data-k="keyHints"><div><b>Show the keys</b></div></label>
-    </div>
-    <p class="muted small" id="whKeysNote" style="margin-top:4px"></p>
-    <details style="margin-top:6px"><summary class="small">Change the keys</summary>
+  <p class="muted small" id="whStatus">…</p>
+  ${box('whModeBox', 'Suggestions and autocorrect from', `
+    <div class="set-row set-wrap"><div class="seg" id="whMode"><button data-mode="helper">This add-on</button><button data-mode="windows">Windows</button><button data-mode="off">Off</button></div>
+      <span class="set-desc" id="whModeNote" style="flex-basis:100%"></span></div>
+    <div id="whSw-main"></div>`)}
+  <div id="whKeysBox">${box('whKeysGroup', 'Picking a word', `
+    <div class="set-row set-wrap"><div class="seg" id="whPreset"><button data-preset="windows">Like Windows</button><button data-preset="tab">Tab takes the first</button><button data-preset="custom" disabled>My own keys</button></div>
+      <span class="set-desc" id="whKeysNote" style="flex-basis:100%"></span></div>
+    <label class="set-row"><div class="set-text"><b>Show the keys in the suggestions</b></div><div class="set-ctl"><input type="checkbox" class="tgl" data-k="keyHints"></div></label>
+    <details class="set-row set-free"><summary>Change the keys</summary>
       <div id="whKeys" style="margin-top:6px"></div>
-      <div class="row" style="margin-top:6px"><button class="btn sm ghost" id="whKeysReset">Back to the defaults</button></div>
-    </details>
-  </div>
-  <div class="field" style="margin-top:12px;padding-top:10px;border-top:var(--px) dashed var(--border)"><label>Red underlines (spellchecker)</label>
-    <p class="muted small" id="whEngine"></p>
-    <div class="row" style="margin-top:6px"><button class="btn sm" id="whEngineBtn" hidden></button><button class="btn sm primary" id="whRestart" hidden>Restart now</button></div>
-  </div>
-  <div class="field" style="margin-top:12px;padding-top:10px;border-top:var(--px) dashed var(--border)"><label>Learning</label>
-    <p class="muted small" id="whLearn"></p>
-    <div class="row" style="margin-top:6px"><button class="btn sm" id="whChats">Learn from my chats</button><button class="btn sm ghost" id="whForget">Forget what it learned</button></div>
-  </div>
-  <div class="field" style="margin-top:12px;padding-top:10px;border-top:var(--px) dashed var(--border)"><label>My dictionary</label>
-    <div class="row">
-      <input type="text" id="whNew" maxlength="40" placeholder="Add a word" style="flex:1;min-width:140px">
-      <button class="btn sm" id="whAdd">Add</button>
-      <button class="btn sm ghost" id="whImport">Import…</button>
-      <button class="btn sm ghost" id="whExport">Export…</button>
-    </div>
-    <p class="muted small" style="margin-top:4px">Adds both "word" and "Word". A word with capitals inside ("McKenzie") is kept as written. Right-click a word in SillyTavern to add it from there. A word that keeps being suggested or autocorrected wrongly: select it, right-click, Never suggest.</p>
-    <input type="text" id="whSearch" placeholder="Search my words" style="margin-top:8px">
-    <div id="whList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:220px;overflow:auto"></div>
-  </div>
-  <p class="muted small" style="margin-top:12px">Word lists: <a style="color:var(--accent)" href="https://github.com/en-wl/wordlist">SCOWL / en-wl wordlist</a> (MIT-like licence), word frequencies from <a style="color:var(--accent)" href="https://github.com/hermitdave/FrequencyWords">FrequencyWords</a> by Hermit Dave (CC BY-SA 4.0, from OpenSubtitles), which words follow which counted in public-domain books from <a style="color:var(--accent)" href="https://www.gutenberg.org/">Project Gutenberg</a>. The adult, roleplay and scene word lists were written for this add-on.</p>`;
+      <div class="row" style="margin-top:8px"><button class="btn sm ghost" id="whKeysReset">Back to the defaults</button></div>
+    </details>`)}</div>
+  ${box('whSw-adult', 'Explicit words', '')}
+  ${box('whLearnBox', 'Learning', `
+    <div id="whSw-learn"></div>
+    <div class="set-row set-free"><span class="set-desc" id="whLearn"></span>
+      <div class="row" style="margin-top:8px"><button class="btn sm" id="whChats">Learn from my chats</button><button class="btn sm ghost" id="whForget">Forget what it learned</button></div></div>`)}
+  ${box('whEngineBox', 'Red underlines', `
+    <div class="set-row set-free"><span class="set-desc" id="whEngine"></span>
+      <div class="row" style="margin-top:8px"><button class="btn sm" id="whEngineBtn" hidden></button><button class="btn sm primary" id="whRestart" hidden>Restart now</button></div></div>`, ` ${tip('The spellchecker marks misspelled words in SillyTavern. Your words, the packs and the names count as spelled right in both kinds.')}`)}
+  ${box('whDictBox', 'My dictionary', `
+    <div class="set-row set-free">
+      <div class="row">
+        <input type="text" id="whNew" maxlength="40" placeholder="Add a word" style="flex:1;min-width:140px">
+        <button class="btn sm" id="whAdd">Add</button>
+        <button class="btn sm ghost" id="whImport">Import…</button>
+        <button class="btn sm ghost" id="whExport">Export…</button>
+      </div>
+      <input type="text" id="whSearch" placeholder="Search my words" style="margin-top:8px;width:100%">
+      <div id="whList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:220px;overflow:auto"></div>
+    </div>`, ` ${tip('Adding a word adds both "word" and "Word"; a word with capitals inside ("McKenzie") is kept as written. In SillyTavern, right-click a word to add it, or select a word that keeps being suggested or autocorrected wrongly and choose Never suggest.')}`)}
+  <details style="margin-top:14px"><summary class="small muted">Word lists and credits</summary>
+    <p class="muted small" style="margin-top:6px">Word lists: <a style="color:var(--accent)" href="https://github.com/en-wl/wordlist">SCOWL / en-wl wordlist</a> (MIT-like licence), word frequencies from <a style="color:var(--accent)" href="https://github.com/hermitdave/FrequencyWords">FrequencyWords</a> by Hermit Dave (CC BY-SA 4.0, from OpenSubtitles), which words follow which counted in public-domain books from <a style="color:var(--accent)" href="https://www.gutenberg.org/">Project Gutenberg</a>. The adult, roleplay and scene word lists were written for this add-on.</p>
+  </details>`;
 
 const $ = id => panel.querySelector('#' + id);
 let state = null;
@@ -108,6 +107,7 @@ function keyWarning(keys, action, combo) {
 }
 
 let recording = null; // the action waiting for a key
+let refused = '';     // a key just pressed that can't be used
 function renderKeys() {
     const s = state.settings;
     const keys = s.keys;
@@ -120,7 +120,9 @@ function renderKeys() {
         + (keys.pickFirst.length ? ` ${k('pickFirst')} takes the first word right away.` : '')
         + (keys.pick1.length || keys.pick2.length || keys.pick3.length ? ` ${[1, 2, 3].map(i => k(`pick${i}`)).join(', ')} take word 1, 2 or 3.` : '')
         + (s.adultRow && s.adult ? ` In the explicit row: ${k('enter')} once more to get there, ${[4, 5, 6].map(i => k(`pick${i}`)).join(', ')} right away.` : '')
-        + (!keys.enter.length && !keys.pickFirst.length && !keys.pick1.length ? ' No key takes a word now: only a click does.' : '');
+        + (!keys.enter.length && !keys.pickFirst.length && !keys.pick1.length ? ' No key takes a word now: only a click does.' : '')
+        + (refused ? ` ${refused} can't be used: pick a letter, digit, F key, arrow, Enter, Tab, Esc, Space or a mark like ; or /, with or without Ctrl, Alt or Shift.` : '');
+    refused = '';
     $('whKeys').innerHTML = ACTIONS.map(([id, label]) => {
         const list = keys[id] || [];
         const chips = list.map(c => {
@@ -152,6 +154,12 @@ window.addEventListener('keydown', function onRecordKey(e) {
     recording = null;
     const keys = state.settings.keys;
     const combo = comboOf(e);
+    // The same keys main.cjs accepts (letters, digits, F keys, arrows, Enter…).
+    if (!/^(?:Ctrl\+)?(?:Alt\+)?(?:Shift\+)?(?:Meta\+)?(?:[A-Z0-9]|F\d{1,2}|Space|Enter|Tab|Escape|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Arrow(?:Up|Down|Left|Right)|[`\-=[\]\\;',./])$/.test(combo)) {
+        refused = pretty(combo);
+        renderKeys();
+        return;
+    }
     if ((keys[action] || []).includes(combo)) { renderKeys(); return; }
     saveKeys({ ...keys, [action]: [...(keys[action] || []), combo] });
 }, true);
@@ -169,15 +177,18 @@ async function load() {
         : s.mode === 'off' ? 'No suggestions or autocorrect from this add-on or from Windows. Your dictionary still counts for the red underlines.'
             : 'Only this add-on\'s suggestions show in SillyTavern; Windows\' own box stays hidden there.';
     $('whWinSettings')?.addEventListener('click', () => ext.invoke('windows-typing'));
-    $('whSwitches').innerHTML = SWITCHES.map(([k, t, d]) => `<label class="switch"><input type="checkbox" data-k="${k}"${s[k] ? ' checked' : ''}${(s.mode !== 'helper' && ['suggestions', 'autocorrect', 'adultRow', 'sceneBoost'].includes(k)) || (!s.adult && ['adultRow', 'sceneBoost'].includes(k)) ? ' disabled' : ''}><div><b>${t}</b><span>${d}</span></div></label>`).join('');
-    $('whSwitches').querySelectorAll('[data-k]').forEach(c => c.onchange = async () => { c.disabled = true; await ext.invoke('set', c.dataset.k, c.checked); load(); });
+    const off = k => (s.mode !== 'helper' && ['suggestions', 'autocorrect', 'adultRow', 'sceneBoost'].includes(k)) || (!s.adult && ['adultRow', 'sceneBoost'].includes(k));
+    for (const group of ['main', 'adult', 'learn']) {
+        const el = $(`whSw-${group}`);
+        el.innerHTML = SWITCHES.filter(x => x[3] === group).map(([k, t, d]) => `<label class="set-row"><div class="set-text"><b>${esc(t)}</b> ${tip(d)}</div><div class="set-ctl"><input type="checkbox" class="tgl" data-k="${k}"${s[k] ? ' checked' : ''}${off(k) ? ' disabled' : ''}></div></label>`).join('');
+        el.querySelectorAll('[data-k]').forEach(c => c.onchange = async () => { c.disabled = true; await ext.invoke('set', c.dataset.k, c.checked); load(); });
+    }
     $('whKeysBox').hidden = s.mode !== 'helper' || !s.suggestions;
     renderKeys();
 
     const e = state.engine;
     const builtin = e.chosen === 'builtin';
-    $('whEngine').textContent = (e.engine === 'builtin' ? 'Using the built-in English spellchecker. ' : 'Using Windows\' spellchecker: it marks mistakes only in languages installed in Windows, so on many PCs English isn\'t underlined at all. ')
-        + 'Your words, the packs and the names count as spelled right in both.';
+    $('whEngine').textContent = e.engine === 'builtin' ? 'Using the built-in English spellchecker.' : 'Using Windows\' spellchecker: it marks mistakes only in languages installed in Windows, so on many PCs English isn\'t underlined at all.';
     $('whEngineBtn').hidden = false;
     $('whEngineBtn').textContent = builtin ? 'Use Windows\' spellchecker' : 'Use the built-in English spellchecker';
     $('whEngineBtn').onclick = async () => { await ext.invoke('engine', builtin ? 'windows' : 'builtin'); load(); };
@@ -186,8 +197,8 @@ async function load() {
 
     const c = state.chats;
     $('whLearn').textContent = `Knows ${state.learned.toLocaleString('en-US')} of your words and ${state.pairs.toLocaleString('en-US')} word pairs`
-        + (c ? `, including ${c.messages.toLocaleString('en-US')} of your messages${c.characters ? ` and ${c.characters.toLocaleString('en-US')} of the characters'` : ''} from ${c.files} chats.` : '.')
-        + (s.learnCharacters ? ' "Learn from my chats" reads your messages and the characters\' in your newest 400 saved chats, on this PC only.' : ' "Learn from my chats" reads your own messages (not the characters\') in your newest 400 saved chats, on this PC only.');
+        + (c && (c.messages || c.characters) ? `, including ${c.messages.toLocaleString('en-US')} of your messages${c.characters ? ` and ${c.characters.toLocaleString('en-US')} of the characters'` : ''} from ${c.files} chats.` : '.')
+        + ` "Learn from my chats" reads ${s.learnCharacters ? 'your and the characters\' messages' : 'your own messages'} in your newest 400 saved chats, on this PC only.`;
     $('whChats').disabled = state.learning || state.state !== 'ready';
     $('whChats').textContent = state.learning ? 'Learning…' : c ? 'Learn from my chats again' : 'Learn from my chats';
     renderWords();

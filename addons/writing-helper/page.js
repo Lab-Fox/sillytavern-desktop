@@ -120,7 +120,7 @@
     const MIRROR = ['direction', 'boxSizing', 'width', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderStyle',
         'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize',
         'fontSizeAdjust', 'lineHeight', 'fontFamily', 'fontFeatureSettings', 'textAlign', 'textTransform', 'textIndent', 'letterSpacing', 'wordSpacing', 'tabSize', 'wordBreak', 'overflowWrap'];
-    let mirror = null;
+    let mirror = null, headCache = null;
     function caretBox(el) {
         const box = el.getBoundingClientRect();
         let pos = null;
@@ -132,15 +132,31 @@
             m.position = 'absolute'; m.visibility = 'hidden'; m.top = '0'; m.left = '-9999px'; m.overflow = 'hidden'; m.height = 'auto';
             m.whiteSpace = el.tagName === 'TEXTAREA' ? 'pre-wrap' : 'pre';
             if (el.tagName === 'TEXTAREA') m.overflowWrap = 'break-word';
-            mirror.textContent = el.value.slice(0, el.selectionStart);
-            const mark = document.createElement('span');
-            mark.textContent = '|';
-            mirror.append(mark);
-            document.body.append(mirror);
-            const top = box.top + mark.offsetTop + parseFloat(cs.borderTopWidth) - el.scrollTop;
-            const left = box.left + mark.offsetLeft + parseFloat(cs.borderLeftWidth) - el.scrollLeft;
-            pos = { left, top, bottom: top + mark.offsetHeight };
-            mirror.remove();
+            // Lay out only the paragraph with the cursor: the height of the
+            // text before it is measured once and kept while it stays the same
+            // (a long message would otherwise be laid out on every key).
+            const value = el.value, caret = el.selectionStart;
+            const lineStart = el.tagName === 'TEXTAREA' ? value.lastIndexOf('\n', caret - 1) + 1 : 0;
+            const head = value.slice(0, lineStart);
+            const padTop = parseFloat(cs.paddingTop);
+            const measure = text => {
+                mirror.textContent = text;
+                const mark = document.createElement('span');
+                mark.textContent = '|';
+                mirror.append(mark);
+                document.body.append(mirror);
+                const r = { top: mark.offsetTop - padTop, left: mark.offsetLeft, height: mark.offsetHeight };
+                mirror.remove();
+                return r;
+            };
+            const sig = `${cs.width}|${cs.font}|${cs.letterSpacing}|${cs.wordSpacing}|${padTop}`;
+            if (!headCache || headCache.el !== el || headCache.sig !== sig || headCache.head !== head) {
+                headCache = { el, sig, head, h: head ? measure(head).top : 0 };
+            }
+            const at = measure(value.slice(lineStart, caret));
+            const top = box.top + parseFloat(cs.borderTopWidth) + padTop + headCache.h + at.top - el.scrollTop;
+            const left = box.left + at.left + parseFloat(cs.borderLeftWidth) - el.scrollLeft;
+            pos = { left, top, bottom: top + at.height };
         } else {
             const sel = document.getSelection();
             if (sel?.rangeCount) {
@@ -392,17 +408,21 @@
     // ---------- learning from what you send ----------
     // Only once SillyTavern has sent it (the box is empty then): Enter may
     // just add a line, and a send can fail.
-    let sentText = '', lastLearned = '';
+    // Checked twice (SillyTavern may clear the box a moment later). The same
+    // text is learned again when sent again, just not twice for one send.
+    let learnedAt = { text: '', at: 0 };
     function sending() {
         const t = document.getElementById('send_textarea');
         if (!cfg.learnTyping || !t || !t.value.trim()) return;
-        sentText = t.value;
-        setTimeout(() => {
-            if (t.value.trim() || !sentText || sentText === lastLearned) return;
-            lastLearned = sentText;
-            call('learn', sentText);
-            sentText = '';
-        }, 600);
+        const text = t.value;
+        const check = () => {
+            if (t.value.trim()) return false;
+            if (learnedAt.text === text && Date.now() - learnedAt.at < 3000) return true;
+            learnedAt = { text, at: Date.now() };
+            call('learn', text);
+            return true;
+        };
+        setTimeout(() => { if (!check()) setTimeout(check, 1900); }, 600);
     }
 
     // ---------- events ----------
@@ -435,7 +455,9 @@
             }
         }
         if (!['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) last = null;
-        if (current && isOpen()) {
+        // Shift, Ctrl or Alt on their own change nothing (a highlighted word
+        // stays highlighted, or Enter would send instead of taking it).
+        if (current && isOpen() && !['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock'].includes(e.key)) {
             const combo = comboOf(e);
             const [normal, adult] = current.rows;
             const take = () => { e.preventDefault(); e.stopPropagation(); taken = e.key; };

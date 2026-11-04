@@ -1,9 +1,9 @@
 {
     "name": "Writing helper",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "author": "Lab-Fox",
-    "description": "A dictionary of its own (with adult and roleplay words, your words and your characters' names), word suggestions above SillyTavern's text boxes, and autocorrect that Backspace undoes. Stays on your PC.",
-    "minAppVersion": "1.7.0",
+    "description": "Word suggestions next to the text cursor in every SillyTavern text box, picked like Windows' own (↑, ←/→, Enter), that learn your story's words and predict the next one; autocorrect that Backspace undoes; a dictionary with adult and roleplay words and your characters' names. Stays on your PC.",
+    "minAppVersion": "1.8.0",
     "main": "main.cjs",
     "panel": "panel.js",
     "uses": ["pages", "contextMenu", "download", "spellcheck", "files", "panel"]

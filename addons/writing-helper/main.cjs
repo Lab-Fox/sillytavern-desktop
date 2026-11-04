@@ -76,8 +76,9 @@ const pack = name => fs.readFileSync(path.join(__dirname, 'packs', name), 'utf8'
 // packs/adult-context.txt: "## strong" and "## mild" sections.
 function scenePack() {
     const out = { strong: [], mild: [] };
-    let part = 'strong';
-    for (const line of fs.readFileSync(path.join(__dirname, 'packs', 'adult-context.txt'), 'utf8').split(/\r?\n/).map(x => x.trim())) {
+    let part = 'strong', text = '';
+    try { text = fs.readFileSync(path.join(__dirname, 'packs', 'adult-context.txt'), 'utf8'); } catch (e) { api.log(`Scene words not loaded: ${e.message}`); }
+    for (const line of text.split(/\r?\n/).map(x => x.trim())) {
         const m = /^##\s*(strong|mild)\b/.exec(line);
         if (m) part = m[1];
         else if (line && !line.startsWith('#')) out[part].push(line);
@@ -268,8 +269,10 @@ function learnFromChats() {
                     if (m.is_user) { lex.learn(m.mes); messages++; } else if (characters && m.name !== undefined) { lex.learn(m.mes.slice(0, 8000)); theirs++; }
                 } catch { /* broken line or the chat's header */ }
             }
-            // Keep it small while it grows (the characters write a lot).
-            if (characters && done % 25 === 0) lex.importLearned(lex.exportLearned());
+            // Keep memory in check while it grows (the characters write a lot):
+            // trimmed to what is saved anyway, but only once it is really big,
+            // so pairs that add up over many chats aren't cut early.
+            if (characters && done % 25 === 0 && lex.pairCount() > 400000) lex.importLearned(lex.exportLearned(200000));
             setStatus('ready', `Learning from your chats… ${done} of ${Math.min(files.length, 400)}`);
             await new Promise(r => setImmediate(r));
         }
@@ -414,7 +417,7 @@ exports.activate = function (a) {
     });
     api.handle('words', (q = '') => {
         const l = String(q).toLowerCase();
-        return { words: userWords.words.filter(w => w.toLowerCase().includes(l)).sort((a, b) => a.localeCompare(b)), ignored: userWords.ignored.filter(w => w.toLowerCase().includes(l)), blocked: userWords.blocked.filter(w => w.includes(l)).sort((a, b) => a.localeCompare(b)) };
+        return { words: userWords.words.filter(w => w.toLowerCase().includes(l)).sort((a, b) => a.localeCompare(b)), ignored: userWords.ignored.filter(w => w.toLowerCase().includes(l)), blocked: userWords.blocked.filter(w => w.toLowerCase().includes(l)).sort((a, b) => a.localeCompare(b)) };
     });
     api.handle('add-word', (w, exact) => addWord(w, !!exact));
     api.handle('remove-word', w => removeWord(w));

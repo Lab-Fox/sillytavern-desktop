@@ -1,6 +1,6 @@
 # Writing helper
 
-A desktop extension for [SillyTavern Desktop](https://github.com/Lab-Fox/sillytavern-desktop) 1.7.0 or newer. Install it from **Extensions → Desktop add-ons → Get add-ons** in the launcher.
+A desktop extension for [SillyTavern Desktop](https://github.com/Lab-Fox/sillytavern-desktop) 1.8.0 or newer. Install it from **Extensions → Desktop add-ons → Get add-ons** in the launcher.
 
 - **A dictionary of its own:** about 165,000 English words, plus an adult pack (explicit and slang words, on by default, can be turned off) and a roleplay pack (fantasy, anime and chat words). Your characters', personas' and groups' names and your lorebook keywords count as words too.
 - **Your own words:** right-click a word in SillyTavern → **Add "word" to dictionary** (adds "word" and "Word"), **Add only "Kael"** (a name that always has its capital), **Ignore**, or **Remove from my dictionary**. Manage, import (`.txt`, Hunspell `.dic`) and export them in the add-on's panel.
@@ -15,7 +15,7 @@ A desktop extension for [SillyTavern Desktop](https://github.com/Lab-Fox/sillyta
   - **The next word** right after a space, from which words usually follow which: in books (a table of word pairs counted in public-domain books), in what you write, and in the story on screen.
   - **The story on screen:** words and names from the last three chat messages and the message you're writing come first, including ones no dictionary has (a capitalized name counts at once, other words once they appear twice).
   - **Typos at the start of a word:** "chco" still suggests "chocolate", "tje" → "the"; neighbouring keys and swapped letters count as the likely mistakes.
-- **Learns how you write:** words and word pairs from what you send, also new words of your own (names, made-up words) once you've written them twice; written three times, autocorrect leaves them alone. If you want, it also learns from your own messages in your newest 400 saved chats, and with **Also learn from the characters' messages** from theirs too (the words and phrasing of your stories). Saved only in this add-on's folder; **Forget what it learned** deletes it.
+- **Learns how you write:** words and word pairs from what you send, also new words of your own (names, made-up words) once you've written them twice; autocorrect leaves them alone from then on. If you want, it also learns from your own messages in your newest 400 saved chats, and with **Also learn from the characters' messages** from theirs too (the words and phrasing of your stories). Saved only in this add-on's folder; **Forget what it learned** deletes it.
 - **Red underlines:** your words, the packs and the names count as spelled right in the spellchecker too. Windows' spellchecker only marks mistakes in languages installed in Windows; the panel can switch the app to its built-in English spellchecker (needs a restart).
 - **One box at a time:** Windows 11 can show its own text suggestions too. With "Suggestions and autocorrect from" set to **This add-on**, Windows' box stays hidden in SillyTavern (the field in use tells Windows it's a search field, `inputmode="search"`, which only changes the touch keyboard's layout). **Windows** turns this add-on's suggestions and autocorrect off and leaves Windows' box alone (the panel says whether it's on in Windows and opens Windows' typing settings). **Off** hides both.
 
@@ -36,10 +36,11 @@ Downloaded once when the add-on starts, from these exact files, and checked agai
 | File | |
 |---|---|
 | `main.cjs` | Runs in the app: word lists, your dictionary, names from SillyTavern, learning, right-click entries, panel calls |
-| `lexicon.cjs` | The word engine (plain Node, testable without the app): zip reading, Hunspell affix expansion, completions, corrections, autocorrect rules |
-| `page.js` | Runs in SillyTavern pages: the suggestion strip, autocorrect, Backspace undo |
-| `panel.js` | The panel on the launcher's Extensions → Desktop app page |
-| `user/` | Created when used: `words.json` (your words), `learned.json`, `spellchecker.json` (words given to the spellchecker). Kept when the add-on updates |
+| `lexicon.cjs` | The word engine (plain Node, testable without the app): zip reading, Hunspell affix expansion, suggestions (`suggest`: completions, the next word, the story on screen, typo-tolerant word starts), corrections, autocorrect rules, learning |
+| `page.js` | Runs in SillyTavern pages: the suggestion strip (at the cursor, above popups, keys), autocorrect, Backspace undo, hiding Windows' own suggestions |
+| `panel.js` | The panel on the launcher's Extensions → Desktop add-ons page |
+| `data/pairs.txt.gz` | Which word follows which in public-domain books (see Word lists) |
+| `user/` | Created when used: `words.json` (your words, ignored and never-suggested words), `learned.json` (word counts, word pairs, your new words), `spellchecker.json` (words given to the spellchecker). Kept when the add-on updates; 1.0.0's files still load |
 | `downloads/` | The downloaded word lists |
 
 Build the zip for the add-on list with `node addons/build.cjs writing-helper` (from the app's folder).
