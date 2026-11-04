@@ -215,6 +215,25 @@ function learnFromChats() {
     return chatJob;
 }
 
+// Windows' "Show text suggestions when typing on the physical keyboard":
+// true / false, or null when it can't be read. Only shown in the panel.
+let winCache = { at: 0, value: null };
+async function windowsSuggestions() {
+    if (Date.now() - winCache.at < 10000) return winCache.value;
+    const value = await readWindowsSuggestions();
+    winCache = { at: Date.now(), value };
+    return value;
+}
+function readWindowsSuggestions() {
+    return new Promise(resolve => {
+        require('child_process').execFile('reg', ['query', 'HKCU\\Software\\Microsoft\\Input\\Settings', '/v', 'EnableHwkbTextPrediction'], { windowsHide: true, timeout: 5000 }, (err, out) => {
+            if (err) return resolve(err.code === 1 ? false : null); // 1: the value isn't there = never turned on
+            const m = /EnableHwkbTextPrediction\s+REG_DWORD\s+0x([0-9a-f]+)/i.exec(String(out));
+            resolve(m ? parseInt(m[1], 16) !== 0 : null);
+        });
+    });
+}
+
 // ---------- pages ----------
 const PAGE_CODE = fs.readFileSync(path.join(__dirname, 'page.js'), 'utf8');
 function config() {
@@ -299,8 +318,8 @@ exports.activate = function (a) {
     });
 
     // The launcher panel.
-    api.handle('status', () => ({
-        ...status, settings: settings(), engine: api.spellcheck.engine(),
+    api.handle('status', async () => ({
+        ...status, settings: settings(), engine: api.spellcheck.engine(), windows: await windowsSuggestions(),
         words: userWords.words.length, ignored: userWords.ignored.length, names: nameList.length,
         learned: lex ? lex.learned.size : 0, pairs: lex ? [...lex.bigrams.values()].reduce((n, m) => n + m.size, 0) : 0,
         chats: readJson(userFile('chats-learned.json'), null), learning: !!chatJob,
@@ -356,7 +375,7 @@ exports.activate = function (a) {
         if (response === 0) api.app.relaunch();
         return response === 0;
     });
-    api.handle('windows-typing', () => require('electron').shell.openExternal('ms-settings:typing'));
+    api.handle('windows-typing', () => { winCache.at = 0; return require('electron').shell.openExternal('ms-settings:typing'); });
     api.handle('rescan', async () => { await scanNames(); syncSpellchecker(); return nameList.length; });
 
     // New characters, personas and lorebooks show up after a server start.

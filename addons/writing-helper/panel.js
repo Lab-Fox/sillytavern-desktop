@@ -1,7 +1,7 @@
 // Writing helper — the launcher panel (runs with `panel` and `ext` in scope).
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const SWITCHES = [
-    ['suggestions', 'Word suggestions', 'Up to three words above the text box while you type. Tab or Alt+1 takes the first, Alt+2/Alt+3 the others, Esc hides them.'],
+    ['suggestions', 'Word suggestions', 'Up to three words next to the text cursor while you type. Tab or Alt+1 takes the first, Alt+2/Alt+3 the others, Esc hides them.'],
     ['autocorrect', 'Autocorrect', 'Fixes clear typos when you finish a word ("teh" → "the", "dont" → "don\'t", "i" → "I"). Press Backspace right after to undo it.'],
     ['tabAccepts', 'Tab takes the first suggestion', 'Only while suggestions show. Off: use Alt+1.'],
     ['adult', 'Adult words', 'Explicit and slang words count as spelled right and can be suggested.'],
@@ -48,9 +48,11 @@ async function load() {
     $('whStatus').textContent = state.state === 'ready' ? `Ready: ${state.text}.` : state.text;
     $('whStatus').style.color = state.state === 'error' ? 'var(--bad)' : '';
     panel.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === s.mode));
+    const win = state.windows === true ? 'Windows\' text suggestions are on.' : state.windows === false ? 'Windows\' text suggestions are off in Windows.' : '';
     $('whModeNote').innerHTML = s.mode === 'windows'
-        ? 'This add-on stays quiet; Windows\' own text suggestions work if they are on in Windows. <button class="link" id="whWinSettings">Open Windows typing settings</button>'
-        : s.mode === 'off' ? 'No suggestions or autocorrect. Your dictionary still counts for the red underlines.' : 'Works in every SillyTavern text box.';
+        ? `This add-on stays quiet and Windows shows its own suggestions. ${win} <button class="link" id="whWinSettings">Open Windows typing settings</button>`
+        : s.mode === 'off' ? 'No suggestions or autocorrect from this add-on or from Windows. Your dictionary still counts for the red underlines.'
+            : 'Only this add-on\'s suggestions show in SillyTavern; Windows\' own box stays hidden there.';
     $('whWinSettings')?.addEventListener('click', () => ext.invoke('windows-typing'));
     $('whSwitches').innerHTML = SWITCHES.map(([k, t, d]) => `<label class="switch"><input type="checkbox" data-k="${k}"${s[k] ? ' checked' : ''}${s.mode !== 'helper' && ['suggestions', 'autocorrect', 'tabAccepts'].includes(k) ? ' disabled' : ''}><div><b>${t}</b><span>${d}</span></div></label>`).join('');
     $('whSwitches').querySelectorAll('[data-k]').forEach(c => c.onchange = async () => { c.disabled = true; await ext.invoke('set', c.dataset.k, c.checked); load(); });

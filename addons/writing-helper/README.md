@@ -1,14 +1,14 @@
 # Writing helper
 
-A desktop extension for [SillyTavern Desktop](https://github.com/Lab-Fox/sillytavern-desktop) 1.7.0 or newer. Install it from **Extensions → Desktop app → Get add-ons** in the launcher.
+A desktop extension for [SillyTavern Desktop](https://github.com/Lab-Fox/sillytavern-desktop) 1.7.0 or newer. Install it from **Extensions → Desktop add-ons → Get add-ons** in the launcher.
 
 - **A dictionary of its own:** about 165,000 English words, plus an adult pack (explicit and slang words, on by default, can be turned off) and a roleplay pack (fantasy, anime and chat words). Your characters', personas' and groups' names and your lorebook keywords count as words too.
 - **Your own words:** right-click a word in SillyTavern → **Add "word" to dictionary** (adds "word" and "Word"), **Add only "Kael"** (a name that always has its capital), **Ignore**, or **Remove from my dictionary**. Manage, import (`.txt`, Hunspell `.dic`) and export them in the add-on's panel.
-- **Word suggestions** above the text box while you type: the endings of the word you're typing, the word that usually comes next, or corrections of a misspelled word (✎). **Tab** or **Alt+1** takes the first, **Alt+2** / **Alt+3** the others, **Esc** hides them.
+- **Word suggestions** next to the text cursor while you type, in every SillyTavern text box, one-line field and popup (also the expanded editors). Fields for code, keys and addresses get none: the endings of the word you're typing, the word that usually comes next, or corrections of a misspelled word (✎). **Tab** or **Alt+1** takes the first, **Alt+2** / **Alt+3** the others, **Esc** hides them.
 - **Autocorrect** when you finish a word with a space or punctuation, only when it's clear what you meant: "teh" → "the", "dont" → "don't", "i" → "I", "THe" → "The", "alot" → "a lot", "wierd" → "weird". **Backspace right after** puts back what you typed (and leaves that word alone from then on). It never touches `{{macros}}`, links, `code`, words with digits, or capitalized words in the middle of a sentence (probably names), and it doesn't guess when your packs, names or dictionary have an equally close word ("cuming": coming or cumming?).
 - **Learns how you write:** words and word pairs from what you send, and if you want, from your own messages in your newest 400 saved chats (never the characters' messages). Saved only in this add-on's folder; **Forget what it learned** deletes it.
 - **Red underlines:** your words, the packs and the names count as spelled right in the spellchecker too. Windows' spellchecker only marks mistakes in languages installed in Windows; the panel can switch the app to its built-in English spellchecker (needs a restart).
-- **Or Windows' own:** set "Suggestions and autocorrect from" to **Windows** to turn this off and use Windows' text suggestions (the panel opens Windows' typing settings).
+- **One box at a time:** Windows 11 can show its own text suggestions too. With "Suggestions and autocorrect from" set to **This add-on**, Windows' box stays hidden in SillyTavern (the field in use tells Windows it's a search field, `inputmode="search"`, which only changes the touch keyboard's layout). **Windows** turns this add-on's suggestions and autocorrect off and leaves Windows' box alone (the panel says whether it's on in Windows and opens Windows' typing settings). **Off** hides both.
 
 ## Word lists
 
