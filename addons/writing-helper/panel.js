@@ -4,6 +4,8 @@ const SWITCHES = [
     ['suggestions', 'Word suggestions', 'Up to three words next to the text cursor while you type. Pick one with the keys below or a click.'],
     ['autocorrect', 'Autocorrect', 'Fixes clear typos when you finish a word ("teh" → "the", "dont" → "don\'t", "i" → "I"). Press Backspace right after to undo it.'],
     ['adult', 'Adult words', 'Explicit and slang words count as spelled right and can be suggested.'],
+    ['adultRow', 'Second row of explicit words', 'Up to three explicit words above the normal suggestions. ↑ twice reaches them, or Alt+4/5/6.'],
+    ['sceneBoost', 'Notice explicit scenes', 'When what you write and the last chat messages are explicit, explicit words come first in the normal suggestions (marked 18+). It fades as soon as the scene moves on.'],
     ['names', 'Names from SillyTavern', 'Character, persona and group names and lorebook keywords count as words.'],
     ['learnTyping', 'Learn from what I send', 'Remembers the words you use and which words follow which, for better suggestions. Saved only on this PC.'],
 ];
@@ -45,7 +47,7 @@ panel.innerHTML = `
       <button class="btn sm ghost" id="whImport">Import…</button>
       <button class="btn sm ghost" id="whExport">Export…</button>
     </div>
-    <p class="muted small" style="margin-top:4px">Adds both "word" and "Word". A word with capitals inside ("McKenzie") is kept as written. Right-click a word in SillyTavern to add it from there.</p>
+    <p class="muted small" style="margin-top:4px">Adds both "word" and "Word". A word with capitals inside ("McKenzie") is kept as written. Right-click a word in SillyTavern to add it from there. A word that keeps being suggested or autocorrected wrongly: select it, right-click, Never suggest.</p>
     <input type="text" id="whSearch" placeholder="Search my words" style="margin-top:8px">
     <div id="whList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:220px;overflow:auto"></div>
   </div>
@@ -66,6 +68,9 @@ const ACTIONS = [
     ['pick1', 'Take word 1 right away', 'out'],
     ['pick2', 'Take word 2 right away', 'out'],
     ['pick3', 'Take word 3 right away', 'out'],
+    ['pick4', 'Take explicit word 1 right away', 'out'],
+    ['pick5', 'Take explicit word 2 right away', 'out'],
+    ['pick6', 'Take explicit word 3 right away', 'out'],
 ];
 const PRETTY = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' };
 const pretty = combo => combo.split('+').map(p => PRETTY[p] || p).join('+');
@@ -113,6 +118,7 @@ function renderKeys() {
     $('whKeysNote').textContent = (keys.enter.length ? `${k('enter')} moves into the suggestions, ${k('prev')} and ${k('next')} choose, ${k('pick')} takes the word, ${k('leave')} goes back to typing.` : '')
         + (keys.pickFirst.length ? ` ${k('pickFirst')} takes the first word right away.` : '')
         + (keys.pick1.length || keys.pick2.length || keys.pick3.length ? ` ${[1, 2, 3].map(i => k(`pick${i}`)).join(', ')} take word 1, 2 or 3.` : '')
+        + (s.adultRow && s.adult ? ` In the explicit row: ${k('enter')} once more to get there, ${[4, 5, 6].map(i => k(`pick${i}`)).join(', ')} right away.` : '')
         + (!keys.enter.length && !keys.pickFirst.length && !keys.pick1.length ? ' No key takes a word now: only a click does.' : '');
     $('whKeys').innerHTML = ACTIONS.map(([id, label]) => {
         const list = keys[id] || [];
@@ -162,7 +168,7 @@ async function load() {
         : s.mode === 'off' ? 'No suggestions or autocorrect from this add-on or from Windows. Your dictionary still counts for the red underlines.'
             : 'Only this add-on\'s suggestions show in SillyTavern; Windows\' own box stays hidden there.';
     $('whWinSettings')?.addEventListener('click', () => ext.invoke('windows-typing'));
-    $('whSwitches').innerHTML = SWITCHES.map(([k, t, d]) => `<label class="switch"><input type="checkbox" data-k="${k}"${s[k] ? ' checked' : ''}${s.mode !== 'helper' && ['suggestions', 'autocorrect'].includes(k) ? ' disabled' : ''}><div><b>${t}</b><span>${d}</span></div></label>`).join('');
+    $('whSwitches').innerHTML = SWITCHES.map(([k, t, d]) => `<label class="switch"><input type="checkbox" data-k="${k}"${s[k] ? ' checked' : ''}${(s.mode !== 'helper' && ['suggestions', 'autocorrect', 'adultRow', 'sceneBoost'].includes(k)) || (!s.adult && ['adultRow', 'sceneBoost'].includes(k)) ? ' disabled' : ''}><div><b>${t}</b><span>${d}</span></div></label>`).join('');
     $('whSwitches').querySelectorAll('[data-k]').forEach(c => c.onchange = async () => { c.disabled = true; await ext.invoke('set', c.dataset.k, c.checked); load(); });
     $('whKeysBox').hidden = s.mode !== 'helper' || !s.suggestions;
     renderKeys();
@@ -188,9 +194,9 @@ async function load() {
 
 async function renderWords() {
     const r = await ext.invoke('words', $('whSearch').value);
-    const chip = (w, kind) => `<span class="tag" style="display:inline-flex;gap:6px;align-items:center">${esc(w)}${kind ? ' <i class="muted">(ignored)</i>' : ''}<button class="link" data-rm="${esc(w)}" title="Remove">×</button></span>`;
-    $('whList').innerHTML = r.words.length || r.ignored.length
-        ? [...r.words.map(w => chip(w)), ...r.ignored.map(w => chip(w, 'ignored'))].join('')
+    const chip = (w, kind) => `<span class="tag" style="display:inline-flex;gap:6px;align-items:center">${esc(w)}${kind ? ` <i class="muted">(${kind})</i>` : ''}<button class="link" data-rm="${esc(w)}" title="${kind === 'never suggested' ? 'Suggest it again' : 'Remove'}">×</button></span>`;
+    $('whList').innerHTML = r.words.length || r.ignored.length || r.blocked.length
+        ? [...r.words.map(w => chip(w)), ...r.ignored.map(w => chip(w, 'ignored')), ...r.blocked.map(w => chip(w, 'never suggested'))].join('')
         : `<span class="muted small">${$('whSearch').value ? 'No match.' : 'No words of your own yet.'}</span>`;
     $('whList').querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => { await ext.invoke('remove-word', b.dataset.rm); renderWords(); });
 }

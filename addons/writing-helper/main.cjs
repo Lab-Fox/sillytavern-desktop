@@ -31,6 +31,8 @@ const DEFAULTS = {
     keys: null,          // the keys for picking words (null = KEYS below); see setKeys
     keyHints: true,      // show the keys in the strip
     adult: true,        // the adult word pack
+    adultRow: false,     // a second row of explicit words above the normal one
+    sceneBoost: true,    // in an explicit scene, explicit words move into the normal row
     names: true,         // character, persona, group and lorebook names count as words
     learnTyping: true,   // remember words and word pairs from what you send
     learnChats: false,   // also learn from your messages in saved chats (asked first)
@@ -44,6 +46,7 @@ const DEFAULTS = {
 const KEYS = {
     enter: ['ArrowUp'], next: ['ArrowRight'], prev: ['ArrowLeft'], pick: ['Enter'], leave: ['ArrowDown'],
     close: ['Escape'], pickFirst: [], pick1: ['Alt+1'], pick2: ['Alt+2'], pick3: ['Alt+3'],
+    pick4: ['Alt+4'], pick5: ['Alt+5'], pick6: ['Alt+6'], // the adult row
 };
 const KEY = /^(?:Ctrl\+)?(?:Alt\+)?(?:Shift\+)?(?:Meta\+)?(?:[A-Z0-9]|F\d{1,2}|Space|Enter|Tab|Escape|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Arrow(?:Up|Down|Left|Right)|[`\-=[\]\\;',./])$/;
 function cleanKeys(v) {
@@ -60,7 +63,7 @@ const keysOf = s => cleanKeys(s.keys) || KEYS;
 let api = null;
 let lex = null;
 let status = { state: 'starting', text: 'Starting…' };
-let userWords = { words: [], ignored: [] };
+let userWords = { words: [], ignored: [], blocked: [] };
 let nameList = [];
 let saveTimer = null;
 const dir = () => api.dir;
@@ -69,6 +72,17 @@ const settings = () => ({ ...DEFAULTS, ...api.storage.all() });
 const readJson = (f, fallback) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return fallback; } };
 const writeJson = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(`${f}.tmp`, JSON.stringify(v)); fs.renameSync(`${f}.tmp`, f); };
 const pack = name => fs.readFileSync(path.join(__dirname, 'packs', name), 'utf8').split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+// packs/adult-context.txt: "## strong" and "## mild" sections.
+function scenePack() {
+    const out = { strong: [], mild: [] };
+    let part = 'strong';
+    for (const line of fs.readFileSync(path.join(__dirname, 'packs', 'adult-context.txt'), 'utf8').split(/\r?\n/).map(x => x.trim())) {
+        const m = /^##\s*(strong|mild)\b/.exec(line);
+        if (m) part = m[1];
+        else if (line && !line.startsWith('#')) out[part].push(line);
+    }
+    return out;
+}
 const cap = w => (w ? w[0].toUpperCase() + w.slice(1) : w);
 
 function setStatus(state, text) {
@@ -97,10 +111,11 @@ async function build() {
         const words = L.expandHunspell(L.unzipEntry(zip, 'en_US-large.aff').toString('utf8'), L.unzipEntry(zip, 'en_US-large.dic').toString('utf8'));
         for (const w of pack('roleplay.txt')) words.set(w, false);
         const s = settings();
-        lex = new L.Lexicon({ words, freq: L.parseFreq(freqText), adult: pack('adult.txt'), adultOn: s.adult });
+        lex = new L.Lexicon({ words, freq: L.parseFreq(freqText), adult: pack('adult.txt'), adultOn: s.adult, scene: scenePack() });
         lex.setUser(userWords.words);
         for (const w of userWords.ignored) lex.ignored.add(w.toLowerCase());
         lex.importLearned(readJson(userFile('learned.json'), null));
+        lex.setBlocked(userWords.blocked);
         await scanNames();
         lex.suggestable();
         syncSpellchecker();
@@ -160,6 +175,7 @@ function saveUserWords() {
     if (lex) {
         lex.setUser(userWords.words);
         lex.ignored = new Set(userWords.ignored.map(w => w.toLowerCase()));
+        lex.setBlocked(userWords.blocked);
     }
     syncSpellchecker();
 }
@@ -171,16 +187,19 @@ function addWord(word, exact = false) {
     const forms = exact || /[A-Z]/.test(word.slice(1)) ? [word] : [word.toLowerCase(), cap(word.toLowerCase())];
     for (const f of forms) if (!userWords.words.includes(f)) userWords.words.push(f);
     userWords.ignored = userWords.ignored.filter(w => w.toLowerCase() !== word.toLowerCase());
+    userWords.blocked = userWords.blocked.filter(w => w !== word.toLowerCase());
     saveUserWords();
     api.log(`Added "${forms.join('", "')}" to your dictionary.`);
     return true;
 }
 function removeWord(word) {
     const l = String(word || '').toLowerCase();
-    const before = userWords.words.length + userWords.ignored.length;
+    const count = () => userWords.words.length + userWords.ignored.length + userWords.blocked.length;
+    const before = count();
     userWords.words = userWords.words.filter(w => w.toLowerCase() !== l);
     userWords.ignored = userWords.ignored.filter(w => w.toLowerCase() !== l);
-    if (userWords.words.length + userWords.ignored.length === before) return false;
+    userWords.blocked = userWords.blocked.filter(w => w !== l); // = suggest it again
+    if (count() === before) return false;
     saveUserWords();
     return true;
 }
@@ -191,6 +210,20 @@ function ignoreWord(word) {
     saveUserWords();
     return true;
 }
+// Never suggest a word (it stays spelled right): for a word picked by
+// mistake, learned wrong, or just not wanted. Also forgets what was learned
+// about it and takes it out of your own words.
+function blockWord(word) {
+    const l = String(word || '').trim().toLowerCase();
+    if (!l || l.length > 40 || /\s/.test(l) || userWords.blocked.includes(l)) return false;
+    userWords.blocked.push(l);
+    userWords.words = userWords.words.filter(w => w.toLowerCase() !== l);
+    saveUserWords();
+    saveLearnedSoon();
+    api.log(`"${l}" won't be suggested any more.`);
+    return true;
+}
+const isBlocked = w => !!w && userWords.blocked.includes(w.toLowerCase());
 const inUserDict = w => !!w && (userWords.words.some(x => x.toLowerCase() === w.toLowerCase()) || userWords.ignored.some(x => x.toLowerCase() === w.toLowerCase()));
 
 // ---------- learning ----------
@@ -260,7 +293,7 @@ function readWindowsSuggestions() {
 const PAGE_CODE = fs.readFileSync(path.join(__dirname, 'page.js'), 'utf8');
 function config() {
     const s = settings();
-    return { mode: s.mode, suggestions: s.suggestions, autocorrect: s.autocorrect, keys: keysOf(s), keyHints: s.keyHints, learnTyping: s.learnTyping, ready: status.state === 'ready' };
+    return { mode: s.mode, suggestions: s.suggestions, autocorrect: s.autocorrect, keys: keysOf(s), keyHints: s.keyHints, adultRow: s.adult && s.adultRow, scene: s.adult && s.sceneBoost, learnTyping: s.learnTyping, ready: status.state === 'ready' };
 }
 function pushConfig() {
     if (!api) return;
@@ -276,28 +309,34 @@ function wordOf(info) {
 
 exports.activate = function (a) {
     api = a;
-    userWords = readJson(userFile('words.json'), { words: [], ignored: [] });
+    userWords = { words: [], ignored: [], blocked: [], ...readJson(userFile('words.json'), {}) };
 
     api.pages.addScript(PAGE_CODE);
     api.pages.handle('config', () => config());
-    api.pages.handle('suggest', (_page, prefix, prev) => {
-        // → { words, fixes }: the first `fixes` words are corrections of a misspelled word.
+    api.pages.handle('suggest', (_page, prefix, prev, near, chat) => {
+        // → { words, fixes, adult, explicit }: the first `fixes` words are
+        // corrections of a misspelled word; `adult` is the second row;
+        // `explicit` says the scene counts as explicit (explicit words moved up).
         const s = settings();
-        if (!lex || s.mode !== 'helper' || !s.suggestions) return { words: [], fixes: 0 };
+        if (!lex || s.mode !== 'helper' || !s.suggestions) return { words: [], fixes: 0, adult: [] };
         const p = String(prefix || ''), pv = String(prev || '');
+        const adultOn = s.adult && (s.adultRow || s.sceneBoost);
+        const explicit = adultOn && s.sceneBoost ? lex.explicitness(String(near || '').slice(-2000), String(chat || '').slice(-6000)) : 0;
         // Endings of the word being typed ("har" → harbor, hard). Only when no
         // word starts like that is it a typo: then corrections ("wierd" → weird).
-        const endings = lex.complete(p, pv, 3);
+        const rows = lex.completeRows(p, pv, 3, { explicit, adultRow: s.adult && s.adultRow });
+        const endings = rows.words;
+        const extra = { adult: rows.adult, explicit: explicit >= 0.5 };
         if (p.length >= 3 && !lex.known(p)) {
             // What a space would correct it to comes first ("teh" → the, "dont" → don't).
             const sure = s.autocorrect ? lex.autocorrect(p, pv) : null;
             if (!endings.length) {
                 const fixes = [...new Set([sure, ...lex.corrections(p, 3).map(c => c.word)].filter(Boolean))].slice(0, 3);
-                return { words: fixes, fixes: fixes.length };
+                return { words: fixes, fixes: fixes.length, adult: [] };
             }
-            if (sure) return { words: [sure, ...endings.filter(w => w !== sure)].slice(0, 3), fixes: 1 };
+            if (sure) return { words: [sure, ...endings.filter(w => w !== sure)].slice(0, 3), fixes: 1, ...extra };
         }
-        return { words: endings, fixes: 0 };
+        return { words: endings, fixes: 0, ...extra };
     });
     api.pages.handle('correct', (_page, word, prev) => {
         const s = settings();
@@ -316,6 +355,18 @@ exports.activate = function (a) {
         group: 'spelling', contexts: ['editable', 'selection', 'misspelled'],
         label: info => { const w = wordOf(info); return w ? (inUserDict(w) ? `Remove "${w}" from my dictionary` : `Add "${w}" to dictionary`) : ''; },
         click: info => { const w = wordOf(info); if (inUserDict(w)) removeWord(w); else addWord(w); },
+    });
+    // A selected word that gets suggested (or completed, or corrected to)
+    // and shouldn't be: never again. Or back again if it was stopped.
+    api.contextMenu.add({
+        group: 'spelling', contexts: ['editable', 'selection'],
+        label: info => {
+            const w = info.misspelledWord ? '' : wordOf(info);
+            if (!w || !lex) return '';
+            if (isBlocked(w)) return `Suggest "${w}" again`;
+            return lex.suggests(w) ? `Never suggest "${w}"` : '';
+        },
+        click: info => { const w = wordOf(info); if (isBlocked(w)) removeWord(w); else blockWord(w); },
     });
     api.contextMenu.add({
         group: 'spelling', contexts: ['editable', 'selection', 'misspelled'],
@@ -342,7 +393,7 @@ exports.activate = function (a) {
     // The launcher panel.
     api.handle('status', async () => ({
         ...status, settings: { ...settings(), keys: keysOf(settings()) }, defaultKeys: KEYS, engine: api.spellcheck.engine(), windows: await windowsSuggestions(),
-        words: userWords.words.length, ignored: userWords.ignored.length, names: nameList.length,
+        words: userWords.words.length, ignored: userWords.ignored.length, blocked: userWords.blocked.length, names: nameList.length,
         learned: lex ? lex.learned.size : 0, pairs: lex ? [...lex.bigrams.values()].reduce((n, m) => n + m.size, 0) : 0,
         chats: readJson(userFile('chats-learned.json'), null), learning: !!chatJob,
     }));
@@ -357,16 +408,18 @@ exports.activate = function (a) {
         if (key === 'mode' && !['helper', 'windows', 'off'].includes(value)) return false;
         api.storage.set(key, value);
         if (key === 'adult') await build();
+        else if (key === 'adultRow' || key === 'sceneBoost') pushConfig();
         else if (key === 'names') { await scanNames(); syncSpellchecker(); }
         else pushConfig();
         return true;
     });
     api.handle('words', (q = '') => {
         const l = String(q).toLowerCase();
-        return { words: userWords.words.filter(w => w.toLowerCase().includes(l)).sort((a, b) => a.localeCompare(b)), ignored: userWords.ignored.filter(w => w.toLowerCase().includes(l)) };
+        return { words: userWords.words.filter(w => w.toLowerCase().includes(l)).sort((a, b) => a.localeCompare(b)), ignored: userWords.ignored.filter(w => w.toLowerCase().includes(l)), blocked: userWords.blocked.filter(w => w.includes(l)).sort((a, b) => a.localeCompare(b)) };
     });
     api.handle('add-word', (w, exact) => addWord(w, !!exact));
     api.handle('remove-word', w => removeWord(w));
+    api.handle('block-word', w => blockWord(w));
     api.handle('import', async () => {
         const { dialog } = require('electron');
         const r = await dialog.showOpenDialog({ title: 'Import words', filters: [{ name: 'Word lists', extensions: ['txt', 'dic'] }], properties: ['openFile'] });

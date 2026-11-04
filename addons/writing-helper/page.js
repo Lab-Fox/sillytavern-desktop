@@ -169,7 +169,7 @@
     if (canPopover) strip.popover = 'manual'; else strip.hidden = true;
     const style = document.createElement('style');
     style.textContent = `
-#desktop-writing-helper { position: fixed; inset: auto; margin: 0; z-index: 2147483000; display: flex; gap: 4px; padding: 3px; max-width: 90vw; overflow: visible;
+#desktop-writing-helper { position: fixed; inset: auto; margin: 0; z-index: 2147483000; display: flex; flex-direction: column; gap: 2px; padding: 3px; max-width: 90vw; overflow: visible;
   background: var(--SmartThemeBlurTintColor, #222); color: var(--SmartThemeBodyColor, #ddd);
   border: 1px solid var(--SmartThemeBorderColor, #555); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.35);
   font-family: var(--mainFontFamily, sans-serif); font-size: calc(var(--mainFontSize, 15px) * 0.95); line-height: 1.4;
@@ -182,18 +182,22 @@
 #desktop-writing-helper button.sel { background: var(--SmartThemeQuoteColor, #e18a24); color: var(--SmartThemeBlurTintColor, #111); outline: none; }
 #desktop-writing-helper kbd, #desktop-writing-helper .hint { all: unset; opacity: .55; font-size: .78em; margin-left: 6px; }
 #desktop-writing-helper .hint { margin: 0 2px 0 4px; align-self: center; }
-#desktop-writing-helper .fix::before { content: '✎ '; opacity: .6; }`;
+#desktop-writing-helper .fix::before { content: '✎ '; opacity: .6; }
+#desktop-writing-helper .wh-row { display: flex; gap: 4px; align-items: center; }
+#desktop-writing-helper .wh-row.adult { border-bottom: 1px dashed color-mix(in srgb, var(--SmartThemeBodyColor, #fff) 22%, transparent); padding-bottom: 2px; }
+#desktop-writing-helper .wh-tag { all: unset; font-size: .7em; padding: 0 4px; border-radius: 4px; opacity: .75; align-self: center;
+  border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor, #e18a24) 70%, transparent); color: var(--SmartThemeQuoteColor, #e18a24); }`;
     document.head.append(style);
     document.body.append(strip);
 
-    let current = null; // { el, node, start, end, words }
+    let current = null; // { el, node, start, end, rows: [normal words, adult words] }
     let seq = 0;
     const isOpen = () => (canPopover && strip.hasAttribute('popover') ? strip.matches(':popover-open') : !strip.hidden);
     function close() {
         if (!isOpen()) return;
         if (canPopover && strip.hasAttribute('popover')) { try { strip.hidePopover(); } catch { /* already closed */ } } else strip.hidden = true;
     }
-    function hide() { current = null; sel = -1; close(); }
+    function hide() { current = null; sel = null; close(); }
     function open(el) {
         // Inside a modal dialog the strip must be part of it, or the dialog
         // makes it unclickable.
@@ -225,59 +229,86 @@
     const PRETTY = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc', Space: 'Space' };
     const pretty = combo => combo.split('+').map(p => PRETTY[p] || p).join('+');
 
-    // The highlighted word (↑ moves into the strip), -1 = none: typing goes on.
-    let sel = -1;
-    function select(i) {
-        sel = i;
-        strip.querySelectorAll('button').forEach((b, j) => { b.classList.toggle('sel', j === i); b.setAttribute('aria-selected', String(j === i)); });
+    // The highlighted word { r: row (0 normal, 1 adult), i }, or null:
+    // typing goes on. ↑ moves into the normal row, ↑ again into the adult row.
+    let sel = null;
+    function select(s) {
+        sel = s;
+        strip.querySelectorAll('button').forEach(b => {
+            const on = !!s && Number(b.dataset.r) === s.r && Number(b.dataset.i) === s.i;
+            b.classList.toggle('sel', on);
+            b.setAttribute('aria-selected', String(on));
+        });
         const hint = strip.querySelector('.hint');
         if (hint) {
-            const k = sel >= 0 ? keysFor('pick')[0] : keysFor('enter')[0];
+            const k = s ? keysFor('pick')[0] : keysFor('enter')[0];
             hint.textContent = k ? pretty(k) : '';
-            hint.hidden = !k;
         }
     }
 
-    function show(el, at, start, end, words, fixes) {
-        if (!words.length) return hide();
-        current = { el, node: at.node, start, end, words };
-        const items = words.map((w, i) => {
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.tabIndex = -1;
-            b.setAttribute('role', 'option');
-            b.textContent = w;
-            if (fixes.includes(w)) b.className = 'fix';
-            // The word a single key takes without moving into the strip.
-            if (i === 0 && keysFor('pickFirst').length) b.classList.add('first');
-            const direct = (i === 0 && keysFor('pickFirst')[0]) || keysFor(`pick${i + 1}`)[0];
-            if (cfg.keyHints && direct) {
-                const k = document.createElement('kbd');
-                k.textContent = pretty(direct);
-                b.append(k);
-            }
-            b.addEventListener('mousedown', e => { e.preventDefault(); accept(i); }); // keep the focus in the text box
-            return b;
-        });
+    function button(w, r, i, fixes) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.tabIndex = -1;
+        b.setAttribute('role', 'option');
+        b.dataset.r = r;
+        b.dataset.i = i;
+        b.textContent = w;
+        if (r === 0 && fixes.includes(w)) b.className = 'fix';
+        // The word a single key takes without moving into the strip.
+        if (r === 0 && i === 0 && keysFor('pickFirst').length) b.classList.add('first');
+        const direct = (r === 0 && i === 0 && keysFor('pickFirst')[0]) || keysFor(`pick${r * 3 + i + 1}`)[0];
+        if (cfg.keyHints && direct) {
+            const k = document.createElement('kbd');
+            k.textContent = pretty(direct);
+            b.append(k);
+        }
+        b.addEventListener('mousedown', e => { e.preventDefault(); accept(r, i); }); // keep the focus in the text box
+        return b;
+    }
+    function tag(text, title) {
+        const t = document.createElement('span');
+        t.className = 'wh-tag';
+        t.textContent = text;
+        t.title = title;
+        return t;
+    }
+    function show(el, at, start, end, words, fixes, adult = [], explicit = false) {
+        if (!words.length && !adult.length) return hide();
+        current = { el, node: at.node, start, end, rows: [words, adult] };
+        const normal = document.createElement('div');
+        normal.className = 'wh-row';
         if (cfg.keyHints) {
             const hint = document.createElement('span');
             hint.className = 'hint';
             hint.setAttribute('aria-hidden', 'true');
-            items.unshift(hint);
+            normal.append(hint);
         }
-        strip.replaceChildren(...items);
-        select(-1);
+        normal.append(...words.map((w, i) => button(w, 0, i, fixes)));
+        if (explicit) normal.append(tag('18+', 'This scene reads as explicit, so explicit words come first. Turn it off in the Writing helper\'s panel ("Notice explicit scenes").'));
+        const rows = [];
+        if (adult.length) {
+            const top = document.createElement('div');
+            top.className = 'wh-row adult';
+            top.append(tag('18+', 'Explicit words. Turn this row off in the Writing helper\'s panel ("Second row of explicit words").'), ...adult.map((w, i) => button(w, 1, i, fixes)));
+            rows.push(top);
+        }
+        if (words.length) rows.push(normal);
+        strip.replaceChildren(...rows);
+        select(null);
         open(el);
         place(el);
     }
 
-    function accept(i) {
+    function accept(r, i) {
         if (!current) return false;
-        const { el, node, start, end, words } = current;
+        const { el, node, start, end, rows } = current;
+        const word = rows[r]?.[i];
+        if (!word) return false;
         const text = isValueField(el) ? el.value : node?.data || '';
         const next = text[end] || '';
         // Like a phone keyboard: a space after the word, unless one follows.
-        replace(el, node, start, end, words[i] + (/[\s.,!?;:)]/.test(next) ? '' : ' '));
+        replace(el, node, start, end, word + (/[\s.,!?;:)]/.test(next) ? '' : ' '));
         hide();
         suggestSoon(el);
         return true;
@@ -298,6 +329,16 @@
         return { prefix, start: before.length - prefix.length, prev: prevM ? prevM[1] : '' };
     }
 
+    // The last messages of the open chat (for noticing an explicit scene),
+    // read at most every 2 s.
+    let tail = { at: 0, text: '' };
+    function chatTail() {
+        if (Date.now() - tail.at < 2000) return tail.text;
+        const msgs = [...document.querySelectorAll('#chat .mes .mes_text')].slice(-3);
+        tail = { at: Date.now(), text: msgs.map(m => m.textContent || '').join('\n').slice(-6000) };
+        return tail.text;
+    }
+
     let timer = 0;
     function suggestSoon(el) {
         clearTimeout(timer);
@@ -310,11 +351,12 @@
         if (!c) return hide();
         const my = ++seq;
         const before = snapshot(el, at);
-        const r = (await call('suggest', c.prefix, c.prev)) || { words: [], fixes: 0 };
+        const scene = cfg.scene ? [isValueField(el) ? el.value.slice(Math.max(0, at.caret - 1500), at.caret) : at.before.slice(-1500), chatTail()] : ['', ''];
+        const r = (await call('suggest', c.prefix, c.prev, ...scene)) || { words: [], fixes: 0, adult: [] };
         const now = cursorText(el);
         if (my !== seq || fieldOf(document.activeElement) !== el || !now || now.caret !== at.caret || now.node !== at.node || snapshot(el, now) !== before) return;
         const fixes = r.words.slice(0, r.fixes);
-        show(el, at, c.start, at.caret, r.words.filter(w => w !== c.prefix), fixes);
+        show(el, at, c.start, at.caret, r.words.filter(w => w !== c.prefix), fixes, (r.adult || []).filter(w => w !== c.prefix), !!r.explicit);
     }
 
     // ---------- autocorrect ----------
@@ -393,20 +435,27 @@
         if (!['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) last = null;
         if (current && isOpen()) {
             const combo = comboOf(e);
-            const n = current.words.length;
+            const [normal, adult] = current.rows;
             const take = () => { e.preventDefault(); e.stopPropagation(); taken = e.key; };
-            if (sel >= 0) {
+            if (sel) {
                 // A word is highlighted: these keys move or take it.
-                if (bound('next', combo)) { select((sel + 1) % n); return take(); }
-                if (bound('prev', combo)) { select((sel + n - 1) % n); return take(); }
-                if (bound('pick', combo)) { accept(sel); return take(); }
-                if (bound('leave', combo)) { select(-1); return take(); }
+                const n = current.rows[sel.r].length;
+                if (bound('next', combo)) { select({ r: sel.r, i: (sel.i + 1) % n }); return take(); }
+                if (bound('prev', combo)) { select({ r: sel.r, i: (sel.i + n - 1) % n }); return take(); }
+                if (bound('pick', combo)) { accept(sel.r, sel.i); return take(); }
+                // ↑ again: up into the adult row; ↓: down again, then back to the text.
+                if (bound('enter', combo) && sel.r === 0 && adult.length) { select({ r: 1, i: Math.min(sel.i, adult.length - 1) }); return take(); }
+                if (bound('enter', combo) && sel.r === 1) return take();
+                if (bound('leave', combo)) { select(sel.r === 1 && normal.length ? { r: 0, i: Math.min(sel.i, normal.length - 1) } : null); return take(); }
                 if (bound('close', combo)) { hide(); return take(); }
-                select(-1); // any other key: back to typing (the key does its usual thing)
+                select(null); // any other key: back to typing (the key does its usual thing)
             } else {
-                if (bound('enter', combo)) { select(0); return take(); }
-                if (bound('pickFirst', combo)) { accept(0); return take(); }
-                for (let i = 1; i <= 3; i++) if (bound(`pick${i}`, combo) && i <= n) { accept(i - 1); return take(); }
+                if (bound('enter', combo)) { select(normal.length ? { r: 0, i: 0 } : { r: 1, i: 0 }); return take(); }
+                if (bound('pickFirst', combo) && normal.length) { accept(0, 0); return take(); }
+                for (let k = 1; k <= 6; k++) {
+                    const r = k > 3 ? 1 : 0, i = (k - 1) % 3;
+                    if (bound(`pick${k}`, combo) && current.rows[r][i]) { accept(r, i); return take(); }
+                }
                 if (bound('close', combo)) { hide(); return take(); }
             }
             if (NAV.has(e.key)) hide(); // the cursor moves: new words after the key

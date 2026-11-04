@@ -159,8 +159,9 @@ const FIXES = {
 // ---------- the dictionary ----------
 class Lexicon {
     // sources: { words: Map word→nosuggest (SCOWL), freq: Map lower→count,
-    //            adult: [words], adultOn: bool }
-    constructor({ words, freq, adult = [], adultOn = true }) {
+    //            adult: [words], adultOn: bool,
+    //            scene: { strong: [words], mild: [words] } (packs/adult-context.txt) }
+    constructor({ words, freq, adult = [], adultOn = true, scene = { strong: [], mild: [] } }) {
         // lower → its spellings: '' (only the lowercase one), a string (one
         // other spelling, like "London") or an array. Compact on purpose:
         // with objects per word this took ~125 MB in the app.
@@ -169,10 +170,16 @@ class Lexicon {
         for (const [w, ns] of words) this.addBase(w, ns && !VULGAR.test(w));
         this.adult = new Set(adultOn ? adult.map(w => w.toLowerCase()) : []);
         if (adultOn) for (const w of adult) this.addBase(w, false);
+        // Explicit words: the adult pack plus the strong scene words (shown in
+        // the adult row); mild scene words only hint at an explicit scene.
+        this.explicit = new Set(adultOn ? [...this.adult, ...scene.strong.map(w => w.toLowerCase())] : []);
+        this.mild = new Set(adultOn ? scene.mild.map(w => w.toLowerCase()) : []);
+        this.sceneCache = { text: null, hits: 0 };
         this.freq = freq;
-        this.user = new Map();    // lower → Set of exact forms (the user's dictionary)
+        this.user = new Map();   // lower → Set of exact forms (the user's dictionary)
         this.names = new Map();   // lower → exact form (characters, personas, lorebooks)
         this.ignored = new Set(); // lower: never correct or flag
+        this.blocked = new Set(); // lower: never suggested, completed or corrected to (still spelled right)
         this.learned = new Map(); // lower → count (words the user writes)
         this.bigrams = new Map(); // prev lower → Map next lower → count
         this.dirty = true;
@@ -240,13 +247,14 @@ class Lexicon {
         const vocab = new Map();
         const add = (l, word, score, special = false) => { const v = vocab.get(l); if (!v || v[1] < score) vocab.set(l, [word, score, special || !!v?.[2]]); else if (special) v[2] = true; };
         for (const [l, count] of this.freq) {
-            if (!this.base.has(l) || this.nosug.has(l)) continue;
+            if (!this.base.has(l) || this.nosug.has(l) || this.blocked.has(l)) continue;
             add(l, this.preferred(l), Math.log10(count + 1));
         }
-        // Adult words: about as likely as an everyday word when missing from the subtitles list.
-        for (const l of this.adult) if (this.base.has(l) && !this.nosug.has(l)) add(l, this.preferred(l), Math.log10((this.freq.get(l) || 3000) + 1), true);
-        for (const [l, forms] of this.user) add(l, forms.has(l) ? l : [...forms][0], 6, true);
-        for (const [l, n] of this.names) add(l, n, 6.5, true);
+        // Adult words: at least about as likely as an everyday word (subtitles
+        // rarely have them, or not at all), so a rare count doesn't sink one.
+        for (const l of this.adult) if (this.base.has(l) && !this.nosug.has(l) && !this.blocked.has(l)) add(l, this.preferred(l), Math.max(3.6, Math.log10((this.freq.get(l) || 0) + 1)), true);
+        for (const [l, forms] of this.user) if (!this.blocked.has(l)) add(l, forms.has(l) ? l : [...forms][0], 6, true);
+        for (const [l, n] of this.names) if (!this.blocked.has(l)) add(l, n, 6.5, true);
         for (const [l, c] of this.learned) if (vocab.has(l)) vocab.get(l)[1] += Math.min(2, Math.log10(c + 1));
         this.vocab = vocab;
         this.sorted = [...vocab.keys()].sort();
@@ -263,6 +271,59 @@ class Lexicon {
         return vocab;
     }
 
+    // How explicit the scene is, 0…1: explicit words in the message being
+    // written (`near`, counts fully) and in the last chat messages (`chat`,
+    // half). Mild words count 0.3. Only the latest text counts, so it fades
+    // as soon as the scene moves on.
+    sceneHits(text, maxWords) {
+        let hits = 0;
+        for (const w of tokens(text).slice(-maxWords)) {
+            const l = w.toLowerCase();
+            if (this.explicit.has(l)) hits += 1; else if (this.mild.has(l)) hits += 0.3;
+        }
+        return hits;
+    }
+    explicitness(near = '', chat = '') {
+        if (!this.explicit.size) return 0;
+        if (this.sceneCache.text !== chat) this.sceneCache = { text: chat, hits: this.sceneHits(chat, 400) };
+        return Math.min(1, (this.sceneHits(near, 80) + this.sceneCache.hits * 0.5) / 3);
+    }
+
+    // Suggestions in rows: `words` (the normal row, explicit words move up
+    // in it the more explicit the scene is) and `adult` (explicit words not
+    // in the normal row, for the second row).
+    completeRows(prefix, prev = '', n = 3, { explicit = 0, adultRow = false } = {}) {
+        const vocab = this.suggestable();
+        const p = prefix.toLowerCase();
+        const next = prev ? this.bigrams.get(prev.toLowerCase()) : null;
+        const found = [];
+        const consider = (l, base) => {
+            const v = vocab.get(l);
+            if (!v) return;
+            const strong = this.explicit.has(l);
+            const boost = explicit * (strong ? 2.5 : this.mild.has(l) ? 1.2 : 0);
+            found.push({ l, word: v[0], score: base, boosted: base + boost, strong });
+        };
+        if (!p) {
+            // Nothing typed yet: what usually comes after `prev`.
+            if (!next) return { words: [], adult: [] };
+            for (const [l, c] of next) consider(l, Math.log10(c + 1) * 2 + (vocab.get(l)?.[1] || 0) * 0.1);
+        } else {
+            let lo = 0, hi = this.sorted.length;
+            while (lo < hi) { const m = (lo + hi) >> 1; if (this.sorted[m] < p) lo = m + 1; else hi = m; }
+            for (let i = lo; i < this.sorted.length && this.sorted[i].startsWith(p); i++) {
+                const l = this.sorted[i];
+                if (l === p) continue;
+                consider(l, vocab.get(l)[1] + (next?.get(l) ? 2 + Math.log10(next.get(l)) : 0) - (l.length - p.length) * 0.02);
+            }
+        }
+        const words = [...found].sort((a, b) => b.boosted - a.boosted).slice(0, n);
+        const taken = new Set(words.map(f => f.l));
+        const adult = adultRow ? found.filter(f => f.strong && !taken.has(f.l)).sort((a, b) => b.score - a.score).slice(0, n) : [];
+        const out = list => list.map(f => (p ? matchCase(prefix, f.word) : f.word));
+        return { words: out(words), adult: out(adult) };
+    }
+
     // Words starting with `prefix` (the part of the word typed so far).
     complete(prefix, prev = '', n = 3) {
         const vocab = this.suggestable();
@@ -271,7 +332,7 @@ class Lexicon {
         if (!p) {
             // Nothing typed yet: what usually comes after `prev`.
             if (!next) return [];
-            return [...next.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([l]) => vocab.get(l)?.[0] || l);
+            return [...next.entries()].filter(([l]) => vocab.has(l)).sort((a, b) => b[1] - a[1]).slice(0, n).map(([l]) => vocab.get(l)?.[0] || l);
         }
         let lo = 0, hi = this.sorted.length;
         while (lo < hi) { const m = (lo + hi) >> 1; if (this.sorted[m] < p) lo = m + 1; else hi = m; }
@@ -318,12 +379,13 @@ class Lexicon {
         // "i" → "I", "dont" → "don't" (even though "dont" is common in chats)
         if (CONTRACTIONS[l] && !this.user.has(l) && !this.names.has(l)) {
             const to = CONTRACTIONS[l];
+            if (this.blocked.has(to.toLowerCase())) return null;
             const out = l === 'i' || /^i'/.test(l) || to.startsWith('I') ? to : matchCase(word, to);
             return out === word ? null : out;
         }
-        if (FIXES[l] && !this.user.has(l)) return matchCase(word, FIXES[l]);
+        if (FIXES[l] && !this.user.has(l) && !this.blocked.has(FIXES[l].toLowerCase())) return matchCase(word, FIXES[l]);
         // "THe" → "The" (two capitals by accident)
-        if (/^[A-Z]{2}[a-z]+$/.test(word) && this.known(word[0] + word.slice(1).toLowerCase())) return word[0] + word.slice(1).toLowerCase();
+        if (/^[A-Z]{2}[a-z]+$/.test(word) && !this.blocked.has(l) && this.known(word[0] + word.slice(1).toLowerCase())) return word[0] + word.slice(1).toLowerCase();
         if (this.known(word) || l.length < 3 || /[^a-z'’-]/i.test(word)) return null;
         // Capitalized mid-sentence words are probably names: leave them.
         if (prev && /^[A-Z]/.test(word) && !/[.!?]$/.test(prev)) return null;
@@ -346,7 +408,7 @@ class Lexicon {
         const words = tokens(text);
         for (let i = 0; i < words.length; i++) {
             const l = words[i].toLowerCase();
-            if (!this.known(words[i])) continue;
+            if (!this.known(words[i]) || this.blocked.has(l)) continue;
             this.learned.set(l, (this.learned.get(l) || 0) + 1);
             if (i > 0) {
                 const p = words[i - 1].toLowerCase();
@@ -357,6 +419,18 @@ class Lexicon {
         }
         this.dirty = true;
     }
+    // Words never to suggest; what was learned about them is forgotten.
+    setBlocked(words) {
+        this.blocked = new Set(words.map(w => w.toLowerCase()));
+        for (const l of this.blocked) {
+            this.learned.delete(l);
+            this.bigrams.delete(l);
+            for (const m of this.bigrams.values()) m.delete(l);
+        }
+        this.dirty = true;
+    }
+    // Would this word show up as a suggestion?
+    suggests(word) { return this.suggestable().has(String(word).toLowerCase()); }
     // Keeps the learned data small: the most frequent pairs only.
     exportLearned(maxPairs = 60000) {
         const pairs = [];
