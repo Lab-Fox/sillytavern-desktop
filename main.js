@@ -1535,7 +1535,8 @@ ipcMain.handle('lan-info', async () => {
     if (settings.lanAccess) { tailscaleInfo = await tunnel.tailscale(); tailscaleOn = !!tailscaleInfo.running; }
     return lanInfo();
 });
-ipcMain.handle('lan-save', async (_e, { on, user, password }) => {
+// `restart: false` (Settings) only saves: the launcher offers one "Restart server" for every waiting change.
+ipcMain.handle('lan-save', async (_e, { on, user, password, restart = true }) => {
     settings.lanAccess = !!on;
     settings.lanUser = String(user || 'user').trim().slice(0, 64) || 'user';
     // Empty field = keep the saved password; `null` clears it.
@@ -1545,7 +1546,7 @@ ipcMain.handle('lan-save', async (_e, { on, user, password }) => {
     broadcast('settings', publicSettings());
     const info = lanInfo();
     // Restarting closes extra servers on this folder and reloads the tabs.
-    if (info.needsRestart) await runTask(t('Restarting the server for phone access'), async () => true);
+    if (restart && info.needsRestart) await runTask(t('Restarting the server for phone access'), async () => true);
     return lanInfo();
 });
 
@@ -1967,6 +1968,27 @@ ipcMain.handle('ai-model-remove', async (_e, file) => {
 ipcMain.handle('app-update-state', () => appUpdate.getState());
 ipcMain.handle('app-update-check', () => appUpdate.check({ fresh: true }));
 // Switching the channel asks GitHub again right away.
+// Settings → About → Reset: look, start-up, updates and window options go back to the
+// defaults. Folders, profiles, phone access, server options, programs and add-ons stay.
+const RESETTABLE = ['theme', 'uiFont', 'uiZoom', 'consoleFont', 'consoleFontSize', 'autoStart', 'confirmBeforeQuit', 'closeToTray',
+    'backupBeforeUpdate', 'backupKeep', 'checkUpdatesOnLaunch', 'updateOnLaunch', 'checkAppUpdates', 'appPreview', 'windowLayer', 'tabs', 'searchEngine', 'inspectMenu', 'syncStLanguage'];
+ipcMain.handle('settings-reset', async () => {
+    if (!(await confirm(t('Reset this app\'s settings?'),
+        t('Look, start-up, updates and SillyTavern window options go back to their defaults. Your SillyTavern folders, profiles, phone access, server options and programs stay as they are.'),
+        t('Reset')))) return false;
+    const hadPreview = settings.appPreview;
+    for (const k of RESETTABLE) if (k in DEFAULT_SETTINGS) settings[k] = DEFAULT_SETTINGS[k];
+    saveSettings(settings);
+    setTheme(settings.theme);
+    stWins.forEach(w => w.setLayer(settings.windowLayer));
+    fitLauncherToZoom();
+    syncTray();
+    stWins.forEach(w => w.push());
+    broadcast('settings', publicSettings());
+    logLine('Settings reset to the defaults.');
+    if (hadPreview !== settings.appPreview) appUpdate.check({ fresh: true });
+    return true;
+});
 ipcMain.handle('set-app-preview', (_e, on) => {
     settings.appPreview = !!on;
     saveSettings(settings);
@@ -2075,7 +2097,6 @@ ipcMain.handle('save-settings', (_e, s) => {
     settings = { ...settings, ...s };
     saveSettings(settings);
     syncTray();
-    logLine('Settings saved.');
 });
 
 // ---------- setup, requirements, install location ----------

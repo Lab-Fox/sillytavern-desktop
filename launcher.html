@@ -257,14 +257,70 @@
   .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--muted); }
   .switch input:checked { background: var(--accent); border-color: var(--accent2); }
   .switch input:checked::after { transform: translateX(16px); background: var(--on-accent); }
+  input.tgl { appearance: none; width: 36px; height: 20px; background: var(--well); border: var(--px) solid var(--border); position: relative; flex-shrink: 0; cursor: pointer; }
+  input.tgl::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--muted); }
+  input.tgl:checked { background: var(--accent); border-color: var(--accent2); }
+  input.tgl:checked::after { transform: translateX(16px); background: var(--on-accent); }
+  input.tgl:focus-visible, .switch input:focus-visible { outline: var(--px) solid var(--accent2); outline-offset: 2px; }
   .switch b { display: block; font-weight: 600; color: var(--title); }
   .switch span { font-size: 13.5px; color: var(--muted); }
 
+  /* ---------- settings: one category at a time, rows with the control on the right ---------- */
+  #page-settings > * { max-width: 920px; }
+  .set-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 18px; }
+  .set-tabs { flex-wrap: wrap; }
+  .set-tabs button { padding: 4px 12px; }
+  #setSearch { flex: 1 1 140px; max-width: 240px; margin-left: auto; padding: 4px 10px; font-size: 14px; }
+  .set-free .empty { padding: 10px; }
+  .searching .set-tabs button.on { background: none; color: var(--muted); }
+  .set-restart { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 16px; background: var(--tint); border: var(--px) solid var(--accent); color: var(--accent2); font-size: 14px; }
+  .set-restart span { flex: 1; min-width: 180px; }
+  .set-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 600; margin: 22px 2px 8px; }
+  .set-pane > .set-h:first-child, .set-pane > .set-group:first-child { margin-top: 0; }
+  .set-h .act { margin-left: auto; display: flex; gap: 8px; text-transform: none; letter-spacing: .2px; }
+  .set-group { background: var(--panel); border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); container-type: inline-size; }
+  .set-group + .set-group { margin-top: 14px; }
+  .set-free { padding: 14px 16px; }
+  .set-row { display: flex; align-items: center; gap: 8px 18px; padding: 11px 16px; min-height: 52px; border-top: var(--px) dashed var(--border); }
+  .set-row:first-child { border-top: 0; }
+  label.set-row { cursor: pointer; }
+  label.set-row:hover { background: var(--panel2); }
+  .set-row.set-free { padding: 12px 16px; display: block; }
+  .set-text { flex: 1; min-width: 0; }
+  .set-text > b { font-weight: 600; color: var(--title); }
+  .set-text .tip { margin-left: 2px; }
+  .set-desc { display: block; font-size: 13.5px; color: var(--muted); overflow-wrap: anywhere; }
+  .set-desc.mono { color: var(--text); }
+  .set-warn { color: var(--warn); }
+  .set-ctl { flex: 0 1 auto; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .set-ctl select { width: auto; min-width: 170px; max-width: 300px; }
+  .set-ctl input[type=number] { width: 96px; }
+  .set-ctl input[type=text], .set-ctl input[type=password] { width: 160px; }
+  .set-ctl .seg { flex-wrap: wrap; }
+  .set-ctl .link { white-space: nowrap; }
+  #setZoom { height: auto; }
+  #setLogSize { width: 72px; }
+  .set-row.set-wrap { flex-wrap: wrap; }
+  .set-row.set-wrap .set-text { flex-basis: 220px; }
+  @container (max-width: 520px) {
+    .set-row { flex-wrap: wrap; }
+    .set-ctl { justify-content: flex-start; }
+    .set-ctl select { min-width: 0; max-width: 100%; }
+  }
+  .set-more { margin-top: 14px; }
+  .set-more > summary { cursor: pointer; color: var(--accent2); font-size: 14px; padding: 6px 2px; }
+  .set-more > summary:hover { color: var(--title); }
+  .set-more > .set-group { margin-top: 6px; }
+  .set-about { display: flex; align-items: center; gap: 16px; padding: 16px; flex-wrap: wrap; }
+  .set-about img.logo { width: 48px; height: 48px; border: var(--px) solid var(--border); }
+  .set-about .set-text > b { font-size: 17px; }
+  .set-links { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set-links .btn svg { color: var(--accent); width: 16px; height: 16px; }
+  .set-miss, .searching .set-pane > p { display: none !important; }
+  #soList .item { padding: 10px 0; }
+
   /* ---------- themes ---------- */
   .themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
-  /* As tall as the font box next to it, so the two labels line up. */
-  #setZoom { height: 37px; }
-  #setZoom button { height: 100%; }
   .theme-card { background: var(--panel2); padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--px) var(--px) 0 var(--shadow); }
   .theme-card:hover { border-color: var(--accent2); }
   .theme-card.on { border-color: var(--accent); box-shadow: 0 0 0 var(--px) var(--accent), calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
@@ -519,7 +575,7 @@
         </div>
 
         <div class="card" id="lanCard" hidden>
-          <h2>On your phone<button class="link act" data-goto="settings">Phone settings</button></h2>
+          <h2>On your phone<button class="link act" data-goto="settings:phone">Phone settings</button></h2>
           <div class="row" style="align-items:flex-start;gap:18px">
             <div class="qr" id="lanQr"></div>
             <div class="stack" style="flex:1;gap:8px">
@@ -899,14 +955,6 @@
             </div>
           </div>
         </div>
-        <div class="card">
-          <h2>Release channel</h2>
-          <div class="row">
-            <p class="muted" style="flex:1"><b style="color:var(--title)">Release</b> is the stable version most people use. <b style="color:var(--title)">Staging</b> gets new features first and is updated daily, but can break. You're on <span class="tag fox" id="branchTag">—</span></p>
-            <button class="btn sm" data-task data-branch="release">Use release</button>
-            <button class="btn sm" data-task data-branch="staging">Use staging</button>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -967,169 +1015,261 @@
 
     <!-- ===== Settings ===== -->
     <section class="page" id="page-settings">
-      <div class="card" style="margin-bottom:16px">
-        <h2>Appearance
-          <span class="act row">
-            <button class="btn sm ghost" id="btnImportTheme"><svg class="i"><use href="#i-download"/></svg>Import theme…</button>
-            <button class="btn sm" id="btnNewTheme"><svg class="i"><use href="#i-sliders"/></svg>New theme</button>
-          </span>
-        </h2>
-        <div class="row" style="align-items:flex-end;margin-bottom:14px;padding-bottom:14px;border-bottom:var(--px) dashed var(--border)">
-          <div class="field" style="flex:1 1 320px;max-width:420px"><label>Language</label><select id="setLang"></select></div>
-          <label class="switch" style="border:0;padding:0;flex:2;min-width:260px"><input type="checkbox" id="setStLang"><div><b>Also switch SillyTavern's own language</b><span>SillyTavern has its own language setting. With this on, changing the app's language changes SillyTavern's too (when SillyTavern has that language), once per SillyTavern. You can still change it in SillyTavern afterwards.</span></div></label>
+      <div class="set-top">
+        <div class="seg set-tabs" id="setTabsBar" role="tablist">
+          <button data-pane="look" class="on" role="tab" aria-selected="true">Appearance</button>
+          <button data-pane="start" role="tab" aria-selected="false">Start &amp; updates</button>
+          <button data-pane="window" role="tab" aria-selected="false">Window</button>
+          <button data-pane="server" role="tab" aria-selected="false">Server</button>
+          <button data-pane="phone" role="tab" aria-selected="false">Phone &amp; remote</button>
+          <button data-pane="about" role="tab" aria-selected="false">About</button>
         </div>
-        <div class="themes" id="themeList"></div>
-        <div class="row" style="align-items:flex-end;margin-top:14px;padding-top:14px;border-top:var(--px) dashed var(--border)">
-          <div class="field" style="flex:1;min-width:300px;max-width:420px"><label>App font</label><select id="setUiFont"></select></div>
-          <div class="field"><label>Size</label><div style="display:flex;gap:10px;align-items:center"><div class="seg" id="setZoom"></div><button class="btn sm ghost" id="btnUiFontReset">Reset</button></div></div>
-        </div>
-        <p class="muted small" style="margin-top:6px">For this app's windows and the SillyTavern window's top bar. SillyTavern's own pages keep their font (change it in SillyTavern's User Settings).</p>
-        <div id="themeEditor" hidden style="margin-top:18px;padding-top:16px;border-top:var(--px) dashed var(--border)">
-          <div class="row" style="margin-bottom:14px">
-            <div class="field" style="flex:1;max-width:320px"><label>Theme name</label><input type="text" id="themeName" maxlength="40" placeholder="My theme"></div>
-            <div class="logo-pick">
-              <img class="logo" id="themeLogoPreview" alt="">
-              <div class="stack" style="gap:6px">
-                <span class="muted small">Logo (shown pixelated)</span>
-                <div class="row">
-                  <button class="btn sm" id="btnThemeLogo">Upload image…</button>
-                  <button class="btn sm ghost" data-logo-preset="st" translate="no">ST</button>
-                  <button class="btn sm ghost" data-logo-preset="fox" translate="no">Fox</button>
+        <input type="search" id="setSearch" placeholder="Search settings…" aria-label="Search settings">
+      </div>
+      <div class="set-restart" id="setRestartBar" hidden>
+        <svg class="i"><use href="#i-refresh"/></svg><span>The server still runs with the old settings.</span>
+        <button class="btn sm primary" id="btnSetRestart">Restart server</button>
+      </div>
+      <div class="set-empty empty" id="setNoMatch" hidden>No setting matches.</div>
+
+      <!-- ===== Appearance ===== -->
+      <div class="set-pane" data-pane="look">
+        <h3 class="set-h">Theme<span class="act"><button class="btn sm ghost" id="btnImportTheme"><svg class="i"><use href="#i-download"/></svg>Import theme…</button><button class="btn sm" id="btnNewTheme"><svg class="i"><use href="#i-plus"/></svg>New theme</button></span></h3>
+        <div class="set-group set-free" data-k="theme colors colours logo">
+          <div class="themes" id="themeList"></div>
+          <div id="themeEditor" hidden style="margin-top:18px;padding-top:16px;border-top:var(--px) dashed var(--border)">
+            <div class="row" style="margin-bottom:14px">
+              <div class="field" style="flex:1;max-width:320px"><label>Theme name</label><input type="text" id="themeName" maxlength="40" placeholder="My theme"></div>
+              <div class="logo-pick">
+                <img class="logo" id="themeLogoPreview" alt="">
+                <div class="stack" style="gap:6px">
+                  <span class="muted small">Logo (shown pixelated)</span>
+                  <div class="row">
+                    <button class="btn sm" id="btnThemeLogo">Upload image…</button>
+                    <button class="btn sm ghost" data-logo-preset="st" translate="no">ST</button>
+                    <button class="btn sm ghost" data-logo-preset="fox" translate="no">Fox</button>
+                  </div>
                 </div>
+                <input type="file" id="themeLogoFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
               </div>
-              <input type="file" id="themeLogoFile" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+            </div>
+            <div class="editor" id="themeColors"></div>
+            <p class="muted small" style="margin-top:12px">Changes preview live. Other shades are mixed from these colors automatically.</p>
+            <div class="row" style="margin-top:12px">
+              <button class="btn primary" id="btnSaveTheme"><svg class="i"><use href="#i-check"/></svg>Save theme</button>
+              <button class="btn ghost" id="btnCancelTheme">Cancel</button>
+              <span class="muted small" id="themeError" style="color:var(--bad)"></span>
             </div>
           </div>
-          <div class="editor" id="themeColors"></div>
-          <p class="muted small" style="margin-top:12px">Changes preview live. Other shades are mixed from these colors automatically.</p>
-          <div class="row" style="margin-top:12px">
-            <button class="btn primary" id="btnSaveTheme"><svg class="i"><use href="#i-check"/></svg>Save theme</button>
-            <button class="btn ghost" id="btnCancelTheme">Cancel</button>
-            <span class="muted small" id="themeError" style="color:var(--bad)"></span>
+        </div>
+        <h3 class="set-h">Text</h3>
+        <div class="set-group">
+          <div class="set-row" data-k="language translation">
+            <div class="set-text"><b>Language</b></div>
+            <div class="set-ctl"><select id="setLang"></select></div>
+          </div>
+          <label class="set-row" data-k="language sillytavern translation">
+            <div class="set-text"><b>Also switch SillyTavern's language</b> <span class="tip" tabindex="0" role="note" aria-label="When SillyTavern has the same language. You can still change it in SillyTavern afterwards."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setStLang"></div>
+          </label>
+          <div class="set-row" data-k="font typeface letters">
+            <div class="set-text"><b>App font</b> <span class="tip" tabindex="0" role="note" aria-label="For this app and the SillyTavern window's top bar. SillyTavern's own pages keep their font."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><select id="setUiFont"></select></div>
+          </div>
+          <div class="set-row" data-k="size zoom scale bigger smaller">
+            <div class="set-text"><b>Size</b></div>
+            <div class="set-ctl"><div class="seg" id="setZoom"></div><button class="btn sm ghost" id="btnUiFontReset">Reset</button></div>
           </div>
         </div>
-      </div>
-      <div class="grid g2">
-        <div class="stack">
-          <div class="card stack">
-            <h2>SillyTavern install</h2>
-            <div class="path" id="curPath">—</div>
-            <div class="row">
-              <button class="btn sm" data-task id="btnChangeInstall"><svg class="i"><use href="#i-refresh"/></svg>Change…</button>
-              <button class="btn sm" data-task id="btnMoveST"><svg class="i"><use href="#i-folder"/></svg>Move to another folder…</button>
-              <button class="btn sm ghost" data-place="st"><svg class="i"><use href="#i-external"/></svg>Open</button>
-            </div>
-            <p class="muted small">This app can live anywhere — it remembers where SillyTavern is. <b style="color:var(--title)">Move</b> relocates the whole install, backups included.</p>
+        <h3 class="set-h">Console</h3>
+        <div class="set-group">
+          <div class="set-row" data-k="console font log size">
+            <div class="set-text"><b>Console font</b></div>
+            <div class="set-ctl"><select id="setLogFont"></select><input type="number" id="setLogSize" min="10" max="32" aria-label="Size" title="Size"><button class="btn sm ghost" id="btnLogFontReset">Reset</button></div>
           </div>
-          <div class="card stack">
-            <h2>Server</h2>
-            <div class="field">
-              <label>Port</label>
-              <input type="number" id="setPort" min="1" max="65535">
-            </div>
-            <p class="muted small">The port is passed to the server on start, overriding config.yaml. Changes apply the next time the server starts.</p>
-          </div>
-        </div>
-        <div class="card">
-          <h2>Behavior</h2>
-          <label class="switch"><input type="checkbox" id="setAuto"><div><b>Start automatically</b><span>Start the server and open SillyTavern when the app launches.</span></div></label>
-          <label class="switch"><input type="checkbox" id="setCheck"><div><b>Check for updates on launch</b><span>Shows "update available" on Home. Never updates by itself.</span></div></label>
-          <label class="switch"><input type="checkbox" id="setUpdLaunch"><div><b>Update SillyTavern on launch</b><span>When an update is out, install it before the server starts. Uses "Back up before updating".</span></div></label>
-          <label class="switch"><input type="checkbox" id="setAppUpd"><div><b>Check for app updates on launch</b><span>Looks for a new version of this app on GitHub and shows it on Home. Installs only when you click.</span></div></label>
-          <label class="switch"><input type="checkbox" id="setAppPreview"><div><b>Get preview versions of this app</b><span>Also offers test versions (pre-releases) before they become a regular release. New things sooner, but tested less. Turn it off to wait for the next regular release. Applies right away.</span></div></label>
-          <label class="switch"><input type="checkbox" id="setBackup"><div><b>Back up before updating</b><span>Zip your data before every update or channel switch.</span></div></label>
-          <label class="switch"><input type="checkbox" id="setConfirm"><div><b>Confirm before quitting</b><span>Ask before quitting while the server runs.</span></div></label>
-          <label class="switch"><input type="checkbox" id="setTray"><div><b>Keep running in the tray</b><span>Closing this window hides it to the tray (by the clock) and the server keeps running. Quit from the tray icon's menu.</span></div></label>
-          <div class="field" style="padding-top:10px;border-top:1px solid var(--border)">
-            <label>Automatic backups to keep (manual backups are never removed)</label>
-            <input type="number" id="setKeep" min="1" max="100" style="max-width:120px">
-          </div>
-          <div class="row" style="padding-top:10px;border-top:1px solid var(--border)">
-            <span class="muted small" id="appUpdStatus" style="flex:1"></span>
-            <button class="btn sm ghost" id="btnAppCheck"><svg class="i"><use href="#i-refresh"/></svg>Check for app updates</button>
-          </div>
-        </div>
-      </div>
-      <div class="grid g2" style="margin-top:16px">
-        <div class="card stack">
-          <h2>SillyTavern window</h2>
-          <div class="field">
-            <label>Window layer</label>
-            <div class="seg" id="setLayer" style="width:max-content;max-width:100%;flex-wrap:wrap">
-              <button data-layer="normal">Normal</button>
-              <button data-layer="top">On top</button>
-              <button data-layer="bottom">In background</button>
-            </div>
-          </div>
-          <p class="muted small"><b style="color:var(--title)">On top</b> keeps SillyTavern above every other app. <b style="color:var(--title)">In background</b> keeps it behind other apps, even while you use it — handy for a full-screen SillyTavern under your other windows. <b style="color:var(--title)">Normal</b> is the default. All three are also in the right-click menu of the window's top bar.</p>
-          <label class="switch" style="border-top:var(--px) dashed var(--border)"><input type="checkbox" id="setTabs"><div><b>Open new pages as tabs</b><span>Pages SillyTavern or an extension opens become tabs in the SillyTavern window, like a browser (Ctrl+T new tab, Ctrl+W close, Ctrl+Tab switch). Off: they open as separate windows.</span></div></label>
-          <p class="muted small"><b style="color:var(--title)">F11</b> toggles full screen. In full screen, move the mouse to the top edge to show the bar. Drag tabs to reorder them, or out of the bar into a window of their own.</p>
-          <div class="field" style="padding-top:10px;border-top:var(--px) dashed var(--border)">
-            <label>Right-click → Search selected text with</label>
-            <select id="setSearch" style="max-width:220px"><option value="google">Google</option><option value="duckduckgo">DuckDuckGo</option><option value="bing">Bing</option></select>
-          </div>
-          <div class="field" style="padding-top:10px;border-top:var(--px) dashed var(--border)">
-            <label>Spellchecker (red underlines)</label>
-            <select id="setSpell" style="max-width:320px"><option value="windows">Windows' own (needs the language in Windows)</option><option value="builtin">Built-in English (works on every PC)</option></select>
-            <p class="muted small" id="setSpellNote" style="margin-top:4px">Windows' own only marks mistakes in languages installed in Windows. The built-in one downloads an English dictionary once from Google. Changing it needs a restart.</p>
-            <button class="btn sm" id="btnSpellRestart" hidden style="margin-top:6px;width:max-content"><svg class="i"><use href="#i-refresh"/></svg>Restart now</button>
-          </div>
-          <label class="switch" style="border:0;padding:0"><input type="checkbox" id="setInspect"><div><b>Show "Inspect element" in the right-click menu</b><span>Opens Chromium's developer tools on what you clicked. For making themes, userscripts and extensions.</span></div></label>
-        </div>
-        <div class="card stack">
-          <h2>Console font</h2>
-          <div class="row" style="align-items:flex-end">
-            <div class="field" style="flex:1;min-width:0"><label>Font</label><select id="setLogFont"></select></div>
-            <div class="field"><label>Size</label><input type="number" id="setLogSize" min="10" max="32" style="width:80px"></div>
-            <button class="btn sm ghost" id="btnLogFontReset">Reset</button>
-          </div>
-          <div class="log-preview" translate="no"><span class="l-ok">[12:00:01] SillyTavern is listening on IPv4: 127.0.0.1:8000</span>
+          <div class="set-row set-free" data-k="console font log preview">
+            <div class="log-preview" translate="no"><span class="l-ok">[12:00:01] SillyTavern is listening on IPv4: 127.0.0.1:8000</span>
 <span class="l-warn">[12:00:02] WARNING: an extension is out of date</span>
 [12:00:03] 0123456789 — The quick brown fox jumps over the lazy dog</div>
-          <p class="muted small">Used by the Console page and the activity logs. Applies right away.</p>
+          </div>
         </div>
       </div>
-      <div class="card stack" style="margin-top:16px">
-        <h2>Phone & tablet</h2>
-        <label class="switch" style="border-top:0;padding-top:0"><input type="checkbox" id="setLan"><div><b>Use SillyTavern from your phone</b><span>Phones, tablets and other PCs on the same Wi-Fi can open your SillyTavern. Only devices on your own home network can connect. Home shows the address and a QR code.</span></div></label>
-        <div class="row" style="align-items:flex-end">
-          <div class="field"><label>User name</label><input type="text" id="setLanUser" maxlength="64" autocomplete="off" style="width:160px"></div>
-          <div class="field"><label>Password (optional, recommended)</label><input type="password" id="setLanPass" maxlength="128" autocomplete="new-password" style="width:220px"></div>
-          <button class="btn sm ghost" id="btnLanClear" hidden>Remove password</button>
+
+      <!-- ===== Start & updates ===== -->
+      <div class="set-pane" data-pane="start" hidden>
+        <h3 class="set-h">When this app opens</h3>
+        <div class="set-group">
+          <label class="set-row" data-k="start automatically autostart launch open">
+            <div class="set-text"><b>Start SillyTavern automatically</b></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setAuto"></div>
+          </label>
+          <label class="set-row" data-k="check updates sillytavern launch">
+            <div class="set-text"><b>Check for SillyTavern updates</b> <span class="tip" tabindex="0" role="note" aria-label="Shows them on Home. Never updates by itself."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setCheck"></div>
+          </label>
+          <label class="set-row" data-k="update sillytavern automatically launch">
+            <div class="set-text"><b>Update SillyTavern automatically</b> <span class="tip" tabindex="0" role="note" aria-label="Installs an update before the server starts."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setUpdLaunch"></div>
+          </label>
+          <label class="set-row" data-k="check app updates desktop github">
+            <div class="set-text"><b>Check for updates of this app</b></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setAppUpd"></div>
+          </label>
         </div>
-        <p class="muted small">With a password, other devices must sign in; this app signs in by itself. Anyone on your Wi-Fi could open SillyTavern without one, so set one unless you trust everyone on it. SillyTavern's own config.yaml is never changed.</p>
-        <div class="row">
-          <button class="btn sm primary" id="btnLanSave"><svg class="i"><use href="#i-check"/></svg>Save phone settings</button>
-          <span class="muted small" id="lanStatus"></span>
+        <h3 class="set-h">Updates</h3>
+        <div class="set-group">
+          <div class="set-row" data-k="channel branch release staging version">
+            <div class="set-text"><b>SillyTavern channel</b> <span class="tip" tabindex="0" role="note" aria-label="Release is the stable version most people use. Staging gets new features first and changes daily, but can break."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc" id="branchNote" hidden></span></div>
+            <div class="set-ctl"><div class="seg" id="setBranch"><button data-task data-branch="release">Release</button><button data-task data-branch="staging">Staging</button></div></div>
+          </div>
+          <label class="set-row" data-k="backup before updating zip">
+            <div class="set-text"><b>Back up before updating</b></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setBackup"></div>
+          </label>
+          <div class="set-row" data-k="backups keep automatic number">
+            <div class="set-text"><b>Automatic backups to keep</b> <span class="tip" tabindex="0" role="note" aria-label="Backups you make yourself are never removed."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="number" id="setKeep" min="1" max="100"></div>
+          </div>
+          <label class="set-row" data-k="preview versions pre-release beta app">
+            <div class="set-text"><b>Get preview versions of this app</b> <span class="tip" tabindex="0" role="note" aria-label="Test versions before a regular release: new things sooner, but tested less."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setAppPreview"></div>
+          </label>
+        </div>
+        <h3 class="set-h">Start with SillyTavern<span class="act"><button class="btn sm" id="btnCompAdd"><svg class="i"><use href="#i-plus"/></svg>Add program…</button></span></h3>
+        <div class="set-group set-free" data-k="programs companions start with sillytavern koboldcpp scripts">
+          <div class="list" id="compList"></div>
+        </div>
+        <h3 class="set-h">Closing</h3>
+        <div class="set-group">
+          <label class="set-row" data-k="tray close minimize background">
+            <div class="set-text"><b>Keep running in the tray</b> <span class="tip" tabindex="0" role="note" aria-label="Closing this window hides it next to the clock and the server keeps running. Quit from the tray icon's menu."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setTray"></div>
+          </label>
+          <label class="set-row" data-k="confirm quit quitting ask">
+            <div class="set-text"><b>Ask before quitting while the server runs</b></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setConfirm"></div>
+          </label>
         </div>
       </div>
-      <div class="card stack" style="margin-top:16px">
-        <h2>Away from home</h2>
-        <div class="tool" style="border:0;padding:0;background:none">
-          <b>Remote link</b>
-          <p>A temporary https address from Cloudflare that reaches your SillyTavern from anywhere (mobile data, another house) while it runs. It needs the password above: anyone who gets the link sees the login. A new address every time; it stops with the server.</p>
-          <div class="row" style="gap:8px"><button class="btn sm primary" id="btnTunStart"><svg class="i"><use href="#i-play"/></svg>Start remote link</button><button class="btn sm danger" id="btnTunStop" hidden><svg class="i"><use href="#i-stop"/></svg>Stop</button><span class="muted small" id="tunState" style="flex:1;min-width:200px"></span><button class="link" data-link="remoteDocs">About remote connections</button></div>
+
+      <!-- ===== SillyTavern window ===== -->
+      <div class="set-pane" data-pane="window" hidden>
+        <h3 class="set-h">SillyTavern window</h3>
+        <div class="set-group">
+          <div class="set-row" data-k="window layer on top background always">
+            <div class="set-text"><b>Window layer</b> <span class="tip" tabindex="0" role="note" aria-label="On top: above every other app. In background: behind other apps, even while you use it. Also in the right-click menu of the window's top bar."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><div class="seg" id="setLayer"><button data-layer="normal">Normal</button><button data-layer="top">On top</button><button data-layer="bottom">In background</button></div></div>
+          </div>
+          <label class="set-row" data-k="tabs new pages windows">
+            <div class="set-text"><b>Open new pages as tabs</b> <span class="tip" tabindex="0" role="note" aria-label="Off: they open as separate windows."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setTabs"></div>
+          </label>
+          <div class="set-row" data-k="keyboard shortcuts keys full screen f11">
+            <div class="set-text"><b>Keyboard shortcuts</b> <span class="tip" tabindex="0" role="note" aria-label="F11: full screen (move the mouse to the top edge for the bar). Ctrl+T: new tab. Ctrl+W: close tab. Ctrl+Tab or Ctrl+PgUp/PgDn: switch tabs. Ctrl+Shift+PgUp/PgDn: move a tab. Drag a tab out of the bar for a window of its own."><svg class="i"><use href="#i-info"/></svg></span></div>
+          </div>
         </div>
-        <div class="tool" style="border:0;padding:12px 0 0;background:none;border-top:var(--px) dashed var(--border)">
-          <b translate="no">Tailscale</b>
-          <p>A private network between your own devices, free for personal use. With Tailscale on this PC and your phone (same account) and phone access on, your phone reaches SillyTavern from anywhere, without a public address.</p>
-          <div class="row" style="gap:8px"><span class="muted small" id="tsState" style="flex:1;min-width:200px">Checking…</span><button class="btn sm" data-task id="btnTsInstall" hidden><svg class="i"><use href="#i-download"/></svg>Install Tailscale</button><button class="btn sm ghost" data-link="tailscale" translate="no">tailscale.com</button></div>
+        <h3 class="set-h">Right-click and spelling</h3>
+        <div class="set-group">
+          <div class="set-row" data-k="search right-click google duckduckgo bing">
+            <div class="set-text"><b>Search selected text with</b></div>
+            <div class="set-ctl"><select id="setSearchEngine"><option value="google">Google</option><option value="duckduckgo">DuckDuckGo</option><option value="bing">Bing</option></select></div>
+          </div>
+          <div class="set-row" data-k="spellchecker spelling red underline dictionary">
+            <div class="set-text"><b>Spellchecker</b> <span class="tip" tabindex="0" role="note" aria-label="Windows' own only marks mistakes in languages installed in Windows. The built-in one downloads an English dictionary once from Google."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc" id="setSpellNote" hidden>Takes effect after a restart.</span></div>
+            <div class="set-ctl"><select id="setSpell"><option value="windows">Windows' own</option><option value="builtin">Built-in English</option></select><button class="btn sm" id="btnSpellRestart" hidden><svg class="i"><use href="#i-refresh"/></svg>Restart now</button></div>
+          </div>
+          <label class="set-row" data-k="inspect element developer tools devtools">
+            <div class="set-text"><b>"Inspect element" in the right-click menu</b> <span class="tip" tabindex="0" role="note" aria-label="Opens the developer tools on what you clicked. For making themes, userscripts and extensions."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setInspect"></div>
+          </label>
         </div>
       </div>
-      <div class="card stack" style="margin-top:16px">
-        <h2>SillyTavern server options<span class="act row" style="gap:8px"><button class="btn sm ghost" data-place="config" translate="no"><svg class="i"><use href="#i-external"/></svg>config.yaml</button></span></h2>
-        <p class="muted small">Options SillyTavern usually takes from its config.yaml. This app passes your choice to the server when it starts and never edits config.yaml; "As in config.yaml" leaves it to the file.</p>
-        <label class="switch" style="border-top:0"><input type="checkbox" id="setHttps"><div><b>HTTPS (encrypted connection)</b><span>Serves SillyTavern with this app's own certificate. Phones and browsers warn once that they don't know the certificate; that's expected for a self-made one. Useful for phone access, where some browser features need https.</span></div></label>
-        <p class="muted small" id="httpsInfo" hidden></p>
-        <div class="list" id="soList"></div>
-        <div class="row"><button class="btn sm primary" id="btnSoRestart" hidden><svg class="i"><use href="#i-refresh"/></svg>Restart server to apply</button><span class="muted small" id="soNote"></span></div>
+
+      <!-- ===== Server ===== -->
+      <div class="set-pane" data-pane="server" hidden>
+        <h3 class="set-h">SillyTavern</h3>
+        <div class="set-group">
+          <div class="set-row set-wrap" data-k="folder install path move change location">
+            <div class="set-text"><b>Folder</b><span class="set-desc mono" id="curPath">—</span></div>
+            <div class="set-ctl">
+              <button class="btn sm" data-task id="btnChangeInstall">Change…</button>
+              <button class="btn sm" data-task id="btnMoveST">Move…</button>
+              <button class="btn sm ghost" data-place="st"><svg class="i"><use href="#i-folder"/></svg>Open</button>
+            </div>
+          </div>
+          <div class="set-row" data-k="port number address">
+            <div class="set-text"><b>Port</b> <span class="tip" tabindex="0" role="note" aria-label="Passed to the server when it starts, instead of the port in config.yaml."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc" id="setPortNote" hidden>Stop the server to change it.</span></div>
+            <div class="set-ctl"><input type="number" id="setPort" min="1" max="65535"></div>
+          </div>
+          <label class="set-row" data-k="https encrypted certificate ssl secure">
+            <div class="set-text"><b>HTTPS</b> <span class="tip" tabindex="0" role="note" aria-label="Serves SillyTavern with this app's own certificate. Browsers and phones warn once that they don't know it; that's expected. Some browser features on phones need https."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc" id="httpsInfo" hidden></span></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setHttps"></div>
+          </label>
+        </div>
+        <details class="set-more" id="setAdvanced" data-k="config.yaml advanced options user accounts plugins proxy thumbnails lazy discreet">
+          <summary>Advanced: config.yaml options</summary>
+          <div class="set-group set-free">
+            <div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="muted small">"As in config.yaml" leaves it to the file. This app never edits config.yaml.</span><button class="btn sm ghost" data-place="config" translate="no"><svg class="i"><use href="#i-external"/></svg>config.yaml</button></div>
+            <div class="list" id="soList"></div>
+          </div>
+        </details>
       </div>
-      <div class="card stack" style="margin-top:16px">
-        <h2>Start with SillyTavern<span class="act row"><button class="btn sm" id="btnCompAdd"><svg class="i"><use href="#i-plus"/></svg>Add program…</button></span></h2>
-        <p class="muted small">Programs or scripts that start when the server starts, such as KoboldCpp or a voice app. Stopped together with the server when you tick it.</p>
-        <div class="list" id="compList"></div>
+
+      <!-- ===== Phone & remote ===== -->
+      <div class="set-pane" data-pane="phone" hidden>
+        <h3 class="set-h">Phone &amp; tablet</h3>
+        <div class="set-group">
+          <label class="set-row" data-k="phone tablet wifi lan network access">
+            <div class="set-text"><b>Use SillyTavern from your phone</b> <span class="tip" tabindex="0" role="note" aria-label="Phones, tablets and other PCs on your home network can open your SillyTavern. Home shows the address and a QR code. SillyTavern's config.yaml is never changed."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="checkbox" class="tgl" id="setLan"></div>
+          </label>
+          <div class="set-row set-wrap" data-k="login user name password phone">
+            <div class="set-text"><b>Login</b> <span class="tip" tabindex="0" role="note" aria-label="Other devices sign in with it; this app signs in by itself. Also needed for the remote link."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc set-warn" id="lanNoPass" hidden>No password: anyone on your Wi-Fi can open SillyTavern.</span></div>
+            <div class="set-ctl">
+              <input type="text" id="setLanUser" maxlength="64" autocomplete="off" aria-label="User name" placeholder="User name">
+              <input type="password" id="setLanPass" maxlength="128" autocomplete="new-password" aria-label="Password">
+              <button class="btn sm primary" id="btnLanSave">Save</button>
+              <button class="btn sm ghost" id="btnLanClear" hidden>Remove password</button>
+            </div>
+          </div>
+          <div class="set-row set-free" id="lanStatusRow" hidden><span class="muted small" id="lanStatus"></span></div>
+        </div>
+        <h3 class="set-h">Away from home</h3>
+        <div class="set-group">
+          <div class="set-row set-wrap" data-k="remote link cloudflare tunnel internet mobile data">
+            <div class="set-text"><b>Remote link</b> <span class="tip" tabindex="0" role="note" aria-label="A temporary https address from Cloudflare that reaches your SillyTavern from anywhere while it runs. Anyone with the link sees the login, so it needs the password above. A new address every time; it stops with the server."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc" id="tunState"></span></div>
+            <div class="set-ctl"><button class="btn sm primary" id="btnTunStart"><svg class="i"><use href="#i-play"/></svg>Start</button><button class="btn sm danger" id="btnTunStop" hidden><svg class="i"><use href="#i-stop"/></svg>Stop</button><button class="link" data-link="remoteDocs">About remote connections</button></div>
+          </div>
+          <div class="set-row set-wrap" data-k="tailscale vpn private network">
+            <div class="set-text"><b translate="no">Tailscale</b> <span class="tip" tabindex="0" role="note" aria-label="A private network between your own devices, free for personal use. With Tailscale on this PC and your phone and phone access on, your phone reaches SillyTavern from anywhere without a public address."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc" id="tsState">Checking…</span></div>
+            <div class="set-ctl"><button class="btn sm" data-task id="btnTsInstall" hidden><svg class="i"><use href="#i-download"/></svg>Install</button><button class="btn sm ghost" data-link="tailscale" translate="no">tailscale.com</button></div>
+          </div>
+        </div>
       </div>
-      <div style="margin-top:16px"><button class="btn primary" id="btnSave"><svg class="i"><use href="#i-check"/></svg>Save settings</button></div>
+
+      <!-- ===== About ===== -->
+      <div class="set-pane" data-pane="about" hidden>
+        <div class="set-group set-about">
+          <img class="logo" data-logo alt="">
+          <div class="set-text"><b translate="no">SillyTavern Desktop</b><span class="set-desc" id="appUpdStatus"></span></div>
+          <div class="set-ctl"><button class="btn sm" id="btnAppCheck"><svg class="i"><use href="#i-refresh"/></svg>Check for updates</button></div>
+        </div>
+        <div class="set-group set-free set-links">
+          <button class="btn sm ghost" data-link="desktopReleases"><svg class="i"><use href="#i-book"/></svg>What's new</button>
+          <button class="btn sm ghost" data-link="desktop"><svg class="i"><use href="#i-external"/></svg>Project page</button>
+          <button class="btn sm ghost" data-link="issues"><svg class="i"><use href="#i-alert"/></svg>Report a problem</button>
+          <button class="btn sm ghost" data-link="docs"><svg class="i"><use href="#i-book"/></svg>SillyTavern documentation</button>
+          <button class="btn sm ghost" data-link="discord" translate="no"><svg class="i"><use href="#i-chat"/></svg>Discord</button>
+          <button class="btn sm ghost" data-link="reddit" translate="no"><svg class="i"><use href="#i-users"/></svg>r/SillyTavernAI</button>
+        </div>
+        <p class="muted small" style="margin:10px 2px">Free software under the AGPL-3.0 license. Not made by the SillyTavern team.</p>
+        <div class="set-group" data-k="reset defaults restore">
+          <div class="set-row">
+            <div class="set-text"><b>Reset settings</b> <span class="tip" tabindex="0" role="note" aria-label="Look, start-up, updates and SillyTavern window options go back to their defaults. Your SillyTavern folders, profiles, phone access, server options and programs stay as they are."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><button class="btn sm danger" id="btnSetReset">Reset…</button></div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- ===== Console (docked under every page) ===== -->
@@ -1361,6 +1501,8 @@
   const remember = (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* not available */ } };
   const recall = k => { try { return sessionStorage.getItem(k); } catch { return null; } };
   function go(page) {
+    const [name, pane] = page.split(':');
+    page = name;
     state.page = page;
     remember('page', page);
     document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
@@ -1368,6 +1510,7 @@
     $('pageTitle').textContent = TITLES[page];
     if (dock.max) setDockMax(false);
     loadPage(page);
+    if (page === 'settings') showSetPane(pane || recall('setPane') || 'look');
   }
   document.querySelectorAll('#nav button').forEach(b => b.onclick = () => go(b.dataset.page));
   document.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => go(b.dataset.goto));
@@ -1411,7 +1554,7 @@
     if (page === 'extensions') { loadExtensions(false); loadKits(); if (state.extTab === 'desktop') loadDesktopExtensions(); }
     if (page === 'maintenance') { loadBackend(); loadHealth(); loadInfo(); loadPc(); loadTrouble(); }
     if (page === 'aiapps') loadAi();
-    if (page === 'settings') { loadSettingsForm({ fresh: true }); loadServerOptions(); loadCompanions(); loadTunnel(); loadTailscale(); }
+    if (page === 'settings') { loadSettingsForm({ fresh: true }); loadServerOptions(); loadCompanions(); loadTunnel(); loadTailscale(); loadInfo(); }
   }
 
   // ---------- server status ----------
@@ -1431,6 +1574,7 @@
     const w = state.windows;
     $('btnOpen').lastElementChild.textContent = !w.open ? T('Open SillyTavern') : w.minimized ? T('Restore SillyTavern') : T('Show SillyTavern');
     $('btnMinST').hidden = !w.open || w.minimized;
+    if (state.page === 'settings') { renderPortLock(); loadRestartBar(); }
   }
   function setBusy(label) {
     state.busy = label;
@@ -1451,7 +1595,9 @@
     $('infoVersion').textContent = info.version ? `SillyTavern ${info.version}` : T('Not found');
     $('infoVersion').title = info.commit ? T('Last change: {date} · {commit}', { date: info.commitDate, commit: info.commit }) : '';
     $('infoBranch').innerHTML = info.branch ? `<span class="tag fox">${esc(info.branch)}</span>` : info.pinned ? `<span class="tag">${T('fixed at {version}', { version: esc(info.pinned) })}</span>` : '';
-    $('branchTag').textContent = info.branch || (info.pinned ? T('version {version} (fixed)', { version: info.pinned }) : T('unknown'));
+    document.querySelectorAll('#setBranch button').forEach(b => b.classList.toggle('on', b.dataset.branch === info.branch));
+    $('branchNote').hidden = !info.pinned;
+    $('branchNote').textContent = info.pinned ? T('Now: version {version} (fixed, no updates)', { version: info.pinned }) : '';
     const tag = $('updateTag');
     const upd = $('btnUpdate');
     $('btnIncoming').hidden = true;
@@ -1462,7 +1608,7 @@
     } else if (info.pinned) {
       // Downloaded as a specific version: on no branch, so never "behind".
       tag.className = 'tag'; tag.textContent = T('Fixed version');
-      $('updateHint').textContent = T('Not updated. For updates, choose release or staging in Tools.');
+      $('updateHint').textContent = T('Not updated. For updates, choose release or staging in Settings → Start & updates.');
       upd.hidden = true;
     } else if (info.behind > 0) {
       tag.className = 'tag fox'; tag.textContent = T('Update available');
@@ -1567,20 +1713,26 @@
     $('setLanPass').value = '';
     $('setLanPass').placeholder = info.hasPassword ? T('Saved (type to change)') : T('None');
     $('btnLanClear').hidden = !info.hasPassword;
+    $('lanNoPass').hidden = info.hasPassword;
   }
-  async function saveLan(password) {
+  async function saveLan(password, { login = false } = {}) {
     $('btnLanSave').disabled = true;
-    $('lanStatus').textContent = state.running ? T('Saving… the server restarts if needed.') : T('Saving…');
-    const info = await D.lanSave({ on: $('setLan').checked, user: $('setLanUser').value, password });
-    unsaved.lan = false;
-    $('btnLanSave').disabled = false;
-    $('lanStatus').textContent = T('Saved.');
-    setTimeout(() => { $('lanStatus').textContent = ''; }, 2500);
+    let info;
+    try { info = await D.lanSave({ on: $('setLan').checked, user: $('setLanUser').value, password, restart: false }); } finally { $('btnLanSave').disabled = false; }
+    if (login) unsaved.lan = false;
+    if (login) {
+      $('lanStatusRow').hidden = false;
+      $('lanStatus').textContent = T('Saved.');
+      setTimeout(() => { $('lanStatusRow').hidden = true; }, 2500);
+    }
     loadLan(info);
-    fillLanForm();
+    if (!unsaved.lan) fillLanForm();
+    loadRestartBar();
   }
-  $('btnLanSave').onclick = () => saveLan($('setLanPass').value || undefined);
-  $('btnLanClear').onclick = () => saveLan(null);
+  $('setLan').onchange = () => saveLan(undefined);
+  $('btnLanSave').onclick = () => saveLan($('setLanPass').value || undefined, { login: true });
+  $('setLanPass').onkeydown = e => { if (e.key === 'Enter') $('btnLanSave').click(); };
+  $('btnLanClear').onclick = () => saveLan(null, { login: true });
   $('btnLanRestart').onclick = async () => loadLan(await D.lanSave({ on: state.lan.on, user: state.lan.user }));
 
   // ---------- backups ----------
@@ -2152,53 +2304,125 @@
   $('btnClearLog').onclick = () => { if (dock.src) dock.lines = []; else state.logs = []; renderConsole(); };
 
   // ---------- settings ----------
+  // Every setting applies as soon as it changes. Settings updates from elsewhere
+  // (font, the SillyTavern window) refill the form; the phone login keeps what
+  // is being typed until it's saved.
   let current = {};
-  // Fields that wait for "Save settings" / "Save phone settings". Settings
-  // updates from elsewhere (font, schedule, the SillyTavern window) refill the
-  // form; fields changed but not saved yet keep what was typed.
-  const SAVE_FIELDS = ['setPort', 'setAuto', 'setCheck', 'setUpdLaunch', 'setAppUpd', 'setBackup', 'setConfirm', 'setTray', 'setKeep'];
-  const LAN_FIELDS = ['setLan', 'setLanUser', 'setLanPass'];
-  const unsaved = { form: false, lan: false };
-  SAVE_FIELDS.forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, () => { unsaved.form = true; })));
-  LAN_FIELDS.forEach(id => ['input', 'change'].forEach(ev => $(id).addEventListener(ev, () => { unsaved.lan = true; })));
+  const unsaved = { lan: false };
+  ['setLanUser', 'setLanPass'].forEach(id => $(id).addEventListener('input', () => { unsaved.lan = true; }));
   function loadSettingsForm({ fresh = false } = {}) {
-    if (fresh) unsaved.form = unsaved.lan = false;
+    if (fresh) unsaved.lan = false;
     $('curPath').textContent = current.sillytavernPath || T('Not set');
     $('setAppPreview').checked = !!current.appPreview;
-    if (!unsaved.form) {
-      $('setPort').value = current.port;
-      $('setAuto').checked = current.autoStart;
-      $('setCheck').checked = current.checkUpdatesOnLaunch;
-      $('setUpdLaunch').checked = !!current.updateOnLaunch;
-      $('setAppUpd').checked = current.checkAppUpdates !== false;
-      $('setBackup').checked = current.backupBeforeUpdate;
-      $('setConfirm').checked = current.confirmBeforeQuit;
-      $('setTray').checked = !!current.closeToTray;
-      $('setKeep').value = current.backupKeep;
-    }
+    if (document.activeElement !== $('setPort')) $('setPort').value = current.port;
+    $('setAuto').checked = current.autoStart;
+    $('setCheck').checked = current.checkUpdatesOnLaunch;
+    $('setUpdLaunch').checked = !!current.updateOnLaunch;
+    $('setAppUpd').checked = current.checkAppUpdates !== false;
+    $('setBackup').checked = current.backupBeforeUpdate;
+    $('setConfirm').checked = current.confirmBeforeQuit;
+    $('setTray').checked = !!current.closeToTray;
+    if (document.activeElement !== $('setKeep')) $('setKeep').value = current.backupKeep;
     document.querySelectorAll('#setLayer button').forEach(b => b.classList.toggle('on', b.dataset.layer === (current.windowLayer || 'normal')));
     $('setTabs').checked = current.tabs !== false;
-    $('setSearch').value = current.searchEngine || 'google';
+    $('setSearchEngine').value = current.searchEngine || 'google';
     $('setInspect').checked = !!current.inspectMenu;
+    renderPortLock();
     loadSpellEngine();
     renderLangForm();
     renderLogFontForm();
     renderUiFontForm();
     if (!unsaved.lan) fillLanForm();
   }
+  const saveNow = async s => { await D.saveSettings(s); current = { ...current, ...s }; };
+  const TOGGLES = { setAuto: 'autoStart', setCheck: 'checkUpdatesOnLaunch', setUpdLaunch: 'updateOnLaunch', setAppUpd: 'checkAppUpdates', setBackup: 'backupBeforeUpdate', setConfirm: 'confirmBeforeQuit', setTray: 'closeToTray', setInspect: 'inspectMenu' };
+  for (const [id, key] of Object.entries(TOGGLES)) $(id).onchange = () => saveNow({ [key]: $(id).checked });
+  const clampInt = (v, min, max, def) => Math.min(max, Math.max(min, parseInt(v, 10) || def));
+  $('setKeep').onchange = () => { const n = clampInt($('setKeep').value, 1, 100, 10); $('setKeep').value = n; saveNow({ backupKeep: n }); };
+  // The window and the server agree on the port only while the server is stopped.
+  function renderPortLock() {
+    $('setPort').disabled = state.running;
+    $('setPortNote').hidden = !state.running;
+  }
+  $('setPort').onchange = () => { const n = clampInt($('setPort').value, 1, 65535, 8000); $('setPort').value = n; saveNow({ port: n }); };
   document.querySelectorAll('#setLayer button').forEach(b => b.onclick = () => D.setLayer(b.dataset.layer));
   $('setTabs').onchange = () => D.setTabs($('setTabs').checked);
-  // Right-click menu options apply at once (the next menu uses them).
-  const saveNow = async s => { await D.saveSettings(s); current = { ...current, ...s }; };
-  $('setSearch').onchange = () => saveNow({ searchEngine: $('setSearch').value });
-  $('setInspect').onchange = () => saveNow({ inspectMenu: $('setInspect').checked });
+  $('setSearchEngine').onchange = () => saveNow({ searchEngine: $('setSearchEngine').value });
   async function loadSpellEngine() {
     const s = await D.spellEngine();
     $('setSpell').value = s.chosen;
-    $('btnSpellRestart').hidden = s.chosen === s.engine;
+    $('btnSpellRestart').hidden = $('setSpellNote').hidden = s.chosen === s.engine;
   }
   $('setSpell').onchange = async () => { await D.setSpellEngine($('setSpell').value); loadSpellEngine(); };
   $('btnSpellRestart').onclick = () => D.relaunch();
+  $('btnSetReset').onclick = async () => {
+    if (!(await D.settingsReset())) return;
+    current = (await D.getState()).settings;
+    loadSettingsForm();
+  };
+
+  // ----- categories and search -----
+  function showSetPane(name) {
+    if (!document.querySelector(`.set-pane[data-pane="${CSS.escape(name)}"]`)) name = 'look';
+    remember('setPane', name);
+    if ($('setSearch').value) { $('setSearch').value = ''; filterSettings(); }
+    document.querySelectorAll('#setTabsBar button').forEach(b => { b.classList.toggle('on', b.dataset.pane === name); b.setAttribute('aria-selected', String(b.dataset.pane === name)); b.tabIndex = b.dataset.pane === name ? 0 : -1; });
+    document.querySelectorAll('.set-pane').forEach(p => { p.hidden = p.dataset.pane !== name; });
+    $('page-settings').scrollTop = 0;
+  }
+  document.querySelectorAll('#setTabsBar button').forEach(b => b.onclick = () => showSetPane(b.dataset.pane));
+  // Left/Right/Home/End move between the tabs, like any tab list.
+  $('setTabsBar').onkeydown = e => {
+    const tabs = [...$('setTabsBar').querySelectorAll('button')];
+    const i = tabs.indexOf(document.activeElement);
+    const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+    if (i < 0 || j === undefined) return;
+    e.preventDefault();
+    const t = tabs[(j + tabs.length) % tabs.length];
+    showSetPane(t.dataset.pane);
+    t.focus();
+  };
+  // Matches a row's title, its ⓘ text and its keywords; shows every category's matches at once.
+  function filterSettings() {
+    const q = $('setSearch').value.trim().toLowerCase();
+    const page = $('page-settings');
+    page.classList.toggle('searching', !!q);
+    let any = false;
+    for (const pane of document.querySelectorAll('.set-pane')) {
+      let paneHit = false;
+      for (const group of pane.querySelectorAll(':scope > .set-group, :scope > .set-more')) {
+        const rows = group.matches('.set-free, .set-more') ? [group] : [...group.querySelectorAll(':scope > .set-row')];
+        let groupHit = false;
+        for (const row of rows) {
+          const text = `${row.textContent} ${row.dataset.k || ''} ${[...row.querySelectorAll('[aria-label]')].map(e => e.getAttribute('aria-label')).join(' ')}`.toLowerCase();
+          const hit = !q || text.includes(q);
+          row.classList.toggle('set-miss', !hit);
+          if (hit) groupHit = true;
+        }
+        group.classList.toggle('set-miss', !groupHit);
+        if (q && groupHit && group.matches('.set-more')) group.open = true;
+        const head = group.previousElementSibling;
+        if (head?.matches('.set-h')) head.classList.toggle('set-miss', !groupHit);
+        if (groupHit) paneHit = true;
+      }
+      pane.hidden = q ? !paneHit : pane.dataset.pane !== (recall('setPane') || 'look');
+      if (paneHit) any = true;
+    }
+    $('setNoMatch').hidden = !q || any;
+  }
+  $('setSearch').oninput = filterSettings;
+  $('setSearch').onkeydown = e => { if (e.key === 'Escape' && $('setSearch').value) { e.stopPropagation(); $('setSearch').value = ''; filterSettings(); } };
+
+  // ----- one "Restart server" for every change that waits for it -----
+  async function loadRestartBar(r) {
+    r = r || await D.serverOptions();
+    $('setRestartBar').hidden = !r.needsRestart;
+  }
+  $('btnSetRestart').onclick = async () => {
+    $('btnSetRestart').disabled = true;
+    try { renderServerOptions(await D.serverRestart()); } finally { $('btnSetRestart').disabled = false; }
+    loadLan();
+  };
 
   // ----- console font: presets first, then every installed font -----
   const LOG_FONTS = [['', T('Pixel (default)'), 18], ['Departure Mono', T('Departure Mono (pixel)'), 14], ['Cascadia Mono', 'Cascadia Mono', 14], ['Consolas', 'Consolas', 14], ['Courier New', 'Courier New', 14], ['Segoe UI', 'Segoe UI', 14]];
@@ -2270,24 +2494,6 @@
   }
   $('setUiFont').onchange = () => saveUiFont({ font: $('setUiFont').value });
   $('btnUiFontReset').onclick = () => saveUiFont({ font: '', zoom: 100 });
-  $('btnSave').onclick = async () => {
-    const s = {
-      port: Math.min(65535, Math.max(1, parseInt($('setPort').value, 10) || 8000)),
-      autoStart: $('setAuto').checked,
-      checkUpdatesOnLaunch: $('setCheck').checked,
-      updateOnLaunch: $('setUpdLaunch').checked,
-      checkAppUpdates: $('setAppUpd').checked,
-      backupBeforeUpdate: $('setBackup').checked,
-      confirmBeforeQuit: $('setConfirm').checked,
-      closeToTray: $('setTray').checked,
-      backupKeep: Math.min(100, Math.max(1, parseInt($('setKeep').value, 10) || 10)),
-    };
-    await D.saveSettings(s);
-    unsaved.form = false;
-    current = { ...current, ...s };
-    $('btnSave').innerHTML = `${icon('check')}${T('Saved')}`;
-    setTimeout(() => $('btnSave').innerHTML = `${icon('check')}${T('Save settings')}`, 1500);
-  };
 
   // ---------- welcome / setup ----------
   // Shown on first launch when no install is known, or from Settings → Change.
@@ -2450,7 +2656,7 @@
     if (!o) return '';
     const tip = `${o.fixes.length
       ? T('{n} newer release (latest {latest}), with security fixes this one doesn\'t have.|{n} newer releases (latest {latest}), with security fixes this one doesn\'t have.', { n: o.newer, latest: o.latest })
-      : T('{n} newer release (latest {latest}).|{n} newer releases (latest {latest}).', { n: o.newer, latest: o.latest })} ${p.branch ? (p.active ? T('Update it from Home.') : T('Switch to it, then update it from Home.')) : T('It is a fixed version: switch it to release or staging in Tools to get updates.')}`;
+      : T('{n} newer release (latest {latest}).|{n} newer releases (latest {latest}).', { n: o.newer, latest: o.latest })} ${p.branch ? (p.active ? T('Update it from Home.') : T('Switch to it, then update it from Home.')) : T('It is a fixed version: switch it to release or staging in Settings → Start & updates to get updates.')}`;
     return `<span class="tag warn" title="${esc(tip)}">${o.fixes.length ? `⚠ ${T('missing security fixes')}` : T('older version')}</span>`;
   }
   function renderProfiles() {
@@ -2578,7 +2784,7 @@
     const v = ref === 'release' ? latest : dl.versions.find(x => x.version === ref);
     $('dlVersionHint').textContent = ref === 'release' ? T('The stable version most people use. It gets updates (Home → Update now).')
       : ref === 'staging' ? T('Gets new features first and changes almost daily, but can break. For trying things out.')
-      : `${T('Exactly version {version}, kept as it is (no updates). Switch it to release later under Tools → Release channel if you want updates.', { version: ref })}${v?.limited ? ` ${T('Versions before 1.13.2 ignore some of this app\'s settings: phone access does not work, and a browser tab may open when the server starts.')}` : ''}`;
+      : `${T('Exactly version {version}, kept as it is (no updates). Switch it to release later under Settings → Start & updates → SillyTavern channel if you want updates.', { version: ref })}${v?.limited ? ` ${T('Versions before 1.13.2 ignore some of this app\'s settings: phone access does not work, and a browser tab may open when the server starts.')}` : ''}`;
     // An older version: what it misses, and an "I understand" before downloading.
     const older = !['release', 'staging'].includes(ref) && latest && vnum(ref) && vcmp(vnum(ref), vnum(latest.version)) < 0;
     dl.needsRisk = !!older;
@@ -3381,7 +3587,7 @@
   D.onBusy(setBusy);
   D.onRefresh(refreshAll);
   D.onTheme(loadThemes);
-  D.onSettings(s => { current = s; applyUiFont(s.uiFont || '', s.uiZoom); if (state.page === 'settings') loadSettingsForm(); });
+  D.onSettings(s => { current = s; applyUiFont(s.uiFont || '', s.uiZoom); applyLogFont(s.consoleFont, s.consoleFontSize || 18); if (state.page === 'settings') loadSettingsForm(); });
   D.onWindows(w => { state.windows = w; renderStatus(); });
   D.onAppUpdate(renderAppUpdate);
   D.onProfiles(loadProfiles);
@@ -3447,8 +3653,7 @@
       return `<div class="item"><div class="main"><div class="title">${esc(T(o.label))}</div><div class="meta" style="white-space:normal">${esc(T(o.desc))}</div><div class="meta mono">${esc(o.key)} · ${esc(cfg)}</div></div>${control}</div>`;
     }).join('');
     $('soList').querySelectorAll('[data-so]').forEach(el => el.onchange = saveServerOptions);
-    $('btnSoRestart').hidden = !r.needsRestart;
-    $('soNote').textContent = r.needsRestart ? T('The server runs with the old options until it restarts.') : r.running ? '' : T('Applies when the server starts.');
+    loadRestartBar(r);
   }
   async function loadServerOptions() { renderServerOptions(await D.serverOptions()); }
   async function saveServerOptions() {
@@ -3461,7 +3666,6 @@
     loadLan();
   }
   $('setHttps').onchange = saveServerOptions;
-  $('btnSoRestart').onclick = async () => { $('btnSoRestart').disabled = true; renderServerOptions(await D.serverRestart()); $('btnSoRestart').disabled = false; };
 
   // ---------- start with SillyTavern ----------
   function renderCompanions(list) {

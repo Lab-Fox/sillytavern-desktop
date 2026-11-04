@@ -150,7 +150,7 @@ A profile is a name for a SillyTavern folder ("Main", "Testing staging", "SillyT
 |---|---|
 | **Latest release** (recommended, on top) | The stable version. Gets updates like any install. |
 | **Staging** | The newest changes, updated almost daily. Can break. |
-| **A specific version** (1.12.0 and newer, newest first, with release dates and notes) | Exactly that version, kept as it is: Home shows **Fixed version** and Update does nothing. Switch it to release or staging under **Tools → Release channel** to get updates again. |
+| **A specific version** (1.12.0 and newer, newest first, with release dates and notes) | Exactly that version, kept as it is: Home shows **Fixed version** and Update does nothing. Switch it to release or staging under **Settings → Start & updates → SillyTavern channel** to get updates again. |
 
 You choose the parent folder, the folder name and the profile name; the dialog shows where it goes and the free space there (about 600 MB is needed). Tick **Use it right away** to switch to it when it's done. Downloads take well under a minute on a fast connection (they skip old file versions), and **Cancel** removes the unfinished folder. Versions older than 1.13.2 ignore some of this app's settings: phone access doesn't work and a browser tab may open when the server starts.
 
@@ -214,7 +214,7 @@ Each tab shows which one it is (`:8000`, `read-only :8000`, `1.13.2 :8002`…). 
 
 ### On your phone or tablet
 
-1. Turn on **Settings → Phone & tablet → Use SillyTavern from your phone**. Setting a password is optional but recommended; this app signs in by itself.
+1. Turn on **Settings → Phone & remote → Use SillyTavern from your phone**. Setting a password is optional but recommended; this app signs in by itself.
 2. **Home** shows the address (like `http://192.168.1.25:8000/`) and a QR code. Scan it, or type the address, on a phone or tablet on the same Wi-Fi.
 3. The first time, Windows may ask whether Node.js may use the network. Choose **Allow**.
 
@@ -222,20 +222,20 @@ Only devices on your own home network can connect. Your `config.yaml` is never c
 
 ### Away from home
 
-**Settings → Away from home** has two ways to reach SillyTavern from outside your home network:
+**Settings → Phone & remote → Away from home** has two ways to reach SillyTavern from outside your home network:
 
 - **Remote link:** click **Start remote link** and Home shows a temporary `https://….trycloudflare.com` address with a QR code, made by Cloudflare's free "quick tunnel" (the app downloads `cloudflared` from Cloudflare's GitHub release and checks it against the published SHA256). It works over mobile data or from another house. It only starts with the phone-access password set, since anyone who gets the address reaches the login; the address changes every time, and the link stops with the server or with **Stop**.
 - **Tailscale:** a private network between your own devices. With Tailscale on this PC and your phone (same account) and phone access on, Home also lists the Tailscale addresses and the app lets them through SillyTavern's whitelist. **Install Tailscale** installs it with winget.
 
 ### SillyTavern server options
 
-**Settings → SillyTavern server options** sets a few things SillyTavern normally reads from `config.yaml`: loading characters lazily (faster with many characters), user accounts, the discreet login page, server plugins, SillyTavern's own extension auto-update, thumbnails, and a proxy for AI services. Each stays **As in config.yaml** (the current value is shown) until you pick **On** or **Off**; the app passes the choice to the server as an environment variable when it starts and never edits `config.yaml`. The **config.yaml** button opens the file for anything else.
+**Settings → Server → Advanced: config.yaml options** sets a few things SillyTavern normally reads from `config.yaml`: loading characters lazily (faster with many characters), user accounts, the discreet login page, server plugins, SillyTavern's own extension auto-update, thumbnails, and a proxy for AI services. Each stays **As in config.yaml** (the current value is shown) until you pick **On** or **Off**; the app passes the choice to the server as an environment variable when it starts and never edits `config.yaml`. The **config.yaml** button opens the file for anything else.
 
 **HTTPS** serves SillyTavern with a certificate the app makes for this PC's addresses (in the app's data folder, renewed before it runs out). This app's window trusts it; phones and other browsers warn once that they don't know it, which is normal for a self-made certificate.
 
 ### Start with SillyTavern
 
-**Settings → Start with SillyTavern → Add program…** picks an `.exe`, `.bat`, `.cmd`, `.ps1` or shortcut to start whenever the server starts, with optional arguments. Ticked **Stop it with SillyTavern**, it is closed (with everything it started) when the server stops or the app quits.
+**Settings → Start & updates → Start with SillyTavern → Add program…** picks an `.exe`, `.bat`, `.cmd`, `.ps1` or shortcut to start whenever the server starts, with optional arguments. Ticked **Stop it with SillyTavern**, it is closed (with everything it started) when the server stops or the app quits.
 
 ### AI apps
 
@@ -384,6 +384,8 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 
 ### Settings
 
+Settings has six tabs: **Appearance**, **Start & updates**, **Window**, **Server**, **Phone & remote** and **About**, plus a search box that finds any setting. Every change applies at once (there is no Save button). Changes the running server needs a restart for (phone access, HTTPS, config.yaml options) show a **Restart server** bar, so the server restarts when you choose. The port can be changed while the server is stopped. **About → Reset settings** puts look, start-up, updates and window options back to their defaults; your folders, profiles, phone access, server options and programs stay.
+
 | Setting | Default | What it does |
 |---|---|---|
 | Start automatically | On | Start the server and open SillyTavern when the app opens |
@@ -393,6 +395,7 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | Get preview versions of this app | Off | Also offers test versions (pre-releases, marked **preview**) before they become a regular release. Off again: you get the next regular release |
 | Back up before updating | On | Back up your data before every update or channel switch |
 | Scheduled backups | Off | On the **Backups** page: when, which profiles, where to, how many to keep |
+| SillyTavern channel | as installed | **Release** (stable) or **Staging** (daily, can break) |
 | Use this app's own Node.js and Git | Off | Under **Tools → Back end** |
 | Confirm before quitting | On | Ask before quitting while the server runs |
 | Keep running in the tray | Off | Closing the launcher hides it to the tray and the server keeps running. Right-click the tray icon for more, including **Quit** |
@@ -412,7 +415,7 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 | The console says | What to do |
 |---|---|
 | `SillyTavern not found at …` | The welcome screen opens: pick your install or click **Find it myself…** |
-| `failed to launch node` | **Settings → Change…** shows what's missing; **Install for me** installs it, **Get them for this app only** downloads a private copy |
+| `failed to launch node` | **Settings → Server → Folder → Change…** shows what's missing; **Install for me** installs it, **Get them for this app only** downloads a private copy |
 | `Update blocked by a changed package-lock.json` | **Tools → Reset package-lock.json**, then update again |
 | `Cannot find module …` after an update | **Tools → Install missing dependencies** |
 | `plugins/<name>.user.js is a browser userscript…` | Move that file into the userscripts folder and restart |

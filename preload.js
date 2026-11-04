@@ -128,6 +128,7 @@ contextBridge.exposeInMainWorld('desktop', {
     setupReady: () => invoke('setup-ready'),
     installRequirements: () => invoke('install-requirements'),
     setAppPreview: on => invoke('set-app-preview', on),
+    settingsReset: () => invoke('settings-reset'),
     remotes: () => invoke('remotes'),
     remoteSave: o => invoke('remote-save', o),
     remoteDelete: id => invoke('remote-delete', id),

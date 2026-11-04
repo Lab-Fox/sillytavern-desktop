@@ -113,7 +113,7 @@ export async function checkForUpdates(stRoot) {
 export async function update(stRoot, { backupFirst, keep }) {
     if (!(await git(stRoot, ['branch', '--show-current'], { quiet: true })).out.trim()) {
         const v = await pinnedVersion(stRoot);
-        log(`This SillyTavern is kept at ${v ? `version ${v}` : 'a fixed version'}, so there is nothing to update. To get updates, choose release or staging under Tools → Release channel.`);
+        log(`This SillyTavern is kept at ${v ? `version ${v}` : 'a fixed version'}, so there is nothing to update. To get updates, choose release or staging under Settings → Start & updates → SillyTavern channel.`);
         return false;
     }
     // No data folder (never started): nothing to back up, nothing to lose.
