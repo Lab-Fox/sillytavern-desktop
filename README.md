@@ -119,7 +119,7 @@ Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 o
 | **Profiles** | Your SillyTavern folders by name: switch, add, rename, re-point, remove, run one next to another, or **Download SillyTavern**. |
 | **Migrate data** | Copy characters, chats, presets, extensions and more from one SillyTavern (or user) to another, and undo earlier migrations. |
 | **Backups** | Back up your data, scheduled or now; restore or delete a backup. |
-| **Extensions** | SillyTavern's extensions with their safety ratings; review and **Update all**, undo updates, find new extensions, Kits. Also extensions for this app (**Desktop app**). |
+| **Extensions** | SillyTavern's extensions with their safety ratings; review and **Update all**, undo updates, find new extensions, Kits. Also extensions for this app (**Desktop add-ons**). |
 | **Tools** | Node.js and Git (your PC's or the app's own), the health check, repair tools, "What can my PC run?", troubleshooting, ways to run SillyTavern without the app, and the release/staging switch. |
 | **Settings** | Themes, which SillyTavern to use, the port, the SillyTavern window, the console font, and how the app behaves. |
 
@@ -129,7 +129,7 @@ Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 o
 
 **Backups** are saved in `backups\desktop\` inside your SillyTavern folder. Automatic ones (before updates) are trimmed to the number you choose; manual ones are kept. Restoring first moves your current `data` folder aside, so nothing is lost.
 
-**Scheduled backups** (Backups page): **On app start**, **Daily** or **Weekly**, for **this profile** or **all profiles**. A backup is only made when something in `data` changed since the last scheduled one. They can go to another folder, for example a second drive or a OneDrive/Dropbox folder (a folder per profile is made inside it), and the newest 7 per profile are kept (your choice; backups before updates and your own are counted apart). Before each one the app checks the free space. If one fails (say, the backup drive isn't connected), Home shows it with **Try again**. Backups in that other folder are listed and restored like the others.
+**Automatic backups** (Backups page): **On app start**, **Daily** or **Weekly**, for **this profile** or **all profiles**. A backup is only made when something in `data` changed since the last scheduled one. They can go to another folder, for example a second drive or a OneDrive/Dropbox folder (a folder per profile is made inside it), and the newest 7 per profile are kept (your choice; backups before updates and your own are counted apart). Before each one the app checks the free space. If one fails (say, the backup drive isn't connected), Home shows it with **Try again**. Backups in that other folder are listed and restored like the others.
 
 **Import cards, lorebooks and presets:** drop the files anywhere on the launcher, or right-click them in Explorer → **Open with → SillyTavern Desktop** (added by the installer; it never becomes the default app for `.png` or `.json`). A list shows what each file is: a character card (`.png` with card data, `.json`, `.charx`, `.byaf`, `.yaml`), a lorebook, or a preset (Chat Completion, Text Completion, instruct, context, system prompt, reasoning). Pick the profile and click **Import**: SillyTavern imports them itself, the same way as its own Import buttons, and names that are already taken get a number instead of being overwritten. The server starts if needed; for a profile that isn't in use, a server runs just for the import. Dropping a card onto the SillyTavern window works too: that's SillyTavern's own import.
 
@@ -295,11 +295,11 @@ To remove a SillyTavern you no longer need, open its profile's edit form (Profil
 | **Server plugins** | SillyTavern's `plugins` folder, as usual (needs `enableServerPlugins: true` in `config.yaml`) |
 | **Userscripts** (`.user.js`) | **Extensions → Userscripts → Open folder**, then restart the app. Replaces Tampermonkey. |
 | **Chrome extensions** | From the Chrome Web Store, such as spelling and grammar checkers: **Extensions → Chrome → Open Chrome Web Store** (or the window's **▾** menu), then **Add to Chrome**. They work in your SillyTavern pages, their buttons sit in the top bar ([details](#chrome-extensions)). |
-| **Desktop extensions** | Extensions for this app: right-click and menu entries, features in SillyTavern pages, their own settings panel. Install them from **Extensions → Desktop app → Get add-ons** (each download is checked against its published SHA256; updates keep their settings), or add your own. They stay off until you turn them on. |
+| **Desktop extensions** | Extensions for this app: right-click and menu entries, features in SillyTavern pages, their own settings panel. Install them from **Extensions → Desktop add-ons → Get add-ons** (each download is checked against its published SHA256; updates keep their settings), or add your own. They stay off until you turn them on. |
 
 #### Writing helper
 
-An add-on made with this app's extension system: install it from **Extensions → Desktop app → Get add-ons**, then turn it on. It downloads its English word lists once (about 1 MB, checked against their SHA256) and builds its dictionary in about two seconds.
+An add-on made with this app's extension system: install it from **Extensions → Desktop add-ons → Get add-ons**, then turn it on. It downloads its English word lists once (about 1 MB, checked against their SHA256) and builds its dictionary in about two seconds.
 
 - **Suggestions** above SillyTavern's text box while you type: endings of the word, the word that usually comes next, or corrections (✎). **Tab** / **Alt+1** takes the first, **Alt+2** / **Alt+3** the others, **Esc** hides them.
 - **Autocorrect** when you finish a word, only when it's clear: "teh" → "the", "dont" → "don't", "i" → "I", "alot" → "a lot". **Backspace right after** undoes it. Macros, links, code and names are left alone.

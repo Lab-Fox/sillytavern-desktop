@@ -6,11 +6,11 @@ Desktop extensions are add-ons for **SillyTavern Desktop itself**, not for Silly
 
 ## Try one first
 
-Ready-made ones are under **Extensions → Desktop app → Get add-ons** in the launcher: click **Install**, then turn it on.
+Ready-made ones are under **Extensions → Desktop add-ons → Get add-ons** in the launcher: click **Install**, then turn it on.
 
 To look at how one is made:
 
-1. In the launcher, open **Extensions → Desktop app**.
+1. In the launcher, open **Extensions → Desktop add-ons**.
 2. Click **Add example**. The *Break reminder* extension appears in the list.
 3. Turn it on. Its settings panel shows up below the list, and the SillyTavern window's menu gets **Extensions → Break reminder: remind me now**.
 
@@ -35,7 +35,7 @@ An extension's main module runs inside the app with **full access to your PC**, 
 
 `data.json`, `downloads/` and `user/` are kept when the extension is updated from **Get add-ons**. Everything else is replaced by the new version.
 
-**Open folder** on the Desktop app page opens it. After you edit an extension, click **Reload**.
+**Open folder** on the Desktop add-ons tab opens it. After you edit an extension, click **Reload**.
 
 ## manifest.json
 
@@ -147,7 +147,7 @@ Only channels you registered with `api.pages.handle` answer, and only SillyTaver
 
 ## The launcher panel
 
-If the manifest has `panel`, the launcher shows a card with your extension's name on the Desktop app page and runs the script with two names in scope:
+If the manifest has `panel`, the launcher shows a card with your extension's name on the Desktop add-ons tab and runs the script with two names in scope:
 
 - `panel`: the card's body element. Fill it with your UI.
 - `ext`: `{ id, invoke(channel, ...args) }`. `invoke` calls a handler registered with `api.handle` and returns a promise of its answer.

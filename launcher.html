@@ -364,7 +364,12 @@
   /* ---------- AI apps ---------- */
   .ai-card { display: flex; flex-direction: column; gap: 10px; }
   .ai-card .acts { display: flex; gap: 6px; flex-wrap: wrap; }
-  .ai-card h2 { white-space: normal; }
+  .ai-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+  .ai-head h3 { font-size: 17px; color: var(--title); font-weight: 700; }
+  .ai-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding-top: 10px; border-top: var(--px) dashed var(--border); }
+  .ai-foot .act { margin-left: auto; display: flex; gap: 14px; }
+  .ai-auto { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; color: var(--text); }
+  .ai-card { gap: 12px; }
   .ai-card details > summary { cursor: pointer; color: var(--muted); font-size: 14px; }
   .ai-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 8px; }
   .ai-opts .wide { grid-column: 1 / -1; }
@@ -431,6 +436,12 @@
   .steps .done { color: var(--good); }
   .warnbox { border: var(--px) solid var(--warn); background: color-mix(in srgb, var(--warn) 9%, transparent); padding: 10px 12px; font-size: 14px; }
   .warnbox b { color: var(--warn); }
+  .warn-line { color: var(--warn) !important; }
+  .page > .set-h:first-child { margin-top: 0; }
+  .health-ok > summary { display: flex; align-items: center; gap: 12px; padding: 6px 4px; cursor: pointer; list-style: none; color: var(--text); }
+  .health-ok > summary::-webkit-details-marker { display: none; }
+  .health-ok[open] > summary .link { display: none; }
+  .health-ok > .item:first-of-type { border-top: var(--px) dashed var(--border); }
   .warnbox ul { margin: 6px 0 6px 18px; color: var(--text); }
   .warnbox li { margin: 2px 0; }
   .warnbox .switch { border: 0; padding: 6px 0 0; }
@@ -600,14 +611,14 @@
 
     <!-- ===== Profiles ===== -->
     <section class="page" id="page-profiles">
-      <p class="lead">A profile is a name for a SillyTavern folder. Switch profiles to run another SillyTavern — another version, a test copy, or one with other characters. Each folder keeps its own chats, characters and settings.</p>
+      <p class="lead">Each profile is a SillyTavern folder with its own chats, characters and settings.</p>
       <div class="stack">
         <div class="card">
           <h2>Profiles
             <span class="act row">
               <button class="btn sm ghost" id="btnProfFound" title="Add a profile for every SillyTavern found on this PC"><svg class="i"><use href="#i-refresh"/></svg>Find on this PC</button>
               <button class="btn sm" id="btnProfAdd"><svg class="i"><use href="#i-plus"/></svg>Add profile</button>
-              <button class="btn sm primary" id="btnProfDownload"><svg class="i"><use href="#i-download"/></svg>Download SillyTavern</button>
+              <button class="btn sm" id="btnProfDownload"><svg class="i"><use href="#i-download"/></svg>Download SillyTavern</button>
             </span>
           </h2>
           <div class="list" id="profList"></div>
@@ -626,10 +637,9 @@
           </div>
         </div>
         <div class="card">
-          <h2>SillyTavern on another computer
+          <h2>SillyTavern on another computer <span class="tip" tabindex="0" role="note" aria-label="A SillyTavern running on another PC, a home server or a VPS. It opens as a tab in the SillyTavern window; this PC's SillyTavern keeps running. Updates, backups and migrating happen on that computer."><svg class="i"><use href="#i-info"/></svg></span>
             <span class="act row"><button class="btn sm" id="btnRemAdd"><svg class="i"><use href="#i-plus"/></svg>Add</button></span>
           </h2>
-          <p class="muted small" style="margin-bottom:8px">A SillyTavern running on another PC, a home server or a VPS. It opens as a tab in the SillyTavern window with its own login; this PC's SillyTavern keeps running as it is. Updates, backups and migrating happen on that computer.</p>
           <div class="list" id="remList"></div>
           <div class="form" id="remForm" hidden>
             <div class="row" style="align-items:flex-end">
@@ -639,12 +649,11 @@
             </div>
             <div class="warnbox" id="remWarn" hidden style="margin-top:10px"><b>Not encrypted:</b> this is a plain <span class="mono">http://</span> address outside your home network, so your password and chats would travel readable. Use <span class="mono">https://</span> or a private network such as Tailscale if you can.</div>
             <div class="row" style="align-items:flex-end;margin-top:10px">
-              <div class="field"><label>User name (if it asks for one)</label><input type="text" id="remUser" maxlength="64" autocomplete="off" style="width:180px"></div>
+              <div class="field"><label>User name (if it asks for one) <span class="tip" tabindex="0" role="note" aria-label="For SillyTavern's basic auth (its listen mode with a password), saved encrypted with Windows' own protection. If SillyTavern shows its own login page instead, sign in there once; the tab remembers it."><svg class="i"><use href="#i-info"/></svg></span></label><input type="text" id="remUser" maxlength="64" autocomplete="off" style="width:180px"></div>
               <div class="field"><label>Password</label><input type="password" id="remPass" maxlength="128" autocomplete="new-password" style="width:200px"></div>
               <button class="btn sm ghost" id="btnRemClearPass" hidden>Remove password</button>
             </div>
             <p class="muted small" id="remTestOut" style="margin-top:8px"></p>
-            <p class="muted small">The login is for SillyTavern's basic auth (its "listen" mode with a password); it's saved encrypted with Windows' own protection. If SillyTavern shows its own login page instead, sign in there once — the tab remembers it.</p>
             <div class="row" style="margin-top:10px">
               <button class="btn primary" id="btnRemSave"><svg class="i"><use href="#i-check"/></svg>Save</button>
               <button class="btn ghost" id="btnRemCancel">Cancel</button>
@@ -652,13 +661,12 @@
             </div>
           </div>
         </div>
-        <p class="muted small">Switching restarts the server on the new folder and reloads open SillyTavern tabs. <b style="color:var(--title)">Open next to it</b> runs another profile at the same time, on its own port, in a new tab. Removing a profile never deletes its folder. You can also switch from the top bar here, the tray icon, or the SillyTavern window's menu.</p>
       </div>
     </section>
 
     <!-- ===== Migrate ===== -->
     <section class="page" id="page-migrate">
-      <p class="lead">Copy characters, chats, presets, extensions and more from one SillyTavern to another, or between users. The source is never changed, and every migration can be undone.</p>
+      <p class="lead">The source is never changed, and every migration can be undone.</p>
       <div class="stack">
         <div class="card stack">
           <h2>From and to</h2>
@@ -727,44 +735,35 @@
 
     <!-- ===== Backups ===== -->
     <section class="page" id="page-backups">
-      <p class="lead">Backups zip your <span class="mono">data</span> folder: characters, chats, settings, presets and extensions. Restoring never deletes anything — your current data is moved aside first.</p>
-      <div class="card stack" style="margin-bottom:16px">
-        <h2>Scheduled backups<span class="act row"><button class="btn sm" data-task id="btnSchedNow" hidden><svg class="i"><use href="#i-archive"/></svg>Back up now</button></span></h2>
-        <div class="row">
-          <div class="seg" id="schedMode">
-            <button data-mode="off">Off</button>
-            <button data-mode="start">On app start</button>
-            <button data-mode="daily">Daily</button>
-            <button data-mode="weekly">Weekly</button>
-          </div>
-          <div class="seg" id="schedScope">
-            <button data-scope="active">This profile</button>
-            <button data-scope="all">All profiles</button>
-          </div>
+      <p class="lead">Restoring a backup never deletes anything: your current data is moved aside first.</p>
+      <h3 class="set-h">Saved backups <span class="tip" tabindex="0" role="note" aria-label="A backup is a zip of your data folder: characters, chats, settings, presets and extensions."><svg class="i"><use href="#i-info"/></svg></span>
+        <span class="act">
+          <button class="btn sm ghost" data-place="backups"><svg class="i"><use href="#i-folder"/></svg>Open folder</button>
+          <button class="btn sm primary" data-task id="btnBackup"><svg class="i"><use href="#i-archive"/></svg>Back up now</button>
+        </span>
+      </h3>
+      <div class="set-group set-free"><div class="list" id="backupList"></div></div>
+      <h3 class="set-h">Automatic backups<span class="act"><button class="btn sm" data-task id="btnSchedNow" hidden><svg class="i"><use href="#i-archive"/></svg>Run now</button></span></h3>
+      <div class="set-group">
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Back up automatically</b><span class="set-desc" id="schedHint"></span></div>
+          <div class="set-ctl"><div class="seg" id="schedMode"><button data-mode="off">Off</button><button data-mode="start">On app start</button><button data-mode="daily">Daily</button><button data-mode="weekly">Weekly</button></div></div>
         </div>
-        <div id="schedMore" class="stack" style="gap:10px">
-          <div class="field"><label>Save to (a folder per profile is made inside)</label><div class="path" id="schedDir"></div></div>
-          <div class="row">
-            <button class="btn sm" id="btnSchedDir"><svg class="i"><use href="#i-folder"/></svg>Choose folder…</button>
-            <button class="btn sm ghost" id="btnSchedDirOpen" hidden>Open</button>
-            <button class="btn sm ghost" id="btnSchedDirReset" hidden>Back to the SillyTavern folder</button>
-            <span style="flex:1"></span>
-            <label class="muted small" for="schedKeep">Keep per profile</label>
-            <input type="number" id="schedKeep" min="1" max="100" style="width:72px" title="Scheduled backups kept per profile. Backups before updates and your own are counted apart.">
-          </div>
-          <div class="list" id="schedStatus"></div>
-          <span class="err" id="schedErr"></span>
+        <div class="set-row" id="schedScope">
+          <div class="set-text"><b>Which profiles</b></div>
+          <div class="set-ctl"><div class="seg"><button data-scope="active">This profile</button><button data-scope="all">All profiles</button></div></div>
         </div>
-        <p class="muted small" id="schedHint"></p>
-      </div>
-      <div class="card">
-        <h2>Saved backups
-          <span class="act row">
-            <button class="btn sm ghost" data-place="backups"><svg class="i"><use href="#i-folder"/></svg>Open folder</button>
-            <button class="btn sm primary" data-task id="btnBackup"><svg class="i"><use href="#i-archive"/></svg>Back up now</button>
-          </span>
-        </h2>
-        <div class="list" id="backupList"></div>
+        <div id="schedMore">
+          <div class="set-row set-wrap">
+            <div class="set-text"><b>Save to</b> <span class="tip" tabindex="0" role="note" aria-label="A folder per profile is made inside. Another drive or a synced folder (OneDrive, Dropbox) keeps backups safe if this drive fails."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc mono" id="schedDir"></span></div>
+            <div class="set-ctl"><button class="btn sm" id="btnSchedDir"><svg class="i"><use href="#i-folder"/></svg>Choose folder…</button><button class="btn sm ghost" id="btnSchedDirOpen" hidden>Open</button><button class="btn sm ghost" id="btnSchedDirReset" hidden>Back to the SillyTavern folder</button></div>
+          </div>
+          <div class="set-row">
+            <div class="set-text"><b>Keep per profile</b> <span class="tip" tabindex="0" role="note" aria-label="Scheduled backups kept per profile. Backups before updates and your own are counted apart."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><input type="number" id="schedKeep" min="1" max="100" aria-label="Keep per profile"></div>
+          </div>
+          <div class="set-row set-free"><div class="list" id="schedStatus"></div><span class="err" id="schedErr"></span></div>
+        </div>
       </div>
     </section>
 
@@ -772,36 +771,34 @@
     <section class="page" id="page-extensions">
       <div class="seg" id="extTabs" style="width:max-content;margin-bottom:14px">
         <button data-ext-tab="st" class="on" translate="no">SillyTavern</button>
-        <button data-ext-tab="desktop">Desktop app</button>
+        <button data-ext-tab="desktop">Desktop add-ons</button>
         <button data-ext-tab="chrome" translate="no">Chrome</button>
       </div>
       <div id="extChrome" class="stack" hidden>
-        <p class="lead">Extensions from the Chrome Web Store, such as spelling and grammar checkers, inside SillyTavern. Open the store, click <b style="color:var(--title)">Add to Chrome</b> on an extension, and it works in your SillyTavern pages. Their buttons appear in the SillyTavern window's top bar.</p>
         <div class="card">
-          <h2>Chrome extensions
+          <h2>Chrome extensions <span class="tip" tabindex="0" role="note" aria-label="Open the store and click Add to Chrome on an extension: it works in your SillyTavern pages, and its button shows in the SillyTavern window's top bar. Extensions only partly work outside Chrome (each one says what it can't use here). They run in every SillyTavern you open in this app except the read-only copy, and update themselves from the store."><svg class="i"><use href="#i-info"/></svg></span>
             <span class="act row">
               <button class="btn sm ghost" id="btnCrxUpdate"><svg class="i"><use href="#i-refresh"/></svg>Check for updates</button>
               <button class="btn sm primary" id="btnCrxStore"><svg class="i"><use href="#i-plus"/></svg>Open Chrome Web Store</button>
             </span>
           </h2>
           <div class="list" id="crxList"><div class="empty">Loading…</div></div>
-          <p class="muted small" style="margin-top:10px">Chrome extensions only partly work outside Chrome: this app gives them most of what they use (buttons and popups, right-click entries, tabs, storage, notifications), but not everything. Each one says what it can't use here. They run in your SillyTavern pages (also other installs and other computers, not the read-only copy) and can read what you type there, so only add ones you trust. They update themselves from the Chrome Web Store.</p>
+          <p class="muted small warn-line" style="margin-top:10px">They can read what you type in SillyTavern: add only ones you trust.</p>
         </div>
       </div>
       <div id="extDesktop" class="stack" hidden>
-        <p class="lead">Add-ons for this app itself (not for SillyTavern): they can add entries to the right-click menu and the window's menu, add features to SillyTavern pages, and show a panel here. Anyone can make one: each is a folder with a <span class="mono">manifest.json</span>.</p>
         <div class="card">
-          <h2>Get add-ons
+          <h2>Get add-ons <span class="tip" tabindex="0" role="note" aria-label="Add-ons for this app itself, not for SillyTavern: right-click menu entries, features on SillyTavern pages, a panel here. They come from the community list on GitHub, and each download is checked against the list's SHA256."><svg class="i"><use href="#i-info"/></svg></span>
             <span class="act row">
               <button class="btn sm ghost" id="btnAddonsRefresh"><svg class="i"><use href="#i-refresh"/></svg>Refresh</button>
             </span>
           </h2>
           <div class="list" id="addonList"><div class="empty">Loading the add-on list…</div></div>
           <p class="muted small" id="addonErr" style="margin-top:8px;color:var(--warn)" hidden></p>
-          <p class="muted small" style="margin-top:10px">Add-ons from the community list (<button class="link" data-link="addonRepo">sillytavern-desktop-extensions on GitHub</button>). Each download is checked against the list's SHA256. Made one? Share it there.</p>
+          <p class="muted small" style="margin-top:10px">Made one? <button class="link" data-link="addonRepo">Share it in the list</button></p>
         </div>
         <div class="card">
-          <h2>Desktop extensions
+          <h2>Installed add-ons
             <span class="act row">
               <button class="btn sm ghost" id="btnDxExample"><svg class="i"><use href="#i-download"/></svg>Add example</button>
               <button class="btn sm ghost" data-place="desktopExtensions"><svg class="i"><use href="#i-folder"/></svg>Open folder</button>
@@ -809,12 +806,11 @@
             </span>
           </h2>
           <div class="list" id="dxList"></div>
-          <p class="muted small" style="margin-top:10px">Extensions run with full access to your PC, like any program, so they stay off until you turn them on. Only turn on extensions you trust. Edited an extension? Click <b style="color:var(--title)">Reload</b>. <button class="link" data-link="extensionDocs">How to make one</button></p>
+          <p class="muted small warn-line" style="margin-top:10px">Add-ons run with full access to your PC: turn on only ones you trust. <button class="link" data-link="extensionDocs">How to make one</button></p>
         </div>
         <div class="stack" id="dxPanels"></div>
       </div>
       <div id="extSt">
-      <p class="lead">Third-party extensions installed in SillyTavern: see how each one was rated for safety, update them together (and undo that), find new ones, and save your set as a Kit to use in another SillyTavern.</p>
       <div class="stack">
         <div class="card">
           <h2>Installed extensions
@@ -830,13 +826,12 @@
           <p class="muted small" id="extCredit" style="margin-top:10px"></p>
         </div>
         <div class="card">
-          <h2>Kits
+          <h2>Kits <span class="tip" tabindex="0" role="note" aria-label="A Kit is a saved list of extensions (their addresses and versions, not their files). Use it to set up the same extensions in another profile, or share it as a file."><svg class="i"><use href="#i-info"/></svg></span>
             <span class="act row">
               <button class="btn sm ghost" id="btnKitImport"><svg class="i"><use href="#i-download"/></svg>Import…</button>
               <button class="btn sm" id="btnKitNew"><svg class="i"><use href="#i-plus"/></svg>Save my extensions as a Kit</button>
             </span>
           </h2>
-          <p class="muted small" style="margin-bottom:8px">A Kit is a saved list of extensions (their addresses and versions, not their files). Use it to set up the same extensions in another profile, or share it as a file.</p>
           <div class="form" id="kitForm" hidden style="margin-top:0;padding-top:0;border:0">
             <div class="row" style="align-items:flex-end">
               <div class="field" style="flex:1;min-width:180px;max-width:280px"><label>Kit name</label><input type="text" id="kitName" maxlength="60" placeholder="My extensions"></div>
@@ -848,11 +843,10 @@
           </div>
           <div class="list" id="kitList"></div>
         </div>
-        <div class="card">
-          <h2>Userscripts</h2>
-          <div class="row">
-            <p class="muted" style="flex:1">Some extensions need a companion <span class="mono">.user.js</span> script (normally installed in Tampermonkey). This app runs them itself — drop them in the userscripts folder and restart.</p>
-            <button class="btn sm" data-place="userscripts"><svg class="i"><use href="#i-folder"/></svg>Open folder</button>
+        <div class="set-group">
+          <div class="set-row">
+            <div class="set-text"><b>Userscripts</b> <span class="tip" tabindex="0" role="note" aria-label="Some extensions need a companion .user.js script (normally installed in Tampermonkey). This app runs them itself: put them in the userscripts folder and restart."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc">For extensions that need a .user.js script</span></div>
+            <div class="set-ctl"><button class="btn sm" data-place="userscripts"><svg class="i"><use href="#i-folder"/></svg>Open folder</button></div>
           </div>
         </div>
       </div>
@@ -861,122 +855,98 @@
 
     <!-- ===== Maintenance ===== -->
     <section class="page" id="page-maintenance">
-      <div class="stack">
-        <div class="card">
-          <h2>Back end<button class="btn sm primary act" data-task id="btnUpdateBackend"><svg class="i"><use href="#i-download"/></svg>Update Node.js &amp; Git</button></h2>
-          <div class="list" id="backendList"></div>
-          <p class="muted small" style="margin-top:8px" id="backendHint">Installs the latest Node.js (LTS) and Git with Windows' package manager, then reinstalls SillyTavern's dependencies so everything matches.</p>
-          <div class="form stack" style="gap:10px">
-            <label class="switch" style="border:0;padding:0"><input type="checkbox" id="rtUse"><div><b>Use this app's own Node.js and Git</b><span>A private copy for this app only, downloaded from nodejs.org and Git for Windows and checked against their published checksums. Nothing is installed in Windows and no admin permission is needed. Your PC's own Node.js and Git (if any) stay as they are.</span></div></label>
-            <div class="row">
-              <span class="muted small" id="rtState" style="flex:1"></span>
-              <button class="btn sm primary" data-task id="btnRtGet"><svg class="i"><use href="#i-download"/></svg>Download</button>
-              <button class="btn sm ghost danger" data-task id="btnRtRemove" hidden><svg class="i"><use href="#i-trash"/></svg>Remove</button>
-            </div>
-          </div>
+      <h3 class="set-h">Health check<span class="act"><button class="btn sm ghost" id="btnHealth"><svg class="i"><use href="#i-refresh"/></svg>Run again</button></span></h3>
+      <div class="set-group set-free"><div class="list" id="healthList"></div></div>
+
+      <h3 class="set-h">Repair</h3>
+      <div class="set-group">
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Install missing dependencies</b><span class="set-desc">Fixes "Cannot find module" errors, usually after an update. Safe to run any time.</span></div>
+          <div class="set-ctl"><button class="btn sm" data-task data-repair="deps">Run npm install</button></div>
         </div>
-        <div class="card">
-          <h2>Health check<button class="link act" id="btnHealth">Run again</button></h2>
-          <div class="list" id="healthList"></div>
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Reset package-lock.json</b><span class="set-desc">The most common reason an update fails. Puts the official file back.</span></div>
+          <div class="set-ctl"><button class="btn sm" data-task data-repair="reset-lock">Reset file</button></div>
         </div>
-        <div class="card stack">
-          <h2>What can my PC run?<button class="link act" id="btnPcCheck">Check again</button></h2>
-          <div id="pcBox"><div class="empty">Checking…</div></div>
-          <p class="muted small">For running an AI model on this PC (KoboldCpp, llama.cpp, Oobabooga…) instead of an online service. Sizes are for GGUF models with about 8K of context; a model that doesn't fit the graphics card still runs partly on the processor, much slower.</p>
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Repair SillyTavern's files</b> <span class="tip" tabindex="0" role="note" aria-label="Changed program files are kept on a backup branch before the official files come back. Your chats and characters are not touched."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc" id="gitText">For an update that stopped halfway, or "local changes" that block updating.</span></div>
+          <div class="set-ctl"><button class="btn sm" data-task id="btnGitFix">Repair files</button></div>
         </div>
-        <div class="card">
-          <h2>Repair tools</h2>
-          <div class="grid g3">
-            <div class="tool">
-              <b>Install missing dependencies</b>
-              <p>Fixes "Cannot find module" errors, usually after an update. Safe to run any time.</p>
-              <button class="btn sm" data-task data-repair="deps">Run npm install</button>
-            </div>
-            <div class="tool">
-              <b>Reset package-lock.json</b>
-              <p>The most common reason an update fails. Restores the official file so updating works again.</p>
-              <button class="btn sm" data-task data-repair="reset-lock">Reset file</button>
-            </div>
-            <div class="tool">
-              <b>Reinstall dependencies</b>
-              <p>Deletes <span class="mono">node_modules</span> and downloads everything again. For stubborn errors. Takes a few minutes.</p>
-              <button class="btn sm danger" data-task data-repair="clean-deps">Reinstall</button>
-            </div>
-          </div>
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Reinstall dependencies</b><span class="set-desc warn-line">Deletes node_modules and downloads everything again. Takes a few minutes.</span></div>
+          <div class="set-ctl"><button class="btn sm danger" data-task data-repair="clean-deps">Reinstall</button></div>
         </div>
-        <div class="card">
-          <h2>Troubleshooting</h2>
-          <div class="grid g2">
-            <div class="tool">
-              <b>Port</b>
-              <p id="portText">Which program uses SillyTavern's port.</p>
-              <div class="row" style="gap:6px"><button class="btn sm" id="btnPortCheck">Check port</button><button class="btn sm ghost" id="btnPortFree" hidden></button></div>
-            </div>
-            <div class="tool">
-              <b>Repair SillyTavern's files</b>
-              <p id="gitText">For an update that stopped halfway, or "local changes" that block updating. Changed files are kept on a backup branch; your data is not touched.</p>
-              <button class="btn sm" data-task id="btnGitFix">Repair files</button>
-            </div>
-            <div class="tool">
-              <b>Clear npm's cache</b>
-              <p>When installing dependencies keeps failing with download or "integrity" errors.</p>
-              <button class="btn sm" data-task id="btnNpmCache">Clear cache</button>
-            </div>
-            <div class="tool">
-              <b>SillyTavern's welcome tour</b>
-              <p>Shows SillyTavern's first-start tour (name, persona, basics) again the next time it opens. The server restarts.</p>
-              <div class="stack" id="onbList" style="gap:4px"></div>
-            </div>
-            <div class="tool">
-              <b>System report</b>
-              <p>Versions, settings and this PC's details for a bug report, copied to the clipboard. No passwords; your user folder shows as %USERPROFILE%.</p>
-              <button class="btn sm" id="btnReport"><svg class="i"><use href="#i-copy"/></svg>Copy system report</button>
-            </div>
-            <div class="tool">
-              <b>Ask for help</b>
-              <p>Report a problem with this app, or with SillyTavern itself. Paste the system report into it.</p>
-              <div class="row" style="gap:6px"><button class="btn sm ghost" data-link="issues">This app</button><button class="btn sm ghost" data-link="stIssues" translate="no">SillyTavern</button><button class="btn sm ghost" data-link="docs">Documentation</button><button class="btn sm ghost" data-link="discord" translate="no">Discord</button></div>
-            </div>
-          </div>
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Clear npm's cache</b><span class="set-desc">When installing dependencies keeps failing with download or "integrity" errors.</span></div>
+          <div class="set-ctl"><button class="btn sm" data-task id="btnNpmCache">Clear cache</button></div>
         </div>
-        <div class="card">
-          <h2>If this app stops working</h2>
-          <p class="muted" style="margin-bottom:12px">A new SillyTavern version might not work with this app right away. You can always use SillyTavern the usual way:</p>
-          <div class="grid g2">
-            <div class="tool">
-              <b>Open in my browser</b>
-              <p>Starts the server if needed and opens SillyTavern in your normal web browser instead of this app's window.</p>
-              <button class="btn sm" id="btnBrowser"><svg class="i"><use href="#i-external"/></svg>Open in browser</button>
-            </div>
-            <div class="tool">
-              <b>Start the classic way</b>
-              <p>Runs SillyTavern's own <span class="mono">Start.bat</span> in a command window, without this app. Close that window to stop it.</p>
-              <button class="btn sm" data-task id="btnClassic"><svg class="i"><use href="#i-terminal"/></svg>Start with Start.bat</button>
-            </div>
-          </div>
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Port</b><span class="set-desc" id="portText">Which program uses SillyTavern's port.</span></div>
+          <div class="set-ctl"><button class="btn sm" id="btnPortCheck">Check port</button><button class="btn sm ghost" id="btnPortFree" hidden></button></div>
+        </div>
+      </div>
+
+      <h3 class="set-h">Node.js and Git<span class="act"><button class="btn sm" data-task id="btnUpdateBackend"><svg class="i"><use href="#i-download"/></svg>Update Node.js &amp; Git</button></span></h3>
+      <div class="set-group">
+        <div class="set-row set-free"><div class="list" id="backendList"></div><p class="muted small" id="backendHint" style="margin-top:6px">Installs the latest Node.js (LTS) and Git with Windows' package manager, then reinstalls SillyTavern's dependencies so everything matches.</p></div>
+        <label class="set-row">
+          <div class="set-text"><b>Use this app's own Node.js and Git</b> <span class="tip" tabindex="0" role="note" aria-label="A private copy for this app only, downloaded from nodejs.org and Git for Windows and checked against their published checksums. Nothing is installed in Windows and no admin permission is needed. Your PC's own Node.js and Git stay as they are."><svg class="i"><use href="#i-info"/></svg></span></div>
+          <div class="set-ctl"><input type="checkbox" class="tgl" id="rtUse"></div>
+        </label>
+        <div class="set-row set-wrap">
+          <div class="set-text"><span class="set-desc" id="rtState"></span></div>
+          <div class="set-ctl"><button class="btn sm" data-task id="btnRtGet"><svg class="i"><use href="#i-download"/></svg>Download</button><button class="btn sm ghost danger" data-task id="btnRtRemove" hidden><svg class="i"><use href="#i-trash"/></svg>Remove</button></div>
+        </div>
+      </div>
+
+      <h3 class="set-h">What can my PC run? <span class="tip" tabindex="0" role="note" aria-label="For running an AI model on this PC (AI apps) instead of an online service. Sizes are for GGUF models with about 8K of context; a model that doesn't fit the graphics card still runs partly on the processor, much slower."><svg class="i"><use href="#i-info"/></svg></span><span class="act"><button class="btn sm ghost" id="btnPcCheck"><svg class="i"><use href="#i-refresh"/></svg>Check again</button></span></h3>
+      <div class="set-group set-free"><div id="pcBox"><div class="empty">Checking…</div></div></div>
+
+      <h3 class="set-h">Help</h3>
+      <div class="set-group">
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>System report</b> <span class="tip" tabindex="0" role="note" aria-label="Versions, settings and this PC's details for a bug report. No passwords; your user folder shows as %USERPROFILE%."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc">Copied to the clipboard, for a bug report.</span></div>
+          <div class="set-ctl"><button class="btn sm" id="btnReport"><svg class="i"><use href="#i-copy"/></svg>Copy system report</button></div>
+        </div>
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Ask for help</b></div>
+          <div class="set-ctl"><button class="btn sm ghost" data-link="issues">This app</button><button class="btn sm ghost" data-link="stIssues" translate="no">SillyTavern</button><button class="btn sm ghost" data-link="docs">Documentation</button><button class="btn sm ghost" data-link="discord" translate="no">Discord</button></div>
+        </div>
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>SillyTavern's welcome tour</b><span class="set-desc">Shows it again the next time SillyTavern opens. The server restarts.</span></div>
+          <div class="set-ctl"><div class="stack" id="onbList" style="gap:4px"></div></div>
+        </div>
+      </div>
+
+      <h3 class="set-h">If this app stops working <span class="tip" tabindex="0" role="note" aria-label="A new SillyTavern version might not work with this app right away. You can always use SillyTavern the usual way."><svg class="i"><use href="#i-info"/></svg></span></h3>
+      <div class="set-group">
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Open in my browser</b><span class="set-desc">Starts the server if needed and opens SillyTavern in your normal web browser.</span></div>
+          <div class="set-ctl"><button class="btn sm" id="btnBrowser"><svg class="i"><use href="#i-external"/></svg>Open in browser</button></div>
+        </div>
+        <div class="set-row set-wrap">
+          <div class="set-text"><b>Start the classic way</b><span class="set-desc">SillyTavern's own Start.bat in a command window, without this app.</span></div>
+          <div class="set-ctl"><button class="btn sm" data-task id="btnClassic"><svg class="i"><use href="#i-terminal"/></svg>Start with Start.bat</button></div>
         </div>
       </div>
     </section>
 
     <!-- ===== AI apps ===== -->
     <section class="page" id="page-aiapps">
-      <p class="lead">Run an AI model on this PC instead of an online service: install a program, download a model, start it, and connect SillyTavern to it. Everything downloads from the projects' own pages and is checked against their published checksums.</p>
       <div class="stack">
-        <div class="card">
-          <h2>Where they go<span class="act row" style="gap:8px"><button class="btn sm ghost" id="btnAiDir"><svg class="i"><use href="#i-folder"/></svg>Change…</button><button class="btn sm ghost" id="btnAiDirReset" hidden>Back to the default</button></span></h2>
-          <div class="path" id="aiDir"></div>
-          <p class="muted small" id="aiDirInfo" style="margin-top:6px"></p>
-        </div>
-        <div class="seg" id="aiGroup">
-          <button data-g="text" class="on">Text</button>
-          <button data-g="image">Pictures</button>
-          <button data-g="voice">Voices</button>
-          <button data-g="tools">Helper tools</button>
+        <div class="row ai-top">
+          <div class="seg" id="aiGroup">
+            <button data-g="text" class="on">Text</button>
+            <button data-g="image">Pictures</button>
+            <button data-g="voice">Voices</button>
+            <button data-g="tools">Helper tools</button>
+          </div>
+          <span class="tip" tabindex="0" role="note" aria-label="Run an AI model on this PC instead of an online service: install a program, download a model, start it, and connect SillyTavern to it. Everything downloads from the projects' own pages and is checked against their published checksums."><svg class="i"><use href="#i-info"/></svg></span>
         </div>
         <div class="grid g2" id="aiList"></div>
         <div class="card stack" data-ai-group="image" hidden>
-          <h2>Picture models<span class="act row" style="gap:8px"><button class="btn sm ghost" data-ai-folder="image-models"><svg class="i"><use href="#i-folder"/></svg>Open folder</button></span></h2>
-          <p class="muted small">Checkpoints, LoRAs, VAEs, embeddings and upscalers in one folder that ComfyUI, Forge Neo, Forge, AUTOMATIC1111 and Fooocus all use. Download one below or put your own files in its subfolders.</p>
+          <h2>Picture models <span class="tip" tabindex="0" role="note" aria-label="Checkpoints, LoRAs, VAEs, embeddings and upscalers, shared by ComfyUI, Forge Neo, Forge, AUTOMATIC1111 and Fooocus."><svg class="i"><use href="#i-info"/></svg></span><span class="act row" style="gap:8px"><button class="btn sm ghost" data-ai-folder="image-models"><svg class="i"><use href="#i-folder"/></svg>Open folder</button></span></h2>
+          <p class="muted small">One folder that every picture app uses. Download one below or put your own files in its subfolders.</p>
           <div class="list" id="aiImgModels"></div>
           <div class="row" id="aiImgDlBox" hidden style="margin-top:6px"><div class="progress" id="aiImgDlBar"><i></i></div><span class="muted small" id="aiImgDlText" style="flex:1;min-width:200px"></span><button class="btn sm danger" id="btnAiImgDlCancel">Stop</button></div>
           <h3 class="sub-h">Suggested for this PC</h3>
@@ -994,12 +964,12 @@
         </div>
         <div class="card stack" data-ai-group="tools" hidden>
           <h2>Helper tools</h2>
-          <p class="muted small">Programs some apps or their add-ons use. None of them is needed to install the apps on this page. They come from Windows' package manager (winget); Windows may ask for permission.</p>
+          <p class="muted small">None of them is needed to install the apps on this page. They come from Windows' package manager; Windows may ask for permission.</p>
           <div class="list" id="aiTools"><div class="empty">Loading…</div></div>
         </div>
         <div class="card stack" data-ai-group="text">
           <h2>Models<span class="act row" style="gap:8px"><button class="btn sm ghost" data-ai-folder="models"><svg class="i"><use href="#i-folder"/></svg>Open folder</button></span></h2>
-          <p class="muted small">GGUF models for KoboldCpp, llama.cpp and the Text generation web UI, all in one folder. Download one below or put your own .gguf files in the folder.</p>
+          <p class="muted small">One folder for KoboldCpp, llama.cpp and the Text generation web UI. Download one below or put your own .gguf files in it.</p>
           <div class="list" id="aiModels"></div>
           <div class="row" id="aiDlBox" hidden style="margin-top:6px"><div class="progress" id="aiDlBar"><i></i></div><span class="muted small" id="aiDlText" style="flex:1;min-width:200px"></span><button class="btn sm danger" id="btnAiDlCancel">Stop</button></div>
           <h3 class="sub-h">Suggested for this PC</h3>
@@ -1008,6 +978,12 @@
           <div class="row"><input type="search" id="aiSearch" placeholder="Model name, e.g. Mistral Nemo, Stheno, Qwen…" style="flex:1;min-width:220px"><button class="btn sm" id="btnAiSearch">Search</button></div>
           <div class="list" id="aiResults"></div>
           <p class="muted small">Models are made by their authors and come with their own licenses. Many roleplay models are uncensored.</p>
+        </div>
+        <div class="set-group">
+          <div class="set-row set-wrap">
+            <div class="set-text"><b>Apps folder</b> <span class="tip" tabindex="0" role="note" aria-label="Apps that SillyTavern-Launcher (Launcher.bat) installed are found and used where they are."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc mono" id="aiDir"></span><span class="set-desc" id="aiDirInfo"></span></div>
+            <div class="set-ctl"><button class="btn sm" id="btnAiDir"><svg class="i"><use href="#i-folder"/></svg>Change…</button><button class="btn sm ghost" id="btnAiDirReset" hidden>Back to the default</button></div>
+          </div>
         </div>
       </div>
     </section>
@@ -1299,7 +1275,7 @@
         <img class="logo" data-logo alt="">
         <div>
           <h1 id="setupTitle">Welcome to SillyTavern Desktop</h1>
-          <p id="setupLead">Let's get SillyTavern running. Two quick steps — everything happens right here.</p>
+          <p id="setupLead">Two quick steps to get SillyTavern running.</p>
         </div>
         <button class="btn sm ghost lang-btn" data-lang-open title="Language" style="margin-left:auto"><svg class="i"><use href="#i-globe"/></svg><span data-lang-name translate="no"></span></button>
         <button class="btn sm ghost" id="btnSetupClose" hidden>Back</button>
@@ -1336,7 +1312,7 @@
   <div class="modal" id="dlModal">
     <div class="card stack">
       <h2>Download SillyTavern<button class="btn sm ghost act" id="btnDlClose">Close</button></h2>
-      <p class="muted">Gets a SillyTavern of your choice into a new folder and makes a profile for it. Your current SillyTavern is not touched.</p>
+      <p class="muted">Into a new folder, with its own profile. Your current SillyTavern is not touched.</p>
       <div class="field">
         <label>Version <button class="link" id="btnDlReload" style="margin-left:8px">refresh list</button></label>
         <select id="dlVersion"></select>
@@ -1362,7 +1338,7 @@
         <div class="field" style="flex:1;min-width:180px"><label>Profile name</label><input type="text" id="dlName" maxlength="40"></div>
       </div>
       <p class="muted small" id="dlTarget"></p>
-      <label class="switch" style="border-top:0;padding:0"><input type="checkbox" id="dlUse"><div><b>Use it right away</b><span>Switch to the new profile when the download is done. Otherwise switch later from Profiles.</span></div></label>
+      <label class="switch" style="border-top:0;padding:0"><input type="checkbox" id="dlUse"><div><b>Use it right away</b></div></label>
       <div class="stack" id="dlProgressBox" hidden style="gap:8px">
         <div class="steps"><span id="dlStep1">1 · Download</span><span id="dlStep2">2 · Install dependencies</span><span id="dlStep3">3 · Ready</span></div>
         <div class="row"><div class="progress" id="dlBar"><i></i></div><span class="muted small" id="dlText" style="min-width:150px"></span></div>
@@ -1391,7 +1367,7 @@
   <div class="modal" id="impModal">
     <div class="card stack">
       <h2>Import into SillyTavern<button class="btn sm ghost act" id="btnImpClose">Close</button></h2>
-      <p class="muted">SillyTavern imports these itself, the same way as its own Import buttons. Names that are already taken get a number.</p>
+      <p class="muted">Names that are already taken get a number.</p>
       <div class="list" id="impList"></div>
       <div class="field" id="impProfileBox"><label>Into profile</label><select id="impProfile"></select></div>
       <div class="row"><button class="btn primary" data-task id="btnImpGo"><svg class="i"><use href="#i-download"/></svg>Import</button><button class="btn" id="btnImpReload" hidden><svg class="i"><use href="#i-refresh"/></svg>Reload SillyTavern</button><span class="muted small" id="impNote"></span></div>
@@ -1758,7 +1734,7 @@
 
   // ----- scheduled backups -----
   const SCHED_HINT = {
-    off: T('Turn it on and the app backs up by itself — only when something changed since the last scheduled backup.'),
+    off: '',
     start: T('Each time the app starts (a minute in), if something changed since the last scheduled backup.'),
     daily: T('Once a day while the app runs, if something changed since the last scheduled backup.'),
     weekly: T('Once a week while the app runs, if something changed since the last scheduled backup.'),
@@ -1865,7 +1841,7 @@
   function renderCredit() {
     const c = xs.catalog;
     $('extCredit').innerHTML = c
-      ? `${T('Safety ratings: TavernKeeper scans from the {tavernary} catalog ({n} extensions, data under the {odbl}), checked {when}.', { tavernary: '<button class="link" data-xurl="https://tavernary.org">Tavernary</button>', n: c.count, odbl: `<button class="link" data-xurl="${esc(c.credit.licenseUrl)}">ODbL</button>`, when: ago(c.checkedAt) })} <button class="link" id="btnExtRatings">${T('Refresh')}</button> · ${T('A rating describes one version and is not a guarantee; this app is not affiliated with Tavernary.')}${xs.catalogErr ? ` <span class="err">(${esc(xs.catalogErr)})</span>` : ''}`
+      ? `${T('Safety ratings by TavernKeeper from {tavernary} ({odbl}), checked {when}.', { tavernary: '<button class="link" data-xurl="https://tavernary.org">Tavernary</button>', odbl: `<button class="link" data-xurl="${esc(c.credit.licenseUrl)}">ODbL</button>`, when: ago(c.checkedAt) })} ${tipHtml(T('A rating describes one version and is not a guarantee. {n} extensions in the catalog. This app is not affiliated with Tavernary.', { n: c.count }))} <button class="link" id="btnExtRatings">${T('Refresh')}</button>${xs.catalogErr ? ` <span class="err">(${esc(xs.catalogErr)})</span>` : ''}`
       : xs.catalogErr ? `<span class="err">${esc(T('Safety ratings unavailable: {reason}.', { reason: xs.catalogErr }))}</span> <button class="link" id="btnExtRatings">${T('Try again')}</button>` : T('Loading safety ratings…');
     if ($('btnExtRatings')) $('btnExtRatings').onclick = async () => { $('extCredit').textContent = T('Loading safety ratings…'); const r = await D.extCatalog(true); xs.catalogErr = r.ok ? r.stale : r.error; loadExtensions(false); };
   }
@@ -2140,12 +2116,18 @@
   async function loadHealth() {
     const el = $('healthList');
     el.innerHTML = `<div class="empty">${T('Checking…')}</div>`;
-    const checks = await D.healthCheck();
-    el.innerHTML = checks.map(c => `
+    const rank = { bad: 0, warn: 1, ok: 2 };
+    let checks;
+    try { checks = (await D.healthCheck()).sort((a, b) => (rank[a.status] ?? 1) - (rank[b.status] ?? 1)); } catch (e) { el.innerHTML = `<p class="err">${esc(e.message || String(e))}</p>`; return; }
+    const row = c => `
       <div class="item">
         <span class="check-ico ${c.status}">${icon(c.status === 'ok' ? 'check' : c.status === 'warn' ? 'alert' : 'x')}</span>
         <div class="main"><div class="title">${esc(c.label)}</div><div class="meta">${esc(c.detail)}</div>${c.fix ? `<div class="fix">${esc(c.fix)}</div>` : ''}</div>
-      </div>`).join('');
+      </div>`;
+    // Problems in full; what passed folds into one line.
+    const ok = checks.filter(c => c.status === 'ok');
+    el.innerHTML = checks.filter(c => c.status !== 'ok').map(row).join('')
+      + (ok.length ? `<details class="health-ok"><summary><span class="check-ico ok">${icon('check')}</span>${esc(ok.length === checks.length ? T('Everything looks fine ({n} checks).', { n: ok.length }) : T('{n} more checks passed.', { n: ok.length }))} <span class="link">${T('Show details')}</span></summary>${ok.map(row).join('')}</details>` : '');
   }
   $('btnHealth').onclick = loadHealth;
   document.querySelectorAll('[data-repair]').forEach(b => b.onclick = () => D.repair(b.dataset.repair));
@@ -2514,7 +2496,7 @@
     $('setupTitle').textContent = st.ready ? T('Choose your SillyTavern') : T('Welcome to SillyTavern Desktop');
     $('setupLead').textContent = st.ready
       ? T('Switch to another install on this PC, point to a folder, or install a fresh copy.')
-      : st.current ? T('SillyTavern is no longer at {dir}. Pick where it is now, or install it again.', { dir: st.current }) : T("Let's get SillyTavern running. Two quick steps — everything happens right here.");
+      : st.current ? T('SillyTavern is no longer at {dir}. Pick where it is now, or install it again.', { dir: st.current }) : T('Two quick steps to get SillyTavern running.');
 
     const req = st.requirements;
     const reqOk = req.node.ok && req.git.ok;
@@ -2598,7 +2580,7 @@
         <div class="acts"><button class="btn sm primary" data-ropen="${esc(r.id)}">${icon('play')}${T('Open')}</button>
           <button class="btn sm ghost" data-redit="${esc(r.id)}" title="${T('Edit')}">${icon('pencil')}</button>
           <button class="btn sm ghost danger" data-rdel="${esc(r.id)}" title="${T('Remove')}">${icon('trash')}</button></div></div>`).join('')
-      : `<div class="empty">${T('None yet. <b>Add</b> one with its address, like http://192.168.1.25:8000.')}</div>`;
+      : `<div class="empty">${T('None yet.')}</div>`;
     el.querySelectorAll('[data-ropen]').forEach(b => b.onclick = () => D.remoteOpen(b.dataset.ropen));
     el.querySelectorAll('[data-redit]').forEach(b => b.onclick = () => openRemForm(remotes.find(r => r.id === b.dataset.redit)));
     el.querySelectorAll('[data-rdel]').forEach(b => b.onclick = async () => { if (await D.remoteDelete(b.dataset.rdel)) { closeRemForm(); loadRemotes(); } });
@@ -2667,7 +2649,7 @@
       const what = p.ok ? [p.version && `SillyTavern ${p.version}`, p.branch || T('fixed version')].filter(Boolean).map(esc).join(' · ')
         : `<span style="color:var(--bad)">${T('No SillyTavern in this folder anymore. Edit the profile, or remove it.')}</span>`;
       const acts = [
-        !p.active && p.ok ? `<button class="btn sm primary" data-task data-puse="${id}">${T('Use')}</button>` : '',
+        !p.active && p.ok ? `<button class="btn sm primary" data-task data-puse="${id}" title="${esc(T('Switch the server to this folder; open SillyTavern tabs reload'))}">${T('Use')}</button>` : '',
         !p.active && p.ok ? `<button class="btn sm ghost" data-palong="${id}" title="${esc(T('Run it at the same time, on its own port, in a new tab'))}">${T('Open next to it')}</button>` : '',
         !p.active && p.ok ? `<button class="btn sm ghost" data-pmig="${id}" title="${esc(T('Copy characters, chats, presets… from this SillyTavern into another'))}">${icon('swap')}</button>` : '',
         p.ok ? `<button class="btn sm ghost" data-phist="${id}" title="${esc(T('History: updates and what changed'))}">${icon('clock')}</button>` : '',
@@ -3733,7 +3715,7 @@
     $('btnAiCivitaiClear').hidden = !r.civitaiKey;
     $('aiCivitaiKey').placeholder = r.civitaiKey ? T('Saved (type a new one to replace it)') : T('Paste it from Civitai → Account settings → API keys');
     $('aiDir').textContent = r.appsDir;
-    $('aiDirInfo').textContent = `${r.free != null ? T('{free} free there.', { free: GB1(r.free) }) : ''} ${T('Builds for: {kind}.', { kind: { cuda: T('NVIDIA (CUDA)'), vulkan: T('AMD or Intel (Vulkan)'), cpu: T('the processor (no suitable graphics card)') }[r.gpu] })} ${T('Apps that SillyTavern-Launcher (Launcher.bat) installed are found and used where they are.')}`;
+    $('aiDirInfo').textContent = `${r.free != null ? T('{free} free there.', { free: GB1(r.free) }) : ''} ${T('Builds for: {kind}.', { kind: { cuda: T('NVIDIA (CUDA)'), vulkan: T('AMD or Intel (Vulkan)'), cpu: T('the processor (no suitable graphics card)') }[r.gpu] })}`;
     $('btnAiDirReset').hidden = !current.appsDir;
     $('aiList').innerHTML = r.apps.map(appCard).join('');
     r.apps.forEach(a => { ai.apps.set(a.id, a); wireApp(a); });
@@ -3756,11 +3738,10 @@
   $('aiGroup').querySelectorAll('button').forEach(b => b.onclick = () => showAiGroup(b.dataset.g));
   function appCard(a) {
     return `<div class="card ai-card" data-app="${esc(a.id)}" data-group="${esc(a.group)}">
-      <h2>${esc(a.name)}<span class="act row" style="gap:14px"><button class="link" data-ai-log>${T('Log')}</button><button class="link" data-xurl="${esc(a.site)}">${T('Project page')}</button></span></h2>
+      <div class="ai-head"><h3>${esc(a.name)}</h3>${a.note ? tipHtml(a.note) : ''}<span data-part="tag"></span></div>
       <p class="muted small">${esc(a.desc)}${a.size ? ` <span class="tag">${esc(a.size)}</span>` : ''}</p>
-      ${a.note ? `<p class="muted small">${esc(a.note)}</p>` : ''}
       <div data-part="status"></div>
-      <label class="switch" style="border:0;padding:0"><input type="checkbox" data-ai-auto${a.autostart ? ' checked' : ''}><div><b>${T('Start with SillyTavern')}</b><span>${T('Starts when the SillyTavern server starts. AI apps always stop when this app quits.')}</span></div></label>
+      <div class="ai-foot"><label class="ai-auto"><input type="checkbox" class="tgl" data-ai-auto${a.autostart ? ' checked' : ''}><span>${T('Start with SillyTavern')}</span>${tipHtml(T('Starts when the SillyTavern server starts. AI apps always stop when this app quits.'))}</label><span class="act"><button class="link" data-ai-log>${T('Log')}</button><button class="link" data-xurl="${esc(a.site)}">${T('Project page')}</button></span></div>
       <details${a.installed ? '' : ' hidden'} data-part="settings"><summary>${T('Settings')}</summary><div class="ai-opts">${a.opts.map(o => optField(a, o)).join('')}</div></details>
       <div data-part="connect"></div>
     </div>`;
@@ -3792,13 +3773,12 @@
         `<button class="btn sm ghost" data-ai="folder" title="${esc(a.dir)}">${icon('folder')}</button>`,
         a.extraFolder ? `<button class="btn sm ghost" data-ai="subfolder" data-sub="${esc(a.extraFolder.sub)}">${icon('folder')}${esc(a.extraFolder.label)}</button>` : '',
         a.fromLauncherBat ? '' : `<button class="btn sm ghost danger" data-ai="remove" title="${T('Remove')}"${busy || a.running ? ' disabled' : ''}>${icon('trash')}</button>`].join('');
-    card.querySelector('[data-part="status"]').innerHTML = `<div class="row" style="gap:8px">
-        <span class="tag ${tagCls}">${esc(STATUS()[a.status] || a.status)}</span>
-        ${a.installed ? `<span class="muted small">${esc(a.version && a.version !== '?' ? a.version : '')}${a.fromLauncherBat ? ` · ${T('installed by SillyTavern-Launcher')}` : ''}</span>` : ''}
-      </div>
+    card.querySelector('[data-part="tag"]').innerHTML = `<span class="tag ${tagCls}">${esc(STATUS()[a.status] || a.status)}</span>`;
+    const about = a.installed ? [a.version && a.version !== '?' ? a.version : '', a.fromLauncherBat ? T('installed by SillyTavern-Launcher') : ''].filter(Boolean).map(esc).join(' · ') : '';
+    card.querySelector('[data-part="status"]').innerHTML = `${about ? `<div class="muted small">${about}</div>` : ''}
       ${a.status === 'installing' ? `<div class="row" style="margin-top:8px"><div class="progress${a.progress == null ? ' wait' : ''}"><i style="width:${a.progress || 0}%"></i></div><span class="muted small" style="min-width:160px">${esc(a.step || '')}${a.progress != null ? ` ${a.progress}%` : ''}</span></div>` : ''}
       ${a.error ? `<p class="err" style="margin-top:6px">${esc(a.error)}</p>` : ''}
-      <div class="acts" style="margin-top:8px">${acts}</div>`;
+      <div class="acts">${acts}</div>`;
     card.querySelector('[data-part="settings"]').hidden = !a.installed;
     card.querySelector('[data-part="connect"]').innerHTML = !a.installed ? '' : !a.connect ? `<p class="muted small">${esc(a.noConnect)}</p>` : `<div class="ai-connect">
         <span class="muted">${T('In SillyTavern')}</span><span>${esc(a.connect.api)}</span><span></span>
@@ -3856,7 +3836,7 @@
   function renderModels() {
     $('aiModels').innerHTML = ai.models.length ? ai.models.map(m => `<div class="item"><div class="main"><div class="title">${esc(m.name)}</div><div class="meta">${GB1(m.size)}</div></div>
         <button class="btn sm ghost danger" data-mdel="${esc(m.path)}" title="${T('Remove')}">${icon('trash')}</button></div>`).join('')
-      : `<div class="empty">${T('No models yet. Download one below, or put .gguf files in the models folder.')}</div>`;
+      : `<div class="empty">${T('No models yet.')}</div>`;
     $('aiModels').querySelectorAll('[data-mdel]').forEach(b => b.onclick = async () => { ai.models = await D.aiModelRemove(b.dataset.mdel); renderModels(); });
   }
   D.onAiModels(list => { ai.models = list; if (state.page === 'aiapps') loadAi(); });
@@ -3879,7 +3859,7 @@
   function renderImageModels() {
     $('aiImgModels').innerHTML = ai.imageModels.length ? ai.imageModels.map(m => `<div class="item"><div class="main"><div class="title">${esc(m.name)} <span class="tag">${esc(IMG_KIND()[m.kind] || m.kind)}</span></div><div class="meta">${GB1(m.size)}</div></div>
         <button class="btn sm ghost danger" data-imdel="${esc(m.path)}" title="${T('Remove')}">${icon('trash')}</button></div>`).join('')
-      : `<div class="empty">${T('No picture models yet. Download one below, or put files in the folder\'s subfolders (checkpoints, loras, …).')}</div>`;
+      : `<div class="empty">${T('No picture models yet.')}</div>`;
     $('aiImgModels').querySelectorAll('[data-imdel]').forEach(b => b.onclick = async () => { ai.imageModels = await D.aiImageRemove(b.dataset.imdel); renderImageModels(); });
   }
   D.onAiImageModels(list => { ai.imageModels = list; renderImageModels(); if (ai.imgSuggested) renderImageSuggested(); });
