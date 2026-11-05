@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('bar', {
     action: (name, data) => ipcRenderer.send('bar:action', name, data),
     onState: cb => ipcRenderer.on('bar:state', (_e, s) => cb(s)),
+    onThemeCss: cb => ipcRenderer.on('bar:theme-css', (_e, css) => cb(css)),
     i18n: () => ipcRenderer.sendSync('i18n-dict'),
 });
 

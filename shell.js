@@ -83,8 +83,8 @@ export class StWindow {
             }
         });
 
+        this.bar.webContents.on('did-finish-load', () => { this.sentCss = null; this.push(); });
         this.bar.webContents.loadFile(path.join(__dirname, 'stbar.html'));
-        this.bar.webContents.once('did-finish-load', () => this.push());
         if (opts.tab) this.takeTab(opts.tab);
         else this.newTab(opts.instance);
         layer.apply(win, this.layer);
@@ -103,7 +103,6 @@ export class StWindow {
     // After a language change: the bar loads its text again.
     reloadBar() {
         if (this.bar.webContents.isDestroyed()) return;
-        this.bar.webContents.once('did-finish-load', () => this.push());
         this.bar.webContents.reload();
     }
     // After a server restart every SillyTavern tab is a dead page.
@@ -314,6 +313,12 @@ export class StWindow {
     // ---------- bar ----------
     push() {
         if (this.bar.webContents.isDestroyed()) return;
+        // Up to 512 KB, and push() runs a lot: only when it changed.
+        const css = this.opts.themeCss?.() ?? '';
+        if (css !== (this.sentCss ?? '')) {
+            this.sentCss = css;
+            this.bar.webContents.send('bar:theme-css', css);
+        }
         this.bar.webContents.send('bar:state', {
             tabs: this.tabs.map(t => ({ id: t.id, title: t.title, favicon: t.favicon, loading: t.loading, chip: t.instance.chip, tip: t.instance.tip, readOnly: !!t.instance.readOnly })),
             active: this.active?.id,

@@ -355,7 +355,9 @@ The translations were made with the help of AI and are waiting for native speake
 
 **If a theme makes the app hard to use:** press **Ctrl+Alt+Shift+T** in the launcher to go back to the default theme, or hold **Shift** while the app starts to use the default theme for that run only.
 
-The launcher has a soft retro pixel look in **Departure Mono**, a pixel font where B and 8, I, l and 1, and O and 0 are easy to tell apart. **Settings → Appearance → App font** switches to DotGothic16, Pixelify Sans (the font before 1.6), VT323, Segoe UI or any font on your PC, and **Size** makes the launcher 80 to 150 % as large. The font also applies to the SillyTavern window's top bar; SillyTavern's own pages keep the font chosen in SillyTavern. Pick a theme, **SillyTavern** (default) or **Fox**, in **Settings → Appearance**, or click **New theme**: choose seven colors and a logo, and every logo turns into pixel art. **Export** and **Import theme…** share themes as small `.json` files. Themes are only colors and an image, never code.
+The launcher has a soft retro pixel look in **Departure Mono**, a pixel font where B and 8, I, l and 1, and O and 0 are easy to tell apart. **Settings → Appearance → App font** switches to DotGothic16, Pixelify Sans (the font before 1.6), VT323, Segoe UI or any font on your PC, and **Size** makes the launcher 80 to 150 % as large. The font also applies to the SillyTavern window's top bar; SillyTavern's own pages keep the font chosen in SillyTavern. Pick a theme, **SillyTavern** (default) or **Fox**, in **Settings → Appearance**, or click **New theme**: choose seven colors and a logo, and every logo turns into pixel art. **Export** and **Import theme…** share themes as small `.json` files.
+
+Bigger themes come as `.sttheme` files, which can also change shapes, add pictures and use fonts with their own CSS. Install one with **Import theme…**, by dropping it on the launcher, or with **Open with**. The app shows what it is first, checks its CSS every time it loads, and after you apply one for the first time asks **Keep this theme?**: if you do nothing, it goes back after 15 seconds. A theme's CSS can't reach your files or the internet, and it never runs scripts, but it can change what you see, so install themes from people you trust.
 
 <details>
 <summary>Theme file format</summary>
@@ -374,6 +376,8 @@ The launcher has a soft retro pixel look in **Departure Mono**, a pixel font whe
 ```
 
 The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are optional. `logo` is `"st"`, `"fox"`, or a `data:image/…;base64,…` image (PNG, JPEG, GIF or WebP, up to 512 KB).
+
+A `.sttheme` file is a zip with this same `theme.json` (plus `"apiVersion": 1`, and `logo` may be a path like `assets/logo.png`), and optionally `theme.css` for the launcher, `bar.css` for the SillyTavern window's top bar, and pictures, video and fonts. Paths in `url()` stay inside the theme. Scripts and HTML aren't allowed.
 
 </details>
 

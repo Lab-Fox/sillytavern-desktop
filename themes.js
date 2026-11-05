@@ -4,6 +4,7 @@
 import path from 'path';
 import fs from 'fs';
 import { t, N } from './i18n.js';
+import * as pkg from './themepackage.js';
 
 // The app's font (launcher and the SillyTavern window's top bar; not
 // SillyTavern's own pages). '' is the default. Any other value is the name
@@ -121,7 +122,7 @@ export function list() {
             custom.push({ ...t, id: `custom:${f.slice(0, -5)}`, builtin: false });
         } catch { /* skip broken files */ }
     }
-    return [...BUILTIN, ...custom.sort((a, b) => a.name.localeCompare(b.name))];
+    return [...BUILTIN, ...[...custom, ...pkg.list()].sort((a, b) => a.name.localeCompare(b.name))];
 }
 
 export function get(id) {
@@ -142,6 +143,7 @@ export function save(raw, id) {
 }
 
 export function remove(id) {
+    if (id?.startsWith(pkg.PREFIX)) return pkg.remove(id);
     if (!id?.startsWith('custom:')) return false;
     try { fs.unlinkSync(path.join(dir, `${path.basename(id.slice(7))}.json`)); return true; } catch { return false; }
 }

@@ -185,6 +185,8 @@ contextBridge.exposeInMainWorld('desktop', {
     saveTheme: (theme, id) => invoke('save-theme', theme, id),
     deleteTheme: id => invoke('delete-theme', id),
     importTheme: () => invoke('import-theme'),
+    installTheme: file => invoke('theme-install', file),
+    themeCss: () => invoke('theme-css'),
     exportTheme: id => invoke('export-theme', id),
     stLogo: () => invoke('st-logo'),
     // places, links, misc

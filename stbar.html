@@ -240,6 +240,9 @@
   }
   addEventListener('resize', () => document.querySelector('.tab.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' }));
 
+  // Checked by the main process (themecss.js); never anything but CSS here.
+  const themeStyle = document.head.appendChild(document.createElement('style'));
+  bar.onThemeCss(css => { themeStyle.textContent = css; });
   bar.onState(s => {
     for (const [k, v] of Object.entries(VARS)) if (s.colors[k]) document.documentElement.style.setProperty(v, s.colors[k]);
     if (s.font) document.body.style.fontFamily = s.font;

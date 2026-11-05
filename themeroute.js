@@ -19,7 +19,7 @@ protocol.registerSchemesAsPrivileged([{
 
 // Pictures, video and fonts only. CSS, HTML and scripts are never served from
 // here: a theme's CSS is checked first, and pages get the checked text.
-const TYPES = {
+export const TYPES = {
     '.png': 'image/png', '.apng': 'image/apng', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
     '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
     '.webm': 'video/webm', '.mp4': 'video/mp4',
@@ -34,6 +34,13 @@ const inside = (root, file) => {
     return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
 };
 
+// A path inside a package, as "folder/name.png": no way out, nothing Windows
+// treats specially.
+export function safeRel(rel) {
+    const parts = String(rel).split('/');
+    return parts.every(p => p && p !== '.' && p !== '..' && !BAD_NAME.test(p));
+}
+
 // The file a st-theme: address may name, or null. Plain text checks only;
 // `locate` then follows links on disk.
 export function themePath(packagesDir, url) {
@@ -43,10 +50,8 @@ export function themePath(packagesDir, url) {
     if (/%(2f|5c|00)/i.test(u.pathname)) return null;
     let rel;
     try { rel = decodeURIComponent(u.pathname.slice(1)); } catch { return null; }
-    const parts = rel.split('/');
-    if (parts.some(p => !p || p === '.' || p === '..' || BAD_NAME.test(p))) return null;
-    if (!TYPES[path.extname(rel).toLowerCase()]) return null;
-    return path.join(packagesDir, u.hostname, ...parts);
+    if (!safeRel(rel) || !TYPES[path.extname(rel).toLowerCase()]) return null;
+    return path.join(packagesDir, u.hostname, ...rel.split('/'));
 }
 
 async function locate(packagesDir, url) {

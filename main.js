@@ -12,6 +12,7 @@ import { setupUserscripts } from './userscripts.js';
 import * as mx from './maintenance.js';
 import * as setup from './setup.js';
 import * as themes from './themes.js';
+import * as themepkg from './themepackage.js';
 import { StWindow, windowOf } from './shell.js';
 import { MODES as LAYERS, shiftDown } from './winlayer.js';
 import { initThemeRoute, guardFileRequests } from './themeroute.js';
@@ -104,6 +105,7 @@ const DEFAULT_SETTINGS = {
     chromeExtDisabled: [],      // Chrome extension ids turned off (installed but not loaded; chromeext.js)
     spellcheckEngine: 'windows', // red underlines: 'windows' (Windows' spellchecker) or 'builtin' (Chromium's Hunspell, English); needs a restart
     theme: 'sillytavern',       // launcher theme id (see themes.js)
+    themesKept: [],             // themes with CSS the user said yes to, as "<id>:<hash of the CSS>"
     language: '',               // the app's language (i18n.js); '' = Windows' language
     syncStLanguage: true,       // a language change also sets SillyTavern's own language (where it has it)
     stLanguage: null,           // { code, done: [partitions] } after a change: each session gets it once
@@ -1055,6 +1057,7 @@ function createStWindow(instance, extra = {}) {
         layer: settings.windowLayer,
         colors: themes.get(activeThemeId()).colors,
         font: () => themes.uiFontCss(settings.uiFont),
+        themeCss: () => themeCss.bar,
         icon: path.join(__dirname, 'icon.ico'),
         setupPage: lockToServer,
         tabsEnabled: () => settings.tabs,
@@ -2233,7 +2236,7 @@ ipcMain.handle('runtime-remove', async () => {
 // ---------- importing cards, lorebooks and presets ----------
 // Files from "Open with" (argv) and from drag & drop on the launcher.
 function importArgs(argv) {
-    return argv.slice(1).filter(a => !a.startsWith('-') && imp.EXTENSIONS.includes(path.extname(a).toLowerCase()) && fs.existsSync(a));
+    return argv.slice(1).filter(a => !a.startsWith('-') && [...imp.EXTENSIONS, themepkg.EXTENSION].includes(path.extname(a).toLowerCase()) && fs.existsSync(a));
 }
 let pendingImport = [];
 function offerImport(files) {
@@ -2513,8 +2516,65 @@ function setTheme(id) {
     safeTheme = false;
     settings.theme = themes.get(id).id;
     saveSettings(settings);
-    broadcast('theme');
     stWins.forEach(w => w.setColors(themes.get(settings.theme).colors));
+    return refreshThemeCss().then(() => broadcast('theme'));
+}
+// The active theme's checked CSS. A theme whose CSS no longer passes keeps its
+// colors and loses the CSS.
+const themeCss = { launcher: '', bar: '' };
+let cssRound = 0;
+async function refreshThemeCss() {
+    const round = ++cssRound;
+    const id = activeThemeId();
+    const [launcher, bar] = await Promise.all([themepkg.css(id, 'theme.css'), themepkg.css(id, 'bar.css')]);
+    if (round !== cssRound) return;
+    for (const e of [...launcher.errors, ...bar.errors]) logLine(`Theme CSS left out: ${e}`);
+    themeCss.launcher = launcher.css;
+    themeCss.bar = bar.css;
+    stWins.forEach(w => w.push());
+}
+// A theme with CSS could leave the app hard to use, and a broken page can't show
+// its own way back: a native box, and doing nothing goes back.
+const KEEP_SECONDS = 15;
+let keepPrompt = null;
+async function tryTheme(id) {
+    const theme = themes.get(id);
+    const key = theme.hasCss ? themepkg.fingerprint(id) : null;
+    if (!key || settings.themesKept.includes(key)) return setTheme(id);
+    keepPrompt?.abort();
+    const before = activeThemeId();
+    await setTheme(id);
+    const prompt = keepPrompt = new AbortController();
+    const timer = setTimeout(() => prompt.abort(), KEEP_SECONDS * 1000);
+    const { response } = await dialog.showMessageBox({
+        type: 'question', buttons: [t('Keep this theme'), t('Go back')], defaultId: 1, cancelId: 1, signal: prompt.signal,
+        message: t('Keep this theme?'),
+        detail: t('The app goes back to your last theme in {n} seconds if you do nothing.', { n: KEEP_SECONDS }),
+    }).catch(() => ({ response: 1 }));
+    clearTimeout(timer);
+    if (keepPrompt === prompt) keepPrompt = null;
+    if (response === 0 && !prompt.signal.aborted) {
+        settings.themesKept = [...settings.themesKept.filter(k => !k.startsWith(`${id}:`)), key].slice(-50);
+        saveSettings(settings);
+    } else if (settings.theme === id) {
+        logLine(`Went back from the theme "${theme.name}".`);
+        await setTheme(before);
+    }
+}
+async function installTheme(file) {
+    const info = await themepkg.inspect(file);
+    const lines = [
+        [info.author && t('By {name}', { name: info.author }), info.version].filter(Boolean).join(' · '),
+        info.description,
+        info.hasCss ? t('This theme changes how the app looks with its own CSS. It can\'t reach your files or the internet, but it can change what you see: install themes from people you trust.') : '',
+        info.replaces ? t('This replaces the version you have installed.') : '',
+    ].filter(Boolean);
+    if (!(await confirm(t('Install the theme "{name}"?', { name: info.name }), lines.join('\n\n'), t('Install')))) return { canceled: true };
+    const id = await themepkg.install(file, { replace: info.replaces });
+    logLine(`Installed the theme "${info.name}".`);
+    broadcast('theme');
+    await tryTheme(id);
+    return { ok: true, id };
 }
 // The app's font and size: the launcher applies them itself, the top bars get the font.
 ipcMain.handle('ui-fonts', () => ({ fonts: themes.UI_FONTS.map(([id, label]) => ({ id, label: t(label) })), zooms: themes.ZOOMS }));
@@ -2528,7 +2588,11 @@ ipcMain.handle('set-ui-font', (_e, { font, zoom } = {}) => {
     return publicSettings();
 });
 ipcMain.handle('list-themes',() => ({ active: themes.get(activeThemeId()).id, safe: safeTheme, themes: themes.list() }));
-ipcMain.handle('set-theme', (_e, id) => setTheme(id));
+ipcMain.handle('set-theme', (_e, id) => tryTheme(id));
+ipcMain.handle('theme-css', () => themeCss.launcher);
+ipcMain.handle('theme-install', async (_e, file) => {
+    try { return await installTheme(file); } catch (e) { logLine(`Theme not installed: ${e.message}`); return { error: e.message }; }
+});
 ipcMain.handle('save-theme', (_e, raw, id) => {
     try {
         const newId = themes.save(raw, id);
@@ -2545,10 +2609,11 @@ ipcMain.handle('delete-theme', async (_e, id) => {
     return true;
 });
 ipcMain.handle('import-theme', async () => {
-    const r = await dialog.showOpenDialog(launcherWin, { title: t('Import a theme'), filters: [{ name: 'SillyTavern Desktop theme', extensions: ['json'] }], properties: ['openFile'] });
+    const r = await dialog.showOpenDialog(launcherWin, { title: t('Import a theme'), filters: [{ name: 'SillyTavern Desktop theme', extensions: ['sttheme', 'json'] }], properties: ['openFile'] });
     if (r.canceled) return { canceled: true };
     try {
         const file = r.filePaths[0];
+        if (path.extname(file).toLowerCase() === themepkg.EXTENSION) return await installTheme(file);
         if (fs.statSync(file).size > 1024 * 1024) throw new Error(t('That file is too large to be a theme.'));
         let raw;
         try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { throw new Error(t('That file is not valid theme JSON.')); }
@@ -2560,6 +2625,13 @@ ipcMain.handle('import-theme', async () => {
 });
 ipcMain.handle('export-theme', async (_e, id) => {
     const theme = themes.get(id);
+    if (theme.package) {
+        const p = await dialog.showSaveDialog(launcherWin, { title: t('Export theme'), defaultPath: `${theme.name.replace(/[^\w -]/g, '')}${themepkg.EXTENSION}`, filters: [{ name: 'Theme', extensions: ['sttheme'] }] });
+        if (p.canceled) return false;
+        await themepkg.exportTo(id, p.filePath);
+        logLine(`Exported theme "${theme.name}" to ${p.filePath}.`);
+        return true;
+    }
     const r = await dialog.showSaveDialog(launcherWin, { title: t('Export theme'), defaultPath: `${theme.name.replace(/[^\w -]/g, '')}.json`, filters: [{ name: 'Theme', extensions: ['json'] }] });
     if (r.canceled) return false;
     fs.writeFileSync(r.filePath, themes.exportJson(id));
@@ -2641,6 +2713,7 @@ if (gotLock) {
         guardFileRequests(session.defaultSession, __dirname, url => logLine(`Blocked a page from loading ${url}`));
         safeTheme = process.argv.includes('--safe-theme') || shiftDown();
         if (safeTheme) logLine('Safe start: using the default theme for this run.');
+        refreshThemeCss().then(() => { if (themeCss.launcher) broadcast('theme'); });
         appUpdate.initAppUpdate({ userData: USER_DATA, logLine, preview: () => settings.appPreview, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
         bs.initBackupSchedule({
             logLine, userData: USER_DATA, getSettings: () => settings, targets: scheduleTargets,

@@ -54,6 +54,7 @@ Var pid
   !insertmacro stOpenWith ".byaf"
   !insertmacro stOpenWith ".yaml"
   !insertmacro stOpenWith ".yml"
+  !insertmacro stOpenWith ".sttheme"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 !macroend
 

@@ -42,6 +42,8 @@
       "shell.js",
       "winlayer.js",
       "themeroute.js",
+      "themecss.js",
+      "themepackage.js",
       "instances.js",
       "extensions.js",
       "appupdate.js",
@@ -67,6 +69,8 @@
       "package.json",
       "!node_modules/koffi/build/koffi/!(win32_x64)/**",
       "!node_modules/koffi/{src,vendor,doc}/**",
+      "!node_modules/css-tree/{dist,data,cjs}/**",
+      "!node_modules/mdn-data/**",
       "!node_modules/qrcode-generator/{test,experiment}/**",
       "!node_modules/qrcode-generator/dist/qrcode_SJIS.*"
     ],
@@ -99,6 +103,7 @@
     ]
   },
   "dependencies": {
+    "css-tree": "3.2.1",
     "electron-chrome-extensions": "^4.10.0",
     "electron-chrome-web-store": "^0.13.0",
     "koffi": "^2.16.3",

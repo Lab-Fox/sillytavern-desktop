@@ -93,7 +93,9 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `chromeext.js` | Chrome extensions: the Chrome Web Store ([electron-chrome-web-store](https://github.com/samuelmaddock/electron-browser-shell/tree/master/packages/electron-chrome-web-store)), Chrome APIs ([electron-chrome-extensions](https://github.com/samuelmaddock/electron-browser-shell/tree/master/packages/electron-chrome-extensions)), loading them into every SillyTavern session, on/off, remove |
 | `appupdate.js` | Self-update from GitHub releases (SHA256-checked) |
 | `lan.js` | Phone access: local networks, the server's environment variables, QR codes (`qrcode-generator`) |
-| `themes.js` | Built-in and custom themes, import/export |
+| `themes.js` | Built-in and custom themes, import/export, and what themes may rely on (`TOKENS`, `PARTS`, `CLASSES`, `STATES`, `THEME_API`) |
+| `themepackage.js` | `.sttheme` files: checks, install, export, remove |
+| `themecss.js` | The check all theme CSS goes through on every load (uses `css-tree`; plain Node) |
 | `themeroute.js` | `st-theme://<package>/<path>`, the only way theme files reach a page (pictures, video and fonts only), and the block on `file:` addresses outside the app. `--safe-theme` starts with the default theme |
 | `installer.nsh` | Installer steps: ask a running app to close itself (`--quit`) first; the **Open with** entries for cards, lorebooks and presets |
 | `examples/`, `EXTENSIONS.md` | Example desktop extension and the extension guide |
