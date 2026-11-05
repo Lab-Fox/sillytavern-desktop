@@ -167,6 +167,7 @@ panel.addEventListener('mousedown', e => { if (recording && !e.target.closest('[
 
 async function load() {
     state = await ext.invoke('status');
+    if (!panel.isConnected) return; // the page changed meanwhile
     const s = state.settings;
     $('whStatus').textContent = state.state === 'ready' ? `Ready: ${state.text}.` : state.text;
     $('whStatus').style.color = state.state === 'error' ? 'var(--bad)' : '';
@@ -200,15 +201,20 @@ async function load() {
         + (c && (c.messages || c.characters) ? `, including ${c.messages.toLocaleString('en-US')} of your messages${c.characters ? ` and ${c.characters.toLocaleString('en-US')} of the characters'` : ''} from ${c.files} chats.` : '.')
         + ` "Learn from my chats" reads ${s.learnCharacters ? 'your and the characters\' messages' : 'your own messages'} in your newest 400 saved chats, on this PC only.`;
     $('whChats').disabled = state.learning || state.state !== 'ready';
+    $('whForget').disabled = state.learning; // it would save what it learned right after
     $('whChats').textContent = state.learning ? 'Learning…' : c ? 'Learn from my chats again' : 'Learn from my chats';
     renderWords();
 }
 
 async function renderWords() {
     const r = await ext.invoke('words', $('whSearch').value);
+    if (!panel.isConnected) return;
     const chip = (w, kind) => `<span class="tag" style="display:inline-flex;gap:6px;align-items:center">${esc(w)}${kind ? ` <i class="muted">(${kind})</i>` : ''}<button class="link" data-rm="${esc(w)}" title="${kind === 'never suggested' ? 'Suggest it again' : 'Remove'}">×</button></span>`;
-    $('whList').innerHTML = r.words.length || r.ignored.length || r.blocked.length
-        ? [...r.words.map(w => chip(w)), ...r.ignored.map(w => chip(w, 'ignored')), ...r.blocked.map(w => chip(w, 'never suggested'))].join('')
+    // Thousands of chips would slow the whole launcher down: searching finds the rest.
+    const all = [...r.words.map(w => [w]), ...r.ignored.map(w => [w, 'ignored']), ...r.blocked.map(w => [w, 'never suggested'])];
+    const shown = all.slice(0, 300);
+    $('whList').innerHTML = all.length
+        ? shown.map(([w, kind]) => chip(w, kind)).join('') + (all.length > shown.length ? `<span class="muted small" style="flex-basis:100%">Showing ${shown.length} of ${all.length.toLocaleString('en-US')}. Search to find the others.</span>` : '')
         : `<span class="muted small">${$('whSearch').value ? 'No match.' : 'No words of your own yet.'}</span>`;
     $('whList').querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => { await ext.invoke('remove-word', b.dataset.rm); renderWords(); });
 }

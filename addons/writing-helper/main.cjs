@@ -62,6 +62,7 @@ function cleanKeys(v) {
 const keysOf = s => cleanKeys(s.keys) || KEYS;
 
 let api = null;
+let active = false; // false once turned off (a build may still be running)
 let lex = null;
 let status = { state: 'starting', text: 'Starting…' };
 let userWords = { words: [], ignored: [], blocked: [] };
@@ -86,6 +87,9 @@ function scenePack() {
     return out;
 }
 const cap = w => (w ? w[0].toUpperCase() + w.slice(1) : w);
+// Lets the app breathe between long steps: all of this runs in the app's main
+// process, and while it works every window of the app waits.
+const breathe = () => new Promise(r => setImmediate(r));
 
 function setStatus(state, text) {
     status = { state, text };
@@ -106,20 +110,30 @@ async function ensureFile(src) {
 
 async function build() {
     try {
+        saveLearned(); // a rebuild reads this file: what was learned just now stays
         setStatus('loading', 'Getting the word lists…');
         const zip = fs.readFileSync(await ensureFile(SOURCES.scowl));
         const freqText = fs.readFileSync(await ensureFile(SOURCES.freq), 'utf8');
+        await breathe();
         setStatus('loading', 'Building the dictionary…');
         const words = L.expandHunspell(L.unzipEntry(zip, 'en_US-large.aff').toString('utf8'), L.unzipEntry(zip, 'en_US-large.dic').toString('utf8'));
         for (const w of pack('roleplay.txt')) words.set(w, false);
+        await breathe();
         const s = settings();
-        lex = new L.Lexicon({ words, freq: L.parseFreq(freqText), adult: pack('adult.txt'), adultOn: s.adult, scene: scenePack() });
-        lex.setUser(userWords.words);
-        for (const w of userWords.ignored) lex.ignored.add(w.toLowerCase());
-        lex.importLearned(readJson(userFile('learned.json'), null));
-        try { lex.setGeneralPairs(require('zlib').gunzipSync(fs.readFileSync(path.join(__dirname, 'data', 'pairs.txt.gz'))).toString('utf8')); } catch (e) { api.log(`Word pairs not loaded: ${e.message}`); }
-        lex.setBlocked(userWords.blocked);
+        const next = new L.Lexicon({ words, freq: L.parseFreq(freqText), adult: pack('adult.txt'), adultOn: s.adult, scene: scenePack() });
+        await breathe();
+        next.setUser(userWords.words);
+        for (const w of userWords.ignored) next.ignored.add(w.toLowerCase());
+        next.importLearned(readJson(userFile('learned.json'), null));
+        await breathe();
+        try { next.setGeneralPairs(require('zlib').gunzipSync(fs.readFileSync(path.join(__dirname, 'data', 'pairs.txt.gz'))).toString('utf8')); } catch (e) { api.log(`Word pairs not loaded: ${e.message}`); }
+        next.setBlocked(userWords.blocked);
+        await breathe();
+        if (!active) return; // turned off meanwhile
+        lex = next;
         await scanNames();
+        await breathe();
+        if (!active || !lex) return;
         lex.suggestable();
         syncSpellchecker();
         setStatus('ready', `${lex.base.size.toLocaleString('en-US')} words, ${lex.vocab.size.toLocaleString('en-US')} suggested`);
@@ -135,20 +149,26 @@ async function build() {
 // Character file names, persona names, group names and lorebook keys of the
 // SillyTavern in use (its default-user). Only words the dictionary lacks.
 async function scanNames() {
-    nameList = [];
-    if (!settings().names || !lex) { lex?.setNames([]); return; }
+    if (!settings().names || !lex) { nameList = []; lex?.setNames([]); return; }
     const root = path.join(api.sillytavern.folder() || '', 'data', 'default-user');
     const found = new Set();
     const addText = t => { for (const w of L.tokens(t)) if (w.length >= 2 && w.length <= 30 && !lex.base.has(w.toLowerCase())) found.add(w); };
     const list = d => { try { return fs.readdirSync(path.join(root, d)); } catch { return []; } };
     for (const f of list('characters')) if (/\.png$/i.test(f)) addText(f.replace(/\.png$/i, ''));
-    for (const f of list('groups')) if (f.endsWith('.json')) addText(readJson(path.join(root, 'groups', f), {}).name || '');
-    const personas = readJson(path.join(root, 'settings.json'), {})?.power_user?.personas || {};
+    for (const f of list('groups')) if (f.endsWith('.json')) addText(readJson(path.join(root, 'groups', f), null)?.name || '');
+    const personas = readJson(path.join(root, 'settings.json'), null)?.power_user?.personas || {};
     for (const n of Object.values(personas)) addText(String(n));
+    // These files can be big and are written by many tools, so one at a time
+    // and one odd entry is skipped, not the end of the whole dictionary.
+    const keysOf = v => (Array.isArray(v) ? v.filter(k => typeof k === 'string') : []);
     for (const f of list('worlds')) {
         if (!f.endsWith('.json')) continue;
-        const entries = readJson(path.join(root, 'worlds', f), {}).entries || {};
-        for (const e of Object.values(entries)) for (const k of [...(e.key || []), ...(e.keysecondary || [])]) if (!/[\\^$*+?()[\]{}|/]/.test(k)) addText(k);
+        const entries = readJson(path.join(root, 'worlds', f), null)?.entries;
+        for (const e of Object.values(entries && typeof entries === 'object' ? entries : {})) {
+            for (const k of [...keysOf(e?.key), ...keysOf(e?.keysecondary)]) if (!/[\\^$*+?()[\]{}|/]/.test(k)) addText(k);
+        }
+        await breathe();
+        if (!lex) return; // turned off meanwhile
     }
     nameList = [...found].slice(0, 20000);
     lex.setNames(nameList);
@@ -156,7 +176,7 @@ async function scanNames() {
 
 // Chromium's red underline: our extra words (packs, your words, names) are
 // spelled right there too. Remembered, so removed words can be taken back out.
-function syncSpellchecker() {
+async function syncWords() {
     if (!lex) return;
     const want = new Set();
     const s = settings();
@@ -167,9 +187,22 @@ function syncSpellchecker() {
     const had = new Set(readJson(userFile('spellchecker.json'), []));
     const add = [...want].filter(w => !had.has(w) && !/\s/.test(w));
     const remove = [...had].filter(w => !want.has(w));
-    if (add.length) api.spellcheck.add(add);
-    if (remove.length) api.spellcheck.remove(remove);
+    // In small portions: with thousands of words (the first run, an import)
+    // this held up every window of the app for half a minute.
+    for (const [list, fn] of [[add, 'add'], [remove, 'remove']]) {
+        for (let i = 0; i < list.length; i += 25) {
+            if (!active) return;
+            api.spellcheck[fn](list.slice(i, i + 25));
+            await new Promise(r => setTimeout(r, 30));
+        }
+    }
     writeJson(userFile('spellchecker.json'), [...want]);
+}
+// One at a time, in order.
+let spellJob = Promise.resolve();
+function syncSpellchecker() {
+    spellJob = spellJob.then(syncWords).catch(e => api.log(`Spellchecker words not updated: ${e.message}`));
+    return spellJob;
 }
 
 // ---------- your dictionary ----------
@@ -230,10 +263,21 @@ const isBlocked = w => !!w && userWords.blocked.includes(w.toLowerCase());
 const inUserDict = w => !!w && (userWords.words.some(x => x.toLowerCase() === w.toLowerCase()) || userWords.ignored.some(x => x.toLowerCase() === w.toLowerCase()));
 
 // ---------- learning ----------
-function saveLearnedSoon() {
+// `unsaved`: nothing is written, or read back in a rebuild, without a reason.
+let unsaved = false;
+function saveLearned() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { if (lex) writeJson(userFile('learned.json'), lex.exportLearned()); }, 20000);
+    if (!lex || !unsaved) return;
+    unsaved = false;
+    writeJson(userFile('learned.json'), lex.exportLearned());
 }
+function saveLearnedSoon() {
+    unsaved = true;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveLearned, 20000);
+}
+// The app doesn't turn add-ons off when it quits.
+function onQuit() { try { saveLearned(); } catch (e) { api?.log(`Could not save what was learned: ${e.message}`); } }
 // Your own messages in saved chats (newest first, at most 400 files / 40 MB).
 let chatJob = null;
 function learnFromChats() {
@@ -261,6 +305,7 @@ function learnFromChats() {
             done++;
             let text = '';
             try { text = await fs.promises.readFile(f.p, 'utf8'); } catch { continue; }
+            if (!lex) return; // turned off meanwhile
             for (const line of text.split('\n')) {
                 if (!characters && !line.includes('"is_user":true')) continue;
                 try {
@@ -277,11 +322,12 @@ function learnFromChats() {
             await new Promise(r => setImmediate(r));
         }
         lex.importLearned(lex.exportLearned());
-        writeJson(userFile('learned.json'), lex.exportLearned());
+        unsaved = true;
+        saveLearned();
         writeJson(userFile('chats-learned.json'), { at: new Date().toISOString(), files: done, messages, characters: theirs });
         setStatus('ready', `Learned from ${messages.toLocaleString('en-US')} of your messages${theirs ? ` and ${theirs.toLocaleString('en-US')} of the characters'` : ''} in ${done} chats.`);
         api.log(`Learned from ${messages} of your messages and ${theirs} character messages in ${done} chats.`);
-    })().finally(() => { chatJob = null; });
+    })().catch(e => { api?.log(`ERROR while learning from chats: ${e.message}`); }).finally(() => { chatJob = null; });
     return chatJob;
 }
 
@@ -324,8 +370,10 @@ function wordOf(info) {
 
 exports.activate = function (a) {
     api = a;
+    active = true;
     userWords = { words: [], ignored: [], blocked: [], ...readJson(userFile('words.json'), {}) };
 
+    require('electron').app.on('will-quit', onQuit);
     api.pages.addScript(PAGE_CODE);
     api.pages.handle('config', () => config());
     api.pages.handle('suggest', (_page, prefix, prev, near, chat) => {
@@ -446,6 +494,9 @@ exports.activate = function (a) {
     });
     api.handle('learn-chats', () => { api.storage.set('learnChats', true); learnFromChats(); return true; });
     api.handle('forget', () => {
+        if (chatJob) return false; // it would save what it learned right after
+        clearTimeout(saveTimer);
+        unsaved = false;
         if (lex) lex.importLearned(null);
         for (const f of ['learned.json', 'chats-learned.json']) fs.rmSync(userFile(f), { force: true });
         api.storage.set('learnChats', false);
@@ -462,13 +513,14 @@ exports.activate = function (a) {
     api.handle('rescan', async () => { await scanNames(); syncSpellchecker(); return nameList.length; });
 
     // New characters, personas and lorebooks show up after a server start.
-    api.on('server-started', () => { scanNames().then(syncSpellchecker); });
+    api.on('server-started', () => { scanNames().then(syncSpellchecker).catch(e => api.log(`Names not scanned: ${e.message}`)); });
     build();
 };
 
 exports.deactivate = function () {
-    clearTimeout(saveTimer);
-    if (lex) writeJson(userFile('learned.json'), lex.exportLearned());
+    active = false;
+    require('electron').app.off('will-quit', onQuit);
+    saveLearned();
     api.pages.run('window.__desktopWritingHelper?.destroy()');
     lex = null;
 };

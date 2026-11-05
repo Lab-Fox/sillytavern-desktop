@@ -446,6 +446,9 @@ class Lexicon {
     // autocorrect, adultRow, sceneBoost }
     suggest(prefix, prev = '', { near = '', chat = '', autocorrect = true, adultRow = false, sceneBoost = false } = {}) {
         const p = String(prefix || '');
+        // Not a word: a run of letters without spaces (Japanese, a pasted code).
+        // The typo search below grows fast with the length of the word.
+        if (p.length > 30) return { words: [], fixes: 0, adult: [], explicit: false };
         const before = near.endsWith(p) ? near.slice(0, near.length - p.length) : near; // not the half-typed word itself
         this.setContext(chat, before);
         const explicit = sceneBoost ? this.explicitness(before, chat) : 0;
@@ -560,6 +563,7 @@ class Lexicon {
             }
             if (i > 0) {
                 const p = words[i - 1].toLowerCase();
+                if (p.length > 30) continue; // not a word: don't keep it
                 if (!this.bigrams.has(p)) this.bigrams.set(p, new Map());
                 const m = this.bigrams.get(p);
                 m.set(l, (m.get(l) || 0) + 1);

@@ -8,7 +8,10 @@
     const call = (channel, ...args) => (window.SillyTavernDesktop ? window.SillyTavernDesktop.invoke(ID, channel, ...args) : Promise.resolve(null));
     let cfg = { mode: null }; // null until the app answers: touch nothing before that
     const WORD = /[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*['’]?$/u;
-    const BOUNDARY = /^[\s.,!?;:)"”’…]$/u;
+    const BOUNDARY = /^[\s.,!?;:)"”’…*_~]$/u;
+    // Longer than this isn't a word (Japanese or Chinese text without spaces,
+    // a pasted code): nothing is looked up for it.
+    const MAX_WORD = 40;
     // Text boxes that hold code or settings, not writing: no suggestions there.
     const SKIP = '#customCSS, .CodeMirror *, .monaco-editor *, .cm-editor *, [data-no-writing-helper], #regex_test_input, #regex_test_output, #tabby_json_schema, #grammar, #grammar_string_textgenerationwebui';
     // One-line fields for keys, addresses, searches and numbers.
@@ -116,47 +119,74 @@
         sel.addRange(r);
     }
 
-    // Where the text cursor is on screen: { left, top, bottom }.
-    const MIRROR = ['direction', 'boxSizing', 'width', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderStyle',
-        'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize',
+    // Where the text cursor is. A text area can't tell, so a hidden copy of the
+    // text is laid out and measured: that is slow in a long text, so it happens
+    // once per change of the text (measureCaret), never while scrolling. The
+    // result is the cursor's place inside the field's text; on screen that is
+    // the field's position minus how far it is scrolled (caretOnScreen).
+    const MIRROR = ['direction', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize',
         'fontSizeAdjust', 'lineHeight', 'fontFamily', 'fontFeatureSettings', 'textAlign', 'textTransform', 'textIndent', 'letterSpacing', 'wordSpacing', 'tabSize', 'wordBreak', 'overflowWrap'];
-    let mirror = null, headCache = null;
-    function caretBox(el) {
+    const CHUNK = 2048; // only this much of a long paragraph is laid out per key
+    let mirror = null, mirrorHost = null, headCache = null;
+    function measureCaret(el) {
+        if (!mirror) {
+            // In a shadow root, like the strip (see there): added to the page once.
+            mirrorHost = document.createElement('div');
+            mirrorHost.id = 'desktop-writing-helper-measure';
+            mirror = document.createElement('div');
+            mirrorHost.attachShadow({ mode: 'open' }).append(mirror);
+            document.body.append(mirrorHost);
+        }
+        const cs = getComputedStyle(el);
+        const m = mirror.style;
+        for (const p of MIRROR) m[p] = cs[p];
+        const padTop = parseFloat(cs.paddingTop), padLeft = parseFloat(cs.paddingLeft);
+        const borderTop = parseFloat(cs.borderTopWidth), borderLeft = parseFloat(cs.borderLeftWidth);
+        const borders = borderLeft + parseFloat(cs.borderRightWidth);
+        // The lines are as wide as the text's room: a scroll bar takes some of
+        // it, and one line more or less adds up over a long text.
+        const bar = el.offsetWidth - el.clientWidth - borders;
+        const width = el.getBoundingClientRect().width - borders - bar - padLeft - parseFloat(cs.paddingRight);
+        m.boxSizing = 'content-box'; m.width = `${width}px`; m.border = '0';
+        m.position = 'absolute'; m.visibility = 'hidden'; m.top = '0'; m.left = '-9999px'; m.overflow = 'hidden'; m.height = 'auto';
+        const area = el.tagName === 'TEXTAREA';
+        m.whiteSpace = area ? 'pre-wrap' : 'pre';
+        if (area) m.overflowWrap = 'break-word';
+        const indent = m.textIndent;
+        const measure = (text, from) => {
+            m.textIndent = from == null ? indent : `${from}px`;
+            mirror.textContent = text;
+            const mark = document.createElement('span');
+            mark.textContent = '\u200b'; // no width: it can't push a word to the next line
+            mirror.append(mark);
+            return { top: mark.offsetTop - padTop, left: mark.offsetLeft - padLeft, height: mark.offsetHeight };
+        };
+        // The text before the cursor's paragraph, or before the part of a long
+        // paragraph the cursor is in, is measured once and kept while it stays
+        // the same. The rest goes on from where that part ended.
+        const value = el.value, caret = el.selectionStart;
+        const lineStart = area && caret > 0 ? value.lastIndexOf('\n', caret - 1) + 1 : 0;
+        const into = caret - lineStart;
+        const space = area && into > CHUNK ? value.lastIndexOf(' ', caret - (into % CHUNK) - 1) : -1;
+        const cut = space >= lineStart ? space + 1 : lineStart;
+        const head = value.slice(0, cut);
+        const sig = `${width}|${cs.font}|${cs.letterSpacing}|${cs.wordSpacing}|${padTop}`;
+        if (!headCache || headCache.el !== el || headCache.sig !== sig || headCache.head !== head) {
+            const h = head ? measure(head) : { top: 0, left: 0 };
+            headCache = { el, sig, head, top: h.top, from: cut > lineStart ? h.left : null };
+        }
+        const at = measure(value.slice(cut, caret), headCache.from);
+        mirror.textContent = ''; // it holds a copy of the text
+        return { x: borderLeft + padLeft + at.left, y: borderTop + padTop + headCache.top + at.top, h: at.height };
+    }
+    // On screen: { left, top, bottom }, or null when the field is gone or hidden.
+    function caretOnScreen(el, spot) {
         const box = el.getBoundingClientRect();
+        if (!el.isConnected || !box.width || !box.height) return null;
         let pos = null;
-        if (isValueField(el)) {
-            if (!mirror) mirror = document.createElement('div');
-            const cs = getComputedStyle(el);
-            const m = mirror.style;
-            for (const p of MIRROR) m[p] = cs[p];
-            m.position = 'absolute'; m.visibility = 'hidden'; m.top = '0'; m.left = '-9999px'; m.overflow = 'hidden'; m.height = 'auto';
-            m.whiteSpace = el.tagName === 'TEXTAREA' ? 'pre-wrap' : 'pre';
-            if (el.tagName === 'TEXTAREA') m.overflowWrap = 'break-word';
-            // Lay out only the paragraph with the cursor: the height of the
-            // text before it is measured once and kept while it stays the same
-            // (a long message would otherwise be laid out on every key).
-            const value = el.value, caret = el.selectionStart;
-            const lineStart = el.tagName === 'TEXTAREA' ? value.lastIndexOf('\n', caret - 1) + 1 : 0;
-            const head = value.slice(0, lineStart);
-            const padTop = parseFloat(cs.paddingTop);
-            const measure = text => {
-                mirror.textContent = text;
-                const mark = document.createElement('span');
-                mark.textContent = '|';
-                mirror.append(mark);
-                document.body.append(mirror);
-                const r = { top: mark.offsetTop - padTop, left: mark.offsetLeft, height: mark.offsetHeight };
-                mirror.remove();
-                return r;
-            };
-            const sig = `${cs.width}|${cs.font}|${cs.letterSpacing}|${cs.wordSpacing}|${padTop}`;
-            if (!headCache || headCache.el !== el || headCache.sig !== sig || headCache.head !== head) {
-                headCache = { el, sig, head, h: head ? measure(head).top : 0 };
-            }
-            const at = measure(value.slice(lineStart, caret));
-            const top = box.top + parseFloat(cs.borderTopWidth) + padTop + headCache.h + at.top - el.scrollTop;
-            const left = box.left + at.left + parseFloat(cs.borderLeftWidth) - el.scrollLeft;
-            pos = { left, top, bottom: top + at.height };
+        if (spot) {
+            const top = box.top + spot.y - el.scrollTop;
+            pos = { left: box.left + spot.x - el.scrollLeft, top, bottom: top + spot.h };
         } else {
             const sel = document.getSelection();
             if (sel?.rangeCount) {
@@ -177,32 +207,45 @@
     // ---------- the strip ----------
     // A popover, so it sits in the browser's top layer: above SillyTavern's
     // popups and expanded editors (modal <dialog>s), which cover everything else.
+    // The words live in a shadow root. SillyTavern and its themes have hundreds
+    // of :has() rules, and with those any change in the page itself (an element
+    // added, a style set) makes the browser recheck the whole page: about 100 ms
+    // each on a big install, measured. Inside a shadow root it's under 0.1 ms.
+    // So the page sees one empty element that never changes, and everything
+    // that happens per key or per scroll happens in here.
     const strip = document.createElement('div');
     strip.id = 'desktop-writing-helper';
-    strip.setAttribute('role', 'listbox');
-    strip.setAttribute('aria-label', 'Word suggestions');
     const canPopover = typeof strip.showPopover === 'function';
     if (canPopover) strip.popover = 'manual'; else strip.hidden = true;
+    const shadow = strip.attachShadow({ mode: 'open' });
+    const box = document.createElement('div');
+    box.className = 'box';
+    box.setAttribute('role', 'listbox');
+    box.setAttribute('aria-label', 'Word suggestions');
     const style = document.createElement('style');
     style.textContent = `
-#desktop-writing-helper { position: fixed; inset: auto; margin: 0; z-index: 2147483000; display: flex; flex-direction: column; gap: 2px; padding: 3px; max-width: 90vw; overflow: visible;
+#desktop-writing-helper { position: fixed; inset: 0 auto auto 0; width: 0; height: 0; margin: 0; padding: 0; border: 0; background: none; overflow: visible; z-index: 2147483000; }
+#desktop-writing-helper[hidden], #desktop-writing-helper[popover]:not(:popover-open) { display: none; }
+#desktop-writing-helper-measure { position: absolute; left: -9999px; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; contain: strict; }`;
+    const inner = document.createElement('style');
+    inner.textContent = `
+.box { position: absolute; left: 0; top: 0; width: max-content; display: flex; flex-direction: column; gap: 2px; padding: 3px; max-width: 90vw; box-sizing: border-box;
   background: var(--SmartThemeBlurTintColor, #222); color: var(--SmartThemeBodyColor, #ddd);
   border: 1px solid var(--SmartThemeBorderColor, #555); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.35);
   font-family: var(--mainFontFamily, sans-serif); font-size: calc(var(--mainFontSize, 15px) * 0.95); line-height: 1.4;
   backdrop-filter: blur(var(--SmartThemeBlurStrength, 6px)); }
-#desktop-writing-helper:not(:popover-open):not([popover]) { display: flex; }
-#desktop-writing-helper[hidden], #desktop-writing-helper[popover]:not(:popover-open) { display: none; }
-#desktop-writing-helper button { all: unset; cursor: pointer; padding: 2px 10px; border-radius: 6px; white-space: nowrap; }
-#desktop-writing-helper button:hover { background: color-mix(in srgb, var(--SmartThemeBodyColor, #fff) 10%, transparent); }
-#desktop-writing-helper button.first { outline: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor, #fff) 35%, transparent); outline-offset: -1px; }
-#desktop-writing-helper button.sel { background: var(--SmartThemeQuoteColor, #e18a24); color: var(--SmartThemeBlurTintColor, #111); outline: none; }
-#desktop-writing-helper kbd, #desktop-writing-helper .hint { all: unset; opacity: .55; font-size: .78em; margin-left: 6px; }
-#desktop-writing-helper .hint { margin: 0 2px 0 4px; align-self: center; }
-#desktop-writing-helper .fix::before { content: '✎ '; opacity: .6; }
-#desktop-writing-helper .wh-row { display: flex; gap: 4px; align-items: center; }
-#desktop-writing-helper .wh-row.adult { border-bottom: 1px dashed color-mix(in srgb, var(--SmartThemeBodyColor, #fff) 22%, transparent); padding-bottom: 2px; }
-#desktop-writing-helper .wh-tag { all: unset; font-size: .7em; padding: 0 4px; border-radius: 4px; opacity: .75; align-self: center;
+button { all: unset; cursor: pointer; padding: 2px 10px; border-radius: 6px; white-space: nowrap; }
+button:hover { background: color-mix(in srgb, var(--SmartThemeBodyColor, #fff) 10%, transparent); }
+button.first { outline: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor, #fff) 35%, transparent); outline-offset: -1px; }
+button.sel { background: var(--SmartThemeQuoteColor, #e18a24); color: var(--SmartThemeBlurTintColor, #111); outline: none; }
+kbd, .hint { all: unset; opacity: .55; font-size: .78em; margin-left: 6px; }
+.hint { margin: 0 2px 0 4px; align-self: center; }
+.fix::before { content: '✎ '; opacity: .6; }
+.wh-row { display: flex; gap: 4px; align-items: center; }
+.wh-row.adult { border-bottom: 1px dashed color-mix(in srgb, var(--SmartThemeBodyColor, #fff) 22%, transparent); padding-bottom: 2px; }
+.wh-tag { all: unset; font-size: .7em; padding: 0 4px; border-radius: 4px; opacity: .75; align-self: center;
   border: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor, #e18a24) 70%, transparent); color: var(--SmartThemeQuoteColor, #e18a24); }`;
+    shadow.append(inner, box);
     document.head.append(style);
     document.body.append(strip);
 
@@ -213,7 +256,9 @@
         if (!isOpen()) return;
         if (canPopover && strip.hasAttribute('popover')) { try { strip.hidePopover(); } catch { /* already closed */ } } else strip.hidden = true;
     }
-    function hide() { current = null; sel = null; close(); }
+    function hide() { current = null; sel = null; forget(); close(); }
+    // Words still on their way aren't wanted any more.
+    function forget() { seq++; clearTimeout(timer); }
     function open(el) {
         // Inside a modal dialog the strip must be part of it, or the dialog
         // makes it unclickable.
@@ -225,11 +270,32 @@
         }
         strip.hidden = false;
     }
-    function place(el) {
-        const c = caretBox(el);
-        const w = strip.offsetWidth, h = strip.offsetHeight || 30;
-        strip.style.left = `${Math.max(4, Math.min(c.left - 10, innerWidth - w - 4))}px`;
-        strip.style.top = `${c.top - h - 6 < 4 ? c.bottom + 6 : c.top - h - 6}px`;
+    // measure: the text or the strip changed. Without it (scrolling) this only
+    // reads positions and moves the strip, which needs no layout of the page.
+    function place(el, measure) {
+        if (measure) {
+            current.spot = isValueField(el) ? measureCaret(el) : null;
+            current.w = box.offsetWidth;
+            current.h = box.offsetHeight || 30;
+        }
+        const c = caretOnScreen(el, current.spot);
+        if (!c) return hide();
+        const { w, h } = current;
+        const left = Math.max(4, Math.min(c.left - 10, innerWidth - w - 4));
+        const top = Math.max(4, Math.min(c.top - h - 6 < 4 ? c.bottom + 6 : c.top - h - 6, innerHeight - h - 4));
+        box.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+    }
+    // At most once per frame, however many scroll events come.
+    let frame = 0, frameMeasures = false;
+    function placeSoon(measure) {
+        frameMeasures ||= measure;
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+            const again = frameMeasures;
+            frame = 0;
+            frameMeasures = false;
+            if (current && isOpen()) place(current.el, again);
+        });
     }
     // ---------- keys ----------
     // "Ctrl+Alt+Shift+Meta+<key>" — the same form main.cjs stores.
@@ -250,12 +316,13 @@
     let sel = null;
     function select(s) {
         sel = s;
-        strip.querySelectorAll('button').forEach(b => {
+        if (s) forget(); // an answer arriving now would drop the highlight
+        box.querySelectorAll('button').forEach(b => {
             const on = !!s && Number(b.dataset.r) === s.r && Number(b.dataset.i) === s.i;
             b.classList.toggle('sel', on);
             b.setAttribute('aria-selected', String(on));
         });
-        const hint = strip.querySelector('.hint');
+        const hint = box.querySelector('.hint');
         if (hint) {
             const k = s ? keysFor('pick')[0] : keysFor('enter')[0];
             hint.textContent = k ? pretty(k) : '';
@@ -279,7 +346,7 @@
             k.textContent = pretty(direct);
             b.append(k);
         }
-        b.addEventListener('mousedown', e => { e.preventDefault(); accept(r, i); }); // keep the focus in the text box
+        b.addEventListener('mousedown', e => { if (e.button === 0) accept(r, i); });
         return b;
     }
     function tag(text, title) {
@@ -289,9 +356,9 @@
         t.title = title;
         return t;
     }
-    function show(el, at, start, end, words, fixes, adult = [], explicit = false) {
+    function show(el, at, start, end, typed, words, fixes, adult = [], explicit = false) {
         if (!words.length && !adult.length) return hide();
-        current = { el, node: at.node, start, end, rows: [words, adult] };
+        current = { el, node: at.node, start, end, typed, rows: [words, adult] };
         const normal = document.createElement('div');
         normal.className = 'wh-row';
         if (cfg.keyHints) {
@@ -310,21 +377,29 @@
             rows.push(top);
         }
         if (words.length) rows.push(normal);
-        strip.replaceChildren(...rows);
+        box.replaceChildren(...rows);
         select(null);
         open(el);
-        place(el);
+        place(el, true);
     }
 
     function accept(r, i) {
         if (!current) return false;
-        const { el, node, start, end, rows } = current;
+        const { el, node, start, end, typed, rows } = current;
         const word = rows[r]?.[i];
         if (!word) return false;
         const text = isValueField(el) ? el.value : node?.data || '';
+        // The text moved on since these words came (typed fast, or the page
+        // changed it): they would land in the wrong place.
+        if (text.slice(start, end) !== typed || cursorText(el)?.caret !== end) {
+            hide();
+            suggestSoon(el);
+            return false;
+        }
         const next = text[end] || '';
-        // Like a phone keyboard: a space after the word, unless one follows.
-        replace(el, node, start, end, word + (/[\s.,!?;:)]/.test(next) ? '' : ' '));
+        // Like a phone keyboard: a space after the word, unless one follows
+        // (or a mark that closes it: *smile*, "hello").
+        replace(el, node, start, end, word + (/[\s.,!?;:)\]}*_~"”’'…]/.test(next) ? '' : ' '));
         hide();
         suggestSoon(el);
         return true;
@@ -333,16 +408,22 @@
     // The word being typed (up to the cursor) and the word before it.
     function context(before) {
         // Not inside {{macros}}, links, or `code`.
+        // Only the end of the text goes through the patterns: on a long run
+        // without spaces they take seconds.
         const line = before.slice(before.lastIndexOf('\n') + 1);
+        const end = line.slice(-300);
         if (before.lastIndexOf('{{') > before.lastIndexOf('}}')) return null;
-        if (/\S*:\/\/\S*$/.test(line) || /\bwww\.\S*$/.test(line)) return null;
+        if (/\S*:\/\/\S*$/.test(end) || /\bwww\.\S*$/.test(end)) return null;
         if ((before.match(/```/g) || []).length % 2 || ((line.match(/`/g) || []).length % 2)) return null;
-        const m = /[\p{L}\p{M}'’]*$/u.exec(before);
+        const m = /[\p{L}\p{M}'’]*$/u.exec(before.slice(-(MAX_WORD + 1)));
+        if (m[0].length > MAX_WORD) return null;
         const prefix = m[0].replace(/^['’]+/, '');
-        const rest = before.slice(0, before.length - prefix.length);
+        const rest = before.slice(Math.max(0, before.length - prefix.length - 200), before.length - prefix.length);
         if (/\d$/.test(rest)) return null;
         const prevM = /([\p{L}\p{M}'’]+)[^\p{L}\p{M}]*$/u.exec(rest);
-        return { prefix, start: before.length - prefix.length, prev: prevM ? prevM[1] : '' };
+        // A new sentence or line: the next word starts with a capital.
+        const capital = !prefix && !!prevM && /(?:[.!?…]["”’'*_)\]]*\s+|\n\s*)$/.test(rest);
+        return { prefix, start: before.length - prefix.length, prev: prevM ? prevM[1] : '', capital };
     }
 
     // The last messages of the open chat (for noticing an explicit scene),
@@ -370,11 +451,14 @@
         // The text before the cursor and the last chat messages: the story's
         // own words get suggested, and an explicit scene is noticed.
         const near = isValueField(el) ? el.value.slice(Math.max(0, at.caret - 1500), at.caret) : at.before.slice(-1500);
-        const r = (await call('suggest', c.prefix, c.prev, near, chatTail())) || { words: [], fixes: 0, adult: [] };
+        let r = null;
+        try { r = await call('suggest', c.prefix, c.prev, near, chatTail()); } catch { /* the add-on was turned off meanwhile */ }
+        r ||= { words: [], fixes: 0, adult: [] };
         const now = cursorText(el);
         if (my !== seq || fieldOf(document.activeElement) !== el || !now || now.caret !== at.caret || now.node !== at.node || snapshot(el, now) !== before) return;
         const fixes = r.words.slice(0, r.fixes);
-        show(el, at, c.start, at.caret, r.words.filter(w => w !== c.prefix), fixes, (r.adult || []).filter(w => w !== c.prefix), !!r.explicit);
+        const form = c.capital ? w => w[0].toUpperCase() + w.slice(1) : w => w;
+        show(el, at, c.start, at.caret, c.prefix, r.words.filter(w => w !== c.prefix).map(form), fixes.map(form), (r.adult || []).filter(w => w !== c.prefix).map(form), !!r.explicit);
     }
 
     // ---------- autocorrect ----------
@@ -386,17 +470,18 @@
         if (!at || !at.before) return;
         const boundaryAt = at.caret - 1; // the space or mark just typed
         const before = at.before.slice(0, boundaryAt);
-        const m = WORD.exec(before);
-        if (!m) return;
+        const m = WORD.exec(before.slice(-(MAX_WORD + 1)));
+        if (!m || m[0].length > MAX_WORD) return;
         const word = m[0].replace(/['’]$/, '');
         const start = boundaryAt - m[0].length;
         if (skipped.has(word.toLowerCase())) return;
         if (!context(before.slice(0, start))) return; // macro, link or code
-        const prevM = /([\p{L}\p{M}'’]+)([^\p{L}\p{M}]*)$/u.exec(before.slice(0, start));
+        const prevM = /([\p{L}\p{M}'’]+)([^\p{L}\p{M}]*)$/u.exec(before.slice(Math.max(0, start - 200), start));
         // At the start of a sentence (or the text), a capital letter isn't a name.
         const prev = !prevM || /[.!?]\s*$/.test(prevM[2]) ? '' : prevM[1];
         const value = snapshot(el, at);
-        const to = await call('correct', word, prev);
+        let to = null;
+        try { to = await call('correct', word, prev); } catch { return; }
         const now = cursorText(el);
         if (!to || to === word || !now || now.node !== at.node || snapshot(el, now) !== value || fieldOf(document.activeElement) !== el) return;
         replace(el, at.node, start, start + word.length, to);
@@ -455,6 +540,8 @@
             }
         }
         if (!['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) last = null;
+        // Closed before the words arrived: they stay away.
+        if (!current && bound('close', comboOf(e))) forget();
         // Shift, Ctrl or Alt on their own change nothing (a highlighted word
         // stays highlighted, or Enter would send instead of taking it).
         if (current && isOpen() && !['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock'].includes(e.key)) {
@@ -501,17 +588,28 @@
             const now = fieldOf(document.activeElement);
             if (current && now !== current.el) hide();
             if (el && now !== el && marked === el) unmarkField();
+            if (!now) headCache = null; // it holds a copy of the text
         }, 0);
     }
     const onMouseUp = e => { const el = fieldOf(e.target); if (el) suggestSoon(el); };
-    const onScroll = () => { if (current && isOpen()) place(current.el); };
+    // Only what moves the field matters (not the chat scrolling by behind it).
+    const onScroll = e => {
+        const moved = e.target;
+        if (current && isOpen() && (moved.nodeType !== 1 || moved.contains(current.el))) placeSoon(false);
+    };
+    // The window's size can change how the text wraps.
+    const onResize = () => { if (current && isOpen()) placeSoon(true); };
     const onComposition = () => hide();
     const listeners = [
         [document, 'focusin', onFocusIn], [document, 'input', onInput], [document, 'keydown', onKeyDown], [document, 'keyup', onKeyUp],
         [document, 'click', onClick], [document, 'focusout', onFocusOut], [document, 'mouseup', onMouseUp],
-        [document, 'scroll', onScroll], [document, 'compositionstart', onComposition], [window, 'resize', onScroll],
+        [document, 'scroll', onScroll], [document, 'compositionstart', onComposition], [window, 'resize', onResize],
     ];
     for (const [t, ev, fn] of listeners) t.addEventListener(ev, fn, true);
+    // Pressing anywhere on the strip keeps the focus in the text box; a right
+    // click there has nothing to offer.
+    strip.addEventListener('mousedown', e => e.preventDefault());
+    strip.addEventListener('contextmenu', e => e.preventDefault());
 
     function applyConfig(c) {
         cfg = c || { mode: null };
@@ -538,14 +636,16 @@
                 if (!node || node.nodeType !== 3) return '';
                 left = node.data.slice(0, sel.anchorOffset); right = node.data.slice(sel.anchorOffset);
             }
-            return (/[\p{L}\p{M}'’]*$/u.exec(left)[0] + /^[\p{L}\p{M}'’]*/u.exec(right)[0]).replace(/^['’]+|['’]+$/g, '');
+            return (/[\p{L}\p{M}'’]*$/u.exec(left.slice(-(MAX_WORD + 1)))[0] + /^[\p{L}\p{M}'’]*/u.exec(right.slice(0, MAX_WORD + 1))[0]).replace(/^['’]+|['’]+$/g, '');
         },
         destroy() {
             for (const [t, ev, fn] of listeners) t.removeEventListener(ev, fn, true);
-            clearTimeout(timer);
+            cancelAnimationFrame(frame);
             hide();
             unmarkField();
+            headCache = null;
             strip.remove();
+            mirrorHost?.remove();
             style.remove();
             delete window.__desktopWritingHelper;
         },
