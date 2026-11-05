@@ -379,6 +379,30 @@ The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are option
 
 A `.sttheme` file is a zip with this same `theme.json` (plus `"apiVersion": 1`, and `logo` may be a path like `assets/logo.png`), and optionally `theme.css` for the launcher, `bar.css` for the SillyTavern window's top bar, and pictures, video and fonts. Paths in `url()` stay inside the theme. Scripts and HTML aren't allowed.
 
+`"wallpaper": "assets/bg.webm"` fills the window behind everything. `"layers"` places more pictures and video (PNG, JPEG, GIF, WebP, APNG, SVG, WebM, MP4; no sound; up to 24 layers and 4 videos):
+
+```json
+{
+  "id": "sleepy", "src": "assets/fox.gif", "slot": "sidebar", "anchor": "bottom-right",
+  "width": "40%", "minWidth": "48px", "maxWidth": "120px", "x": "5%", "y": "2%",
+  "z": "behind", "hideBelow": 900, "when": { "server": "stopped", "page": ["home", "profiles"] }
+}
+```
+
+| Key | Values |
+|---|---|
+| `slot` | The part of the window it lives in: `window`, `sidebar`, `header`, `page`, `console`, `hero` |
+| `anchor` | `top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right` |
+| `width`, `height`, `minWidth`, `maxWidth`, `x`, `y` | Percent of the slot or pixels, so it follows the window when it's resized |
+| `fit` | `contain`, `cover`, `fill`, `none` |
+| `z` | `behind` the content, or `above` it (clicks always pass through) |
+| `opacity`, `pixelated`, `hideBelow` | 0 to 1; `true` for sharp pixel art; hide when the window is narrower than this |
+| `when` | Show only for these `page`, `server`, `busy`, `update` or `time` values |
+
+Your CSS can reach a layer as `[data-layer="sleepy"]`, for example to animate it. In your CSS, `html[data-motion="off"]` means animations are switched off.
+
+**Settings → Appearance → Theme animations** is **On**, **Only while this window is in use**, or **Off**. Moving parts always stop while the window is hidden or the screen is off, and when Windows has animation effects turned off.
+
 </details>
 
 ### Settings

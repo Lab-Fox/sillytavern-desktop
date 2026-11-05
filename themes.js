@@ -41,11 +41,11 @@ export const PARTS = [
 ];
 // Components that repeat everywhere keep their class names as their hook.
 export const CLASSES = [
-    'btn', 'primary', 'ghost', 'danger', 'sm', 'card', 'hero', 'tag', 'pill', 'tip', 'seg', 'tgl',
+    'layer', 'layer-slot', 'btn', 'primary', 'ghost', 'danger', 'sm', 'card', 'hero', 'tag', 'pill', 'tip', 'seg', 'tgl',
     'set-group', 'set-row', 'item', 'tab', 'chip',
 ];
 // <html data-…>: what a theme's CSS can react to, launcher only.
-export const STATES = { page: 'the open page', server: 'running | stopped', busy: 'yes | no', update: 'available | none', time: 'morning | day | evening | night' };
+export const STATES = { page: 'the open page', server: 'running | stopped', busy: 'yes | no', update: 'available | none', time: 'morning | day | evening | night', motion: 'on | off' };
 
 // Required keys; the launcher derives the in-between shades from these.
 export const COLOR_KEYS = ['bg', 'panel', 'border', 'accent', 'text', 'title', 'muted'];

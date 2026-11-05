@@ -106,6 +106,7 @@ const DEFAULT_SETTINGS = {
     spellcheckEngine: 'windows', // red underlines: 'windows' (Windows' spellchecker) or 'builtin' (Chromium's Hunspell, English); needs a restart
     theme: 'sillytavern',       // launcher theme id (see themes.js)
     themesKept: [],             // themes with CSS the user said yes to, as "<id>:<hash of the CSS>"
+    themeAnimations: 'on',      // a theme's moving parts: on, focused (only while the launcher has focus), off
     language: '',               // the app's language (i18n.js); '' = Windows' language
     syncStLanguage: true,       // a language change also sets SillyTavern's own language (where it has it)
     stLanguage: null,           // { code, done: [partitions] } after a change: each session gets it once
@@ -1058,6 +1059,7 @@ function createStWindow(instance, extra = {}) {
         colors: themes.get(activeThemeId()).colors,
         font: () => themes.uiFontCss(settings.uiFont),
         themeCss: () => themeCss.bar,
+        motion: () => settings.themeAnimations === 'on',
         icon: path.join(__dirname, 'icon.ico'),
         setupPage: lockToServer,
         tabsEnabled: () => settings.tabs,
@@ -1981,7 +1983,7 @@ ipcMain.handle('app-update-check', () => appUpdate.check({ fresh: true }));
 // Switching the channel asks GitHub again right away.
 // Settings → About → Reset: look, start-up, updates and window options go back to the
 // defaults. Folders, profiles, phone access, server options, programs and add-ons stay.
-const RESETTABLE = ['theme', 'uiFont', 'uiZoom', 'consoleFont', 'consoleFontSize', 'autoStart', 'confirmBeforeQuit', 'closeToTray',
+const RESETTABLE = ['theme', 'themeAnimations', 'uiFont', 'uiZoom', 'consoleFont', 'consoleFontSize', 'autoStart', 'confirmBeforeQuit', 'closeToTray',
     'backupBeforeUpdate', 'backupKeep', 'checkUpdatesOnLaunch', 'updateOnLaunch', 'checkAppUpdates', 'appPreview', 'windowLayer', 'tabs', 'searchEngine', 'inspectMenu', 'syncStLanguage'];
 ipcMain.handle('settings-reset', async () => {
     if (!(await confirm(t('Reset this app\'s settings?'),
@@ -2108,6 +2110,7 @@ ipcMain.handle('save-settings', (_e, s) => {
     settings = { ...settings, ...s };
     saveSettings(settings);
     syncTray();
+    if ('themeAnimations' in s) stWins.forEach(w => w.push());
 });
 
 // ---------- setup, requirements, install location ----------

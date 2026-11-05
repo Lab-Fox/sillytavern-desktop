@@ -329,6 +329,7 @@ export class StWindow {
             layer: this.layer,
             colors: this.opts.colors,
             font: this.opts.font?.(),
+            motion: this.opts.motion?.() ?? true,
             controlsWidth: this.fullScreen ? 0 : CONTROLS_W,
             // Chrome extension buttons: the active tab's session ('' = main), null = none
             chromePartition: this.active ? this.opts.chromePartition?.(this.active.view.webContents) ?? null : null,

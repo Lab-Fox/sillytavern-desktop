@@ -15,6 +15,9 @@
   @layer guard {
     [hidden] { display: none !important; }
     #btnMenu, #btnReload { visibility: visible !important; opacity: 1 !important; }
+    /* Settings → Theme animations and Windows' "animation effects". The dot on a loading tab keeps going. */
+    html[data-motion="off"] :not(.tab i), html[data-motion="off"] ::before, html[data-motion="off"] ::after { animation-play-state: paused !important; }
+    @media (prefers-reduced-motion: reduce) { :not(.tab i), ::before, ::after { animation-play-state: paused !important; } }
   }
   @layer app {
   /* Same base colors as the launcher theme (set from bar:state). */
@@ -246,6 +249,7 @@
   bar.onState(s => {
     for (const [k, v] of Object.entries(VARS)) if (s.colors[k]) document.documentElement.style.setProperty(v, s.colors[k]);
     if (s.font) document.body.style.fontFamily = s.font;
+    document.documentElement.dataset.motion = s.motion ? 'on' : 'off';
     renderTabs(s);
     $('info').textContent = s.info;
     $('info').title = s.tabs.find(t => t.id === s.active)?.tip || '';

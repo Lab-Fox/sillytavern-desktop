@@ -97,7 +97,65 @@ function manifestOf(raw) {
         version: String(raw.version || '').trim().slice(0, 20),
         description: String(raw.description || '').trim().slice(0, 300),
         logoFile: typeof raw.logo === 'string' && !['st', 'fox'].includes(raw.logo) ? raw.logo : '',
+        layers: layersOf(raw),
     };
+}
+
+// Pictures and video a theme places in the window. All of it ends up as style
+// values in the launcher, so each value has to look like what it is.
+const SLOTS = ['window', 'sidebar', 'header', 'page', 'console', 'hero'];
+const ANCHORS = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+const FITS = ['contain', 'cover', 'fill', 'none'];
+const WHEN = ['page', 'server', 'busy', 'update', 'time'];
+const SIZE = /^\d{1,4}(\.\d{1,2})?(%|px)$/;
+const OFFSET = /^-?\d{1,4}(\.\d{1,2})?(%|px)$/;
+const MAX_LAYERS = 24, MAX_VIDEOS = 4;
+const VIDEO = new Set(['.webm', '.mp4']);
+const isMedia = rel => safeRel(rel) && /^(image|video)\//.test(TYPES[path.extname(rel).toLowerCase()] || '');
+
+function layerOf(raw, i) {
+    const bad = what => new Error(t('Layer {n} of this theme has a wrong {what}.', { n: i + 1, what }));
+    if (!raw || typeof raw !== 'object') throw bad('entry');
+    if (typeof raw.src !== 'string' || !isMedia(raw.src)) throw bad('src');
+    const pick = (key, list, fallback) => {
+        const v = raw[key] ?? fallback;
+        if (!list.includes(v)) throw bad(key);
+        return v;
+    };
+    const size = (key, re = SIZE) => {
+        if (raw[key] == null) return '';
+        if (typeof raw[key] !== 'string' || !re.test(raw[key])) throw bad(key);
+        return raw[key];
+    };
+    const opacity = Number(raw.opacity ?? 1);
+    if (!(opacity >= 0 && opacity <= 1)) throw bad('opacity');
+    const hideBelow = Number(raw.hideBelow ?? 0);
+    if (!Number.isInteger(hideBelow) || hideBelow < 0 || hideBelow > 10000) throw bad('hideBelow');
+    const when = {};
+    for (const [k, v] of Object.entries(raw.when ?? {})) {
+        const list = [v].flat();
+        if (!WHEN.includes(k) || !list.length || !list.every(x => typeof x === 'string' && /^[a-z-]{1,20}$/.test(x))) throw bad('when');
+        when[k] = list;
+    }
+    const id = raw.id == null ? `layer-${i + 1}` : String(raw.id);
+    if (!/^[a-zA-Z][\w-]{0,39}$/.test(id)) throw bad('id');
+    return {
+        id, src: raw.src, slot: pick('slot', SLOTS, 'window'), anchor: pick('anchor', ANCHORS, 'center'), fit: pick('fit', FITS, 'contain'), z: pick('z', ['behind', 'above'], 'behind'),
+        width: size('width'), height: size('height'), minWidth: size('minWidth'), maxWidth: size('maxWidth'), x: size('x', OFFSET), y: size('y', OFFSET),
+        opacity, hideBelow, when, pixelated: raw.pixelated === true, video: VIDEO.has(path.extname(raw.src).toLowerCase()),
+    };
+}
+
+function layersOf(raw) {
+    const list = Array.isArray(raw.layers) ? [...raw.layers] : [];
+    if (raw.layers != null && !Array.isArray(raw.layers)) throw new Error(t('This theme\'s layers must be a list.'));
+    // The whole window, under everything: the usual reason to want a layer.
+    if (raw.wallpaper != null) list.unshift({ id: 'wallpaper', src: raw.wallpaper, slot: 'window', fit: 'cover', width: '100%', height: '100%', pixelated: raw.wallpaperPixelated });
+    if (list.length > MAX_LAYERS) throw new Error(t('This theme has too many layers.'));
+    const layers = list.map(layerOf);
+    if (layers.filter(l => l.video).length > MAX_VIDEOS) throw new Error(t('This theme has too many videos.'));
+    if (new Set(layers.map(l => l.id)).size !== layers.length) throw new Error(t('Two layers of this theme have the same id.'));
+    return layers;
 }
 
 const sameName = rel => rel.toLowerCase();
@@ -137,6 +195,7 @@ async function open(file) {
         try { raw = JSON.parse(text); } catch { throw new Error(t('That file is not valid theme JSON.')); }
         const manifest = manifestOf(raw);
         if (manifest.logoFile && !files.has(manifest.logoFile)) throw new Error(t('The theme\'s logo file is missing.'));
+        for (const l of manifest.layers) if (!files.has(l.src)) throw new Error(t('A picture of this theme is missing: {name}', { name: l.src.slice(0, 80) }));
         const id = slug(manifest.name);
         for (const css of ['theme.css', 'bar.css']) {
             if (!files.has(css)) continue;
@@ -212,7 +271,9 @@ function read(id) {
         }
         const has = name => fs.existsSync(path.join(dir, name));
         const { logoFile, ...theme } = m;
-        return { ...theme, logo, id: PREFIX + path.basename(dir), builtin: false, package: true, hasCss: has('theme.css') || has('bar.css') };
+        const name = path.basename(dir);
+        const layers = m.layers.filter(l => has(l.src)).map(l => ({ ...l, url: `st-theme://${name}/${l.src.split('/').map(encodeURIComponent).join('/')}` }));
+        return { ...theme, layers, logo, id: PREFIX + name, builtin: false, package: true, hasCss: has('theme.css') || has('bar.css') || layers.some(l => l.z === 'above') };
     } catch { return null; }
 }
 

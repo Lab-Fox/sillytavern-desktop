@@ -23,6 +23,9 @@
     .warn-line:not([hidden]), .warnbox:not([hidden]), .modal.show, #btnPower:not(:disabled) { visibility: visible !important; opacity: 1 !important; }
     /* Decoration can cover things, but never catch the clicks meant for them. */
     *::before, *::after { pointer-events: none !important; }
+    .layer-slot, .layer-slot * { pointer-events: none !important; }
+    /* Settings → Theme animations. What says the app is working keeps moving. */
+    html[data-motion="off"] :not(.spin, .dot, .progress i), html[data-motion="off"] ::before, html[data-motion="off"] ::after { animation-play-state: paused !important; }
     p.warn-line:not([hidden]), .warnbox:not([hidden]), .modal.show { display: block !important; }
     #btnPower { display: inline-flex !important; }
   }
@@ -539,6 +542,16 @@
   @media (max-width: 960px) { .g3 { grid-template-columns: 1fr 1fr; } }
   /* Narrow window: one card per row, so buttons have room. */
   @media (max-width: 900px) { .g2 { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---------- a theme's pictures and video (applyLayers) ----------
+     Only elements that hold layers get this. :where keeps it from outranking
+     anything, like the dialogs' z-index. Every host is a flex container, so
+     z-index works on its children without changing how they're positioned. */
+  :where([data-has-layers]) { position: relative; }
+  :where([data-has-layers]) > :where(:not(.layer-slot)) { z-index: 1; }
+  .layer-slot { position: absolute; inset: 0; overflow: hidden; z-index: 0; }
+  .layer-slot[data-z="above"] { z-index: 2; }
+  .layer { position: absolute; }
 
   /* ---------- corners (the tokens above) ---------- */
   .btn { border-radius: var(--btn-radius); }
@@ -1120,6 +1133,10 @@
             <div class="set-text"><b>Size</b></div>
             <div class="set-ctl"><div class="seg" id="setZoom"></div><button class="btn sm ghost" id="btnUiFontReset">Reset</button></div>
           </div>
+          <div class="set-row" data-k="animation animated gif video moving motion pause battery">
+            <div class="set-text"><b>Theme animations</b> <span class="tip" tabindex="0" role="note" aria-label="GIFs, video and other moving parts of a theme. They always stop while the window is hidden, and when Windows has animation effects turned off."><svg class="i"><use href="#i-info"/></svg></span></div>
+            <div class="set-ctl"><select id="setThemeMotion"></select></div>
+          </div>
         </div>
         <h3 class="set-h">Console</h3>
         <div class="set-group">
@@ -1543,7 +1560,7 @@
   const recall = k => { try { return sessionStorage.getItem(k); } catch { return null; } };
   // What a theme's CSS can react to: <html data-page="home" data-server="stopped" …>.
   const rootState = document.documentElement.dataset;
-  Object.assign(rootState, { page: 'home', server: 'stopped', busy: 'no', update: 'none' });
+  Object.assign(rootState, { page: 'home', server: 'stopped', busy: 'no', update: 'none', motion: 'on' });
   function markTime() {
     const now = new Date(), h = now.getHours();
     rootState.time = h < 5 ? 'night' : h < 11 ? 'morning' : h < 17 ? 'day' : h < 21 ? 'evening' : 'night';
@@ -2386,6 +2403,7 @@
     document.querySelectorAll('#setLayer button').forEach(b => b.classList.toggle('on', b.dataset.layer === (current.windowLayer || 'normal')));
     $('setTabs').checked = current.tabs !== false;
     $('setSearchEngine').value = current.searchEngine || 'google';
+    $('setThemeMotion').value = current.themeAnimations || 'on';
     $('setInspect').checked = !!current.inspectMenu;
     renderPortLock();
     loadSpellEngine();
@@ -2408,6 +2426,8 @@
   document.querySelectorAll('#setLayer button').forEach(b => b.onclick = () => D.setLayer(b.dataset.layer));
   $('setTabs').onchange = () => D.setTabs($('setTabs').checked);
   $('setSearchEngine').onchange = () => saveNow({ searchEngine: $('setSearchEngine').value });
+  $('setThemeMotion').innerHTML = [['on', T('On')], ['focused', T('Only while this window is in use')], ['off', T('Off')]].map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+  $('setThemeMotion').onchange = async () => { await saveNow({ themeAnimations: $('setThemeMotion').value }); updateMotion(); };
   async function loadSpellEngine() {
     const s = await D.spellEngine();
     $('setSpell').value = s.chosen;
@@ -3474,9 +3494,134 @@
     const root = document.documentElement.style;
     const colors = { ...FALLBACK, onAccent: textOn(t.colors.accent), ...t.colors };
     for (const [k, v] of Object.entries(VAR_OF)) if (colors[k]) root.setProperty(v, colors[k]);
+    applyLayers(t.layers || []);
     const src = await logoSrc(t.logo);
     document.querySelectorAll('img[data-logo]').forEach(i => i.src = src);
   }
+
+  // ----- pictures and video a theme places in the window -----
+  // Each layer sits in a slot that fills part of the window, and is sized and
+  // placed in percent of that slot, so resizing and zoom need no code here.
+  const SLOT_HOSTS = {
+    window: () => document.body, sidebar: () => document.querySelector('aside'), header: () => document.querySelector('header'),
+    page: () => document.querySelector('main'), console: () => $('dock'), hero: () => document.querySelector('.hero'),
+  };
+  let layers = [];
+  let layersKey = '[]';
+  function placeLayer(el, def) {
+    const s = el.style, [v, h] = def.anchor.includes('-') ? def.anchor.split('-')
+      : ['left', 'right'].includes(def.anchor) ? ['center', def.anchor] : def.anchor === 'center' ? ['center', 'center'] : [def.anchor, 'center'];
+    const x = def.x || '0px', y = def.y || '0px';
+    if (h === 'center') s.left = `calc(50% + ${x})`; else s[h] = x;
+    if (v === 'center') s.top = `calc(50% + ${y})`; else s[v] = y;
+    // translate, not transform: a theme's CSS can animate transform freely.
+    s.translate = `${h === 'center' ? '-50%' : '0'} ${v === 'center' ? '-50%' : '0'}`;
+    if (def.width) s.width = def.width;
+    if (def.height) s.height = def.height;
+    if (def.minWidth) s.minWidth = def.minWidth;
+    if (def.maxWidth) s.maxWidth = def.maxWidth;
+    s.objectFit = def.fit;
+    s.opacity = def.opacity;
+    if (def.pixelated) s.imageRendering = 'pixelated';
+  }
+  function layerNode(def) {
+    const el = document.createElement(def.video ? 'video' : 'img');
+    if (def.video) Object.assign(el, { muted: true, loop: true, playsInline: true, disableRemotePlayback: true, preload: 'auto' });
+    else Object.assign(el, { alt: '', decoding: 'async', draggable: false });
+    el.className = 'layer';
+    el.dataset.layer = def.id;
+    el.setAttribute('aria-hidden', 'true');
+    placeLayer(el, def);
+    el.src = def.url;
+    return el;
+  }
+  function applyLayers(list) {
+    const key = JSON.stringify(list);
+    if (key === layersKey) return;
+    layersKey = key;
+    layers = [];
+    document.querySelectorAll('.layer-slot').forEach(s => s.remove());
+    document.querySelectorAll('[data-has-layers]').forEach(h => h.removeAttribute('data-has-layers'));
+    for (const def of list) {
+      const host = SLOT_HOSTS[def.slot]();
+      let slot = host.querySelector(`:scope > .layer-slot[data-z="${def.z}"]`);
+      if (!slot) {
+        slot = document.createElement('div');
+        slot.className = 'layer-slot';
+        slot.dataset.slot = def.slot;
+        slot.dataset.z = def.z;
+        host.dataset.hasLayers = '';
+        host.prepend(slot);
+      }
+      const node = layerNode(def);
+      slot.append(node);
+      layers.push({ def, node });
+    }
+    refreshLayers();
+  }
+  const layerShows = def => !(def.hideBelow && innerWidth < def.hideBelow)
+    && Object.entries(def.when).every(([k, list]) => list.includes(rootState[k]));
+  // The page slot is the part of the window pages use, which moves with the console.
+  function placePageSlots() {
+    const page = document.querySelector('.page.show'), main = document.querySelector('main');
+    document.querySelectorAll('.layer-slot[data-slot="page"]').forEach(s => {
+      s.hidden = !page || main.classList.contains('dock-max');
+      if (s.hidden) return;
+      Object.assign(s.style, { top: `${page.offsetTop}px`, height: `${page.offsetHeight}px`, bottom: 'auto', width: `${page.clientWidth}px`, right: 'auto' });
+    });
+  }
+  function refreshLayers() {
+    if (!layers.length) return;
+    for (const l of layers) l.node.hidden = !layerShows(l.def);
+    placePageSlots();
+    updateMotion();
+  }
+  // A frozen picture is a canvas holding its current frame: nothing else stops a GIF.
+  async function freezeLayer(l, freeze) {
+    const frozen = l.node.tagName === 'CANVAS';
+    if (freeze === frozen) return;
+    if (!freeze) {
+      const img = l.frozenFrom;
+      img.src = l.def.url;
+      img.hidden = l.node.hidden;
+      l.node.replaceWith(img);
+      l.node = img;
+      return;
+    }
+    const img = l.node;
+    try { await img.decode(); } catch { return; }
+    if (l.node !== img || !layers.includes(l)) return;
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth || 1;
+    c.height = img.naturalHeight || 1;
+    c.getContext('2d').drawImage(img, 0, 0);
+    c.style.cssText = img.style.cssText;
+    c.className = 'layer';
+    c.dataset.layer = l.def.id;
+    c.hidden = img.hidden;
+    img.replaceWith(c);
+    img.removeAttribute('src');
+    l.frozenFrom = img;
+    l.node = c;
+  }
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  function updateMotion() {
+    const mode = current?.themeAnimations || 'on';
+    const on = !reducedMotion.matches && (mode === 'on' || (mode === 'focused' && document.hasFocus()));
+    if (rootState.motion !== (on ? 'on' : 'off')) rootState.motion = on ? 'on' : 'off';
+    const run = on && document.visibilityState === 'visible';
+    for (const l of layers) {
+      if (l.def.video) {
+        if (run && !l.node.hidden) l.node.play().catch(() => { /* replaced or hidden meanwhile */ });
+        else l.node.pause();
+      } else freezeLayer(l, !on);
+    }
+  }
+  new MutationObserver(refreshLayers).observe(document.documentElement, { attributes: true, attributeFilter: ['data-page', 'data-server', 'data-busy', 'data-update', 'data-time'] });
+  new ResizeObserver(placePageSlots).observe(document.querySelector('main'));
+  new ResizeObserver(placePageSlots).observe($('dock'));
+  addEventListener('resize', refreshLayers);
+  for (const [target, event] of [[window, 'focus'], [window, 'blur'], [document, 'visibilitychange'], [reducedMotion, 'change']]) target.addEventListener(event, updateMotion);
 
   let themeState = { active: 'sillytavern', themes: [] };
   const activeTheme = () => themeState.themes.find(t => t.id === themeState.active) || themeState.themes[0];
@@ -3664,7 +3809,7 @@
   D.onBusy(setBusy);
   D.onRefresh(refreshAll);
   D.onTheme(loadThemes);
-  D.onSettings(s => { current = s; applyUiFont(s.uiFont || '', s.uiZoom); applyLogFont(s.consoleFont, s.consoleFontSize || 18); if (state.page === 'settings') loadSettingsForm(); });
+  D.onSettings(s => { current = s; updateMotion(); applyUiFont(s.uiFont || '', s.uiZoom); applyLogFont(s.consoleFont, s.consoleFontSize || 18); if (state.page === 'settings') loadSettingsForm(); });
   D.onWindows(w => { state.windows = w; renderStatus(); });
   D.onAppUpdate(renderAppUpdate);
   D.onProfiles(loadProfiles);
