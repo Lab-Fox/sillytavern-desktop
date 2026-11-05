@@ -93,4 +93,15 @@ export function banner() {
     text(c, TALLY, tag, 114, 71, C.tag, { gap: 1 });
     return c;
 }
+// The same room without anyone in it, for the Tavern Night example theme.
+export function tavernRoom(w, h) {
+    seed = 7;
+    const c = new Canvas(w, h);
+    wall(c);
+    glow(c, 70, 18); glow(c, w - 40, 18);
+    shelf(c, 96, w - 60, 40);
+    lantern(c, 70); lantern(c, w - 40);
+    counter(c, h - 26);
+    return c;
+}
 export { measure };

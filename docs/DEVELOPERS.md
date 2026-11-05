@@ -96,6 +96,9 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `themes.js` | Built-in and custom themes, import/export, and what themes may rely on (`TOKENS`, `PARTS`, `CLASSES`, `STATES`, `THEME_API`) |
 | `themepackage.js` | `.sttheme` files: checks, install, export, remove |
 | `themecss.js` | The check all theme CSS goes through on every load (uses `css-tree`; plain Node) |
+| `themestudio.js` | Theme Studio: the draft folder, generated CSS, saving a package |
+| `themecheck.js` | "Check it" for theme authors |
+| `examples/starter-theme/`, `examples/themes/` | The starter theme and the example themes (their pictures come from `tools/art/themes.mjs`) |
 | `themeroute.js` | `st-theme://<package>/<path>`, the only way theme files reach a page (pictures, video and fonts only), and the block on `file:` addresses outside the app. `--safe-theme` starts with the default theme |
 | `installer.nsh` | Installer steps: ask a running app to close itself (`--quit`) first; the **Open with** entries for cards, lorebooks and presets |
 | `examples/`, `EXTENSIONS.md` | Example desktop extension and the extension guide |

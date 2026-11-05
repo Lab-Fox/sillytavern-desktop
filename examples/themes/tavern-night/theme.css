@@ -1,0 +1,14 @@
+/* Pixel look, on top of the room. */
+:root {
+  --see: calc(100% - var(--opt-dim));
+  --app-bg: transparent;
+  --sidebar-bg: color-mix(in srgb, var(--surface) 88%, transparent);
+  --header-bg: color-mix(in srgb, var(--surface) 92%, transparent);
+  --card-bg: color-mix(in srgb, var(--panel) var(--see), transparent);
+  --hero-bg: color-mix(in srgb, var(--panel) var(--see), transparent);
+  --dock-bg: color-mix(in srgb, var(--surface) 94%, transparent);
+  --console-bg: color-mix(in srgb, var(--well) 94%, transparent);
+}
+[data-part="power-button"] { color: var(--title); }
+html[data-server="running"] [data-part="server-status"] { border-color: var(--good); }
+html[data-time="night"] [data-layer="fox-asleep"] { filter: brightness(.85); }

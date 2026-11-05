@@ -192,6 +192,7 @@ contextBridge.exposeInMainWorld('desktop', {
     themeCheck: id => invoke('theme-check', id),
     themeContract: () => invoke('theme-contract'),
     themeStarter: () => invoke('theme-starter'),
+    themeExamples: () => invoke('theme-examples'),
     themeWatch: on => invoke('theme-watch', on),
     themeCopy: text => invoke('theme-copy', text),
     deleteTheme: id => invoke('delete-theme', id),

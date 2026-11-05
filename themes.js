@@ -41,7 +41,7 @@ export const PARTS = [
 ];
 // Components that repeat everywhere keep their class names as their hook.
 export const CLASSES = [
-    'layer', 'layer-slot', 'btn', 'primary', 'ghost', 'danger', 'sm', 'card', 'hero', 'tag', 'pill', 'tip', 'seg', 'tgl',
+    'layer', 'layer-slot', 'i', 'btn', 'primary', 'ghost', 'danger', 'sm', 'card', 'hero', 'tag', 'pill', 'tip', 'seg', 'tgl',
     'set-group', 'set-row', 'item', 'tab', 'chip',
 ];
 // <html data-…>: what a theme's CSS can react to, launcher only.

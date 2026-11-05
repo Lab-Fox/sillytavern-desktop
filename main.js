@@ -112,6 +112,7 @@ const DEFAULT_SETTINGS = {
     themeOptions: {},           // the user's choices per theme: { "<id>": { "<option>": value } }
     themeWatch: false,          // for theme authors: apply the active theme's files as they change
     themeScenes: [],            // live scenes the user allowed, as "<id>:<hash of the scene's files>"
+    themeScenesAsked: [],       // the same for scenes the user has answered about, yes or no
     language: '',               // the app's language (i18n.js); '' = Windows' language
     syncStLanguage: true,       // a language change also sets SillyTavern's own language (where it has it)
     stLanguage: null,           // { code, done: [partitions] } after a change: each session gets it once
@@ -2586,6 +2587,10 @@ const KEEP_SECONDS = 15;
 let keepPrompt = null;
 async function tryTheme(id) {
     const theme = themes.get(id);
+    if (theme.hasScene && !settings.themeScenesAsked.includes(themepkg.sceneKey(id))) {
+        settings.themeScenesAsked = [...settings.themeScenesAsked, themepkg.sceneKey(id)].slice(-50);
+        allowScene(id, await confirm(t('Run this theme\'s live scene?'), t('It\'s a small program that draws behind the app. It runs sealed off: it can\'t reach your files, your chats, the app or the internet, but it can use your processor and battery. You can change this in Theme options.'), t('Run it')));
+    }
     const key = theme.hasCss ? themepkg.fingerprint(id) : null;
     if (!key || settings.themesKept.includes(key)) return setTheme(id);
     keepPrompt?.abort();
@@ -2620,9 +2625,6 @@ async function installTheme(file) {
     if (!(await confirm(t('Install the theme "{name}"?', { name: info.name }), lines.join('\n\n'), t('Install')))) return { canceled: true };
     const id = await themepkg.install(file, { replace: info.replaces });
     logLine(`Installed the theme "${info.name}".`);
-    if (info.hasScene) {
-        allowScene(id, await confirm(t('Run this theme\'s live scene?'), t('It\'s a small program that draws behind the app. It runs sealed off: it can\'t reach your files, your chats, the app or the internet, but it can use your processor and battery. You can change this in Theme options.'), t('Run it')));
-    }
     broadcast('theme');
     await tryTheme(id);
     return { ok: true, id };
@@ -2678,6 +2680,14 @@ ipcMain.handle('theme-watch', (_e, on) => {
     settings.themeWatch = !!on;
     saveSettings(settings);
     watchActiveTheme();
+});
+ipcMain.handle('theme-examples', () => {
+    const ids = themepkg.addExamples(path.join(__dirname, 'examples', 'themes'));
+    // They come with the app: no need to ask if the user wants to keep them.
+    settings.themesKept = [...settings.themesKept, ...ids.map(id => themepkg.fingerprint(id))].slice(-50);
+    saveSettings(settings);
+    broadcast('theme');
+    return ids;
 });
 ipcMain.handle('theme-starter', async () => {
     const id = themepkg.addStarter(path.join(__dirname, 'examples', 'starter-theme'));

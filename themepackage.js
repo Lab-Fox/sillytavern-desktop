@@ -368,9 +368,13 @@ export function copyInto(id, target) {
     copy('');
 }
 export const folderOf = id => dirOf(id);
+// The example themes that come with the app. → the ids that are new.
+export function addExamples(srcRoot) {
+    const names = fs.readdirSync(srcRoot, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name);
+    return names.filter(n => !fs.existsSync(dirOf(n))).map(n => addStarter(path.join(srcRoot, n), n));
+}
 // The starter theme, as a package to play with. → its id.
-export function addStarter(srcDir) {
-    const id = freeId('my-theme');
+export function addStarter(srcDir, id = freeId('my-theme')) {
     const walk = sub => {
         fs.mkdirSync(path.join(dirOf(id), sub), { recursive: true });
         for (const e of fs.readdirSync(path.join(srcDir, sub), { withFileTypes: true })) {

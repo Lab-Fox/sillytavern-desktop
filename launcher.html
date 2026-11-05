@@ -1102,7 +1102,7 @@
 
       <!-- ===== Appearance ===== -->
       <div class="set-pane" data-pane="look">
-        <h3 class="set-h">Theme <span class="tip" tabindex="0" role="note" aria-label="A theme made the app hard to use? Press Ctrl+Alt+Shift+T for the default theme, or hold Shift while the app starts to use it for that run only."><svg class="i"><use href="#i-info"/></svg></span><span class="act"><button class="btn sm ghost" id="btnImportTheme"><svg class="i"><use href="#i-download"/></svg>Import theme…</button><button class="btn sm" id="btnNewTheme"><svg class="i"><use href="#i-plus"/></svg>New theme</button></span></h3>
+        <h3 class="set-h">Theme <span class="tip" tabindex="0" role="note" aria-label="A theme made the app hard to use? Press Ctrl+Alt+Shift+T for the default theme, or hold Shift while the app starts to use it for that run only."><svg class="i"><use href="#i-info"/></svg></span><span class="act"><button class="btn sm ghost" id="btnImportTheme"><svg class="i"><use href="#i-download"/></svg>Import theme…</button><button class="btn sm ghost" id="btnThemeExamples">Get example themes</button><button class="btn sm" id="btnNewTheme"><svg class="i"><use href="#i-plus"/></svg>New theme</button></span></h3>
         <div class="set-group set-free" data-k="theme colors colours logo">
           <p class="muted small warn-line" id="themeSafeNote" style="margin-bottom:10px" hidden>Safe start: the default theme is on for now. Pick a theme to leave it.</p>
           <p class="err" id="themeImportError" style="margin-bottom:10px;white-space:pre-wrap" hidden></p>
@@ -3801,6 +3801,7 @@
     $('themeCssErrors').textContent = themeState.cssErrors.join('\n');
     $('themeCssErrors').hidden = !themeState.cssErrors.length;
     renderThemeList();
+    $('btnThemeExamples').hidden = ['pkg:tavern-night', 'pkg:soft-glass', 'pkg:snowfall'].every(id => themeState.themes.some(t => t.id === id));
     renderThemeOptions();
     refreshLayers();
   }
@@ -3968,6 +3969,7 @@
   // ----- tools for theme authors -----
   $('btnThemeFolder').onclick = () => D.themeFolder(activeTheme().id);
   $('btnThemeStarter').onclick = () => D.themeStarter();
+  $('btnThemeExamples').onclick = async () => { await D.themeExamples(); $('btnThemeExamples').hidden = true; };
   $('setThemeWatch').onchange = () => D.themeWatch($('setThemeWatch').checked);
   $('btnThemeCheck').onclick = async () => {
     const list = await D.themeCheck(activeTheme().id);

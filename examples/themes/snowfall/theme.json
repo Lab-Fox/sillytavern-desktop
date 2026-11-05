@@ -1,0 +1,53 @@
+{
+  "format": 2,
+  "apiVersion": 1,
+  "name": "Snowfall",
+  "author": "Fox",
+  "version": "1.0",
+  "description": "Quiet snow behind the app, a little heavier while SillyTavern runs. Has a live scene.",
+  "colors": {
+    "bg": "#0f1a26",
+    "panel": "#182838",
+    "border": "#34506a",
+    "accent": "#8fd3ff",
+    "text": "#dcebf5",
+    "title": "#ffffff",
+    "muted": "#a4bccd",
+    "onAccent": "#0b1620"
+  },
+  "logo": "st",
+  "layers": [
+    {
+      "id": "snow",
+      "src": "scene/index.html",
+      "slot": "window",
+      "z": "behind"
+    }
+  ],
+  "options": [
+    {
+      "id": "amount",
+      "type": "slider",
+      "label": "Snow",
+      "min": 20,
+      "max": 200,
+      "step": 10,
+      "default": 90
+    },
+    {
+      "id": "wind",
+      "type": "slider",
+      "label": "Wind",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "default": 2
+    },
+    {
+      "id": "pixels",
+      "type": "toggle",
+      "label": "Square flakes",
+      "default": true
+    }
+  ]
+}

@@ -21,6 +21,7 @@
   <a href="https://github.com/Lab-Fox/sillytavern-desktop/releases/latest"><b>Download for Windows</b></a>
   &nbsp;·&nbsp; <a href="docs/USER-GUIDE.md">User guide</a>
   &nbsp;·&nbsp; <a href="docs/TROUBLESHOOTING.md">Troubleshooting</a>
+  &nbsp;·&nbsp; <a href="docs/THEMES.md">Making themes</a>
   &nbsp;·&nbsp; <a href="docs/DEVELOPERS.md">For developers</a>
 </p>
 
@@ -66,6 +67,7 @@ Needs **Windows 10 or 11**. Linux and macOS aren't supported yet ([help wanted](
 - **AI apps on your own PC**: KoboldCpp, llama.cpp, ComfyUI, Forge, AllTalk and more, installed in one click with models picked for your graphics card.
 - **Use it from your phone**: scan a QR code to connect over your Wi-Fi, or reach it from outside with a Cloudflare link or Tailscale, protected by a password.
 - **Drag and drop** character cards, lorebooks and presets to import them.
+- **Themes you can make your own**: colors, shapes, fonts, wallpapers, GIFs and video placed where you want them, with no code in Theme Studio, or [with your own CSS](docs/THEMES.md).
 - **Six languages**: English, Bahasa Indonesia, 日本語, 한국어, 简体中文, 繁體中文.
 
 <table>

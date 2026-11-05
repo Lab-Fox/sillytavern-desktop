@@ -1,0 +1,48 @@
+{
+  "format": 2,
+  "apiVersion": 1,
+  "name": "Soft Glass",
+  "author": "Fox",
+  "version": "1.0",
+  "description": "Rounded and calm, with frosted panels over soft light.",
+  "colors": {
+    "bg": "#15172a",
+    "panel": "#23264a",
+    "border": "#4a4f85",
+    "accent": "#8ea2ff",
+    "text": "#e4e6f7",
+    "title": "#ffffff",
+    "muted": "#b6bae0",
+    "onAccent": "#10122a"
+  },
+  "logo": "st",
+  "wallpaper": "assets/wall.png",
+  "options": [
+    {
+      "id": "blur",
+      "type": "slider",
+      "label": "Frost",
+      "min": 0,
+      "max": 24,
+      "step": 2,
+      "unit": "px",
+      "default": 12
+    },
+    {
+      "id": "glass",
+      "type": "slider",
+      "label": "Panel strength",
+      "min": 30,
+      "max": 95,
+      "step": 5,
+      "unit": "%",
+      "default": 62
+    },
+    {
+      "id": "pill",
+      "type": "toggle",
+      "label": "Pill buttons",
+      "default": true
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "format": 2,
+  "apiVersion": 1,
+  "name": "Tavern Night",
+  "author": "Fox",
+  "version": "1.0",
+  "description": "A warm pixel tavern. The fox naps while SillyTavern is stopped, and raises a mug when it runs.",
+  "colors": {
+    "bg": "#1a100a",
+    "panel": "#2a1a10",
+    "border": "#5c3a22",
+    "accent": "#f2a03d",
+    "text": "#f0e2cf",
+    "title": "#fff3e6",
+    "muted": "#c4ab90",
+    "good": "#a5d68a",
+    "warn": "#f2c75c",
+    "bad": "#ff8a6e"
+  },
+  "logo": "fox",
+  "wallpaper": "assets/room.png",
+  "wallpaperPixelated": true,
+  "layers": [
+    {
+      "id": "fox-asleep",
+      "src": "assets/fox-asleep.png",
+      "slot": "sidebar",
+      "anchor": "bottom",
+      "width": "46%",
+      "maxWidth": "112px",
+      "y": "118px",
+      "pixelated": true,
+      "hideBelow": 900,
+      "when": {
+        "server": "stopped",
+        "opt-fox": "on"
+      }
+    },
+    {
+      "id": "fox-awake",
+      "src": "assets/fox-awake.png",
+      "slot": "sidebar",
+      "anchor": "bottom",
+      "width": "46%",
+      "maxWidth": "112px",
+      "y": "118px",
+      "pixelated": true,
+      "hideBelow": 900,
+      "when": {
+        "server": "running",
+        "opt-fox": "on"
+      }
+    },
+    {
+      "id": "lantern",
+      "src": "assets/lantern.gif",
+      "slot": "page",
+      "anchor": "right",
+      "width": "4%",
+      "minWidth": "28px",
+      "maxWidth": "48px",
+      "x": "3%",
+      "pixelated": true,
+      "when": {
+        "opt-lantern": "on"
+      },
+      "y": "8%"
+    }
+  ],
+  "options": [
+    {
+      "id": "fox",
+      "type": "toggle",
+      "label": "Show the fox",
+      "default": true
+    },
+    {
+      "id": "lantern",
+      "type": "toggle",
+      "label": "Lantern",
+      "default": true
+    },
+    {
+      "id": "dim",
+      "type": "slider",
+      "label": "See the room through panels",
+      "min": 0,
+      "max": 60,
+      "step": 5,
+      "unit": "%",
+      "default": 15
+    }
+  ]
+}

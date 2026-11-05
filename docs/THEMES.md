@@ -129,7 +129,7 @@ Single parts of the window have a `data-part`:
 [data-part="sidebar"] { background: url(assets/wood.png); }
 ```
 
-Things that repeat keep their class names, and these won't change either: `.btn` (with `.primary`, `.ghost`, `.danger`, `.sm`), `.card`, `.hero`, `.tag`, `.pill`, `.tip`, `.seg`, `.tgl`, `.set-group`, `.set-row`, `.item`, `.layer`, `.layer-slot`, and `.tab`, `.chip` in the top bar.
+Things that repeat keep their class names, and these won't change either: `.btn` (with `.primary`, `.ghost`, `.danger`, `.sm`), `.card`, `.hero`, `.tag`, `.pill`, `.tip`, `.seg`, `.tgl`, `.set-group`, `.set-row`, `.item`, `.i` (icons), `.layer`, `.layer-slot`, and `.tab`, `.chip` in the top bar.
 
 Any other class name or the order of elements can change in any update. **Check it** warns you if you lean on one. Pages have the ids `page-home`, `page-profiles` and so on, on a `[data-part="page"]`.
 

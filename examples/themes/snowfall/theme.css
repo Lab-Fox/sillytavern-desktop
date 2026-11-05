@@ -1,0 +1,9 @@
+:root {
+  --app-bg: var(--bg);
+  --sidebar-bg: color-mix(in srgb, var(--surface) 72%, transparent);
+  --header-bg: color-mix(in srgb, var(--surface) 72%, transparent);
+  --card-bg: color-mix(in srgb, var(--panel) 80%, transparent);
+  --hero-bg: color-mix(in srgb, var(--panel) 80%, transparent);
+  --dock-bg: color-mix(in srgb, var(--surface) 86%, transparent);
+  --console-bg: color-mix(in srgb, var(--well) 88%, transparent);
+}

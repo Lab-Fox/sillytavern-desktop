@@ -1,0 +1,29 @@
+:root {
+  --radius: 12px;
+  --tag-radius: 999px;
+  --switch-radius: 999px;
+  --border-w: 1px;
+  --divider: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  --shadow-card: 0 8px 24px color-mix(in srgb, #000 30%, transparent);
+  --shadow-btn: none;
+  --btn-press: scale(.97);
+  --nav-active-mark: none;
+  --transition: background .12s ease, border-color .12s ease, transform .08s ease;
+  --body-font: "Segoe UI", var(--lang-fonts), system-ui, sans-serif;
+  --logo-render: auto;
+  --icon-stroke: 1.6;
+  --app-bg: transparent;
+  --sidebar-bg: color-mix(in srgb, var(--surface) 55%, transparent);
+  --header-bg: color-mix(in srgb, var(--surface) 45%, transparent);
+  --dock-bg: color-mix(in srgb, var(--surface) 60%, transparent);
+  --console-bg: color-mix(in srgb, var(--well) 60%, transparent);
+  --card-bg: color-mix(in srgb, var(--panel) var(--opt-glass), transparent);
+  --hero-bg: color-mix(in srgb, var(--panel) var(--opt-glass), transparent);
+  --btn-bg: color-mix(in srgb, var(--panel2) 70%, transparent);
+  --input-bg: color-mix(in srgb, var(--well) 60%, transparent);
+  --scrollbar-track: transparent;
+}
+html[data-opt-pill="on"] { --btn-radius: 999px; }
+body { -webkit-font-smoothing: auto; letter-spacing: 0; }
+svg.i { shape-rendering: auto; stroke-linecap: round; stroke-linejoin: round; }
+.card, .set-group, [data-part="sidebar"], [data-part="header"] { backdrop-filter: blur(var(--opt-blur)); }
