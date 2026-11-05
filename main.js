@@ -13,7 +13,8 @@ import * as mx from './maintenance.js';
 import * as setup from './setup.js';
 import * as themes from './themes.js';
 import { StWindow, windowOf } from './shell.js';
-import { MODES as LAYERS } from './winlayer.js';
+import { MODES as LAYERS, shiftDown } from './winlayer.js';
+import { initThemeRoute, guardFileRequests } from './themeroute.js';
 import * as instances from './instances.js';
 import * as ext from './extensions.js';
 import * as appUpdate from './appupdate.js';
@@ -557,7 +558,7 @@ function createLauncherWindow() {
         minWidth: 820,
         minHeight: 560,
         resizable: true,
-        backgroundColor: themes.get(settings.theme).colors.bg,
+        backgroundColor: themes.get(activeThemeId()).colors.bg,
         title: 'SillyTavern Desktop',
         icon: path.join(__dirname, 'icon.ico'),
         webPreferences: {
@@ -568,6 +569,13 @@ function createLauncherWindow() {
     });
     Menu.setApplicationMenu(null);
     launcherWin.loadFile('launcher.html');
+    // In the main process, so it works however broken a theme leaves the page.
+    launcherWin.webContents.on('before-input-event', (e, input) => {
+        if (input.type !== 'keyDown' || input.isAutoRepeat || !input.control || !input.alt || !input.shift || input.key.toLowerCase() !== 't') return;
+        e.preventDefault();
+        logLine('Theme reset to the default (Ctrl+Alt+Shift+T).');
+        setTheme(themes.BUILTIN[0].id);
+    });
     attachLauncherMenu(launcherWin.webContents);
     fitLauncherToZoom();
     // With the tray on, closing only hides the launcher.
@@ -1045,7 +1053,7 @@ function createStWindow(instance, extra = {}) {
         height: extra.height ?? settings.windowHeight,
         fullScreen: extra.tab ? false : settings.windowFullScreen,
         layer: settings.windowLayer,
-        colors: themes.get(settings.theme).colors,
+        colors: themes.get(activeThemeId()).colors,
         font: () => themes.uiFontCss(settings.uiFont),
         icon: path.join(__dirname, 'icon.ico'),
         setupPage: lockToServer,
@@ -2497,7 +2505,12 @@ ipcMain.handle('move-st', async () => {
 });
 
 // ---------- themes ----------
+// Safe start (Shift held, or --safe-theme): the default theme for this run,
+// the saved choice stays as it is. Picking a theme ends it.
+let safeTheme = false;
+const activeThemeId = () => (safeTheme ? themes.BUILTIN[0].id : settings.theme);
 function setTheme(id) {
+    safeTheme = false;
     settings.theme = themes.get(id).id;
     saveSettings(settings);
     broadcast('theme');
@@ -2514,7 +2527,7 @@ ipcMain.handle('set-ui-font', (_e, { font, zoom } = {}) => {
     broadcast('settings', publicSettings());
     return publicSettings();
 });
-ipcMain.handle('list-themes',() => ({ active: themes.get(settings.theme).id, themes: themes.list() }));
+ipcMain.handle('list-themes',() => ({ active: themes.get(activeThemeId()).id, safe: safeTheme, themes: themes.list() }));
 ipcMain.handle('set-theme', (_e, id) => setTheme(id));
 ipcMain.handle('save-theme', (_e, raw, id) => {
     try {
@@ -2624,6 +2637,10 @@ if (gotLock) {
         // Before any SillyTavern window: tabs register with it as they open.
         initChrome();
         themes.initThemes(USER_DATA);
+        initThemeRoute(themes.packagesDir());
+        guardFileRequests(session.defaultSession, __dirname, url => logLine(`Blocked a page from loading ${url}`));
+        safeTheme = process.argv.includes('--safe-theme') || shiftDown();
+        if (safeTheme) logLine('Safe start: using the default theme for this run.');
         appUpdate.initAppUpdate({ userData: USER_DATA, logLine, preview: () => settings.appPreview, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
         bs.initBackupSchedule({
             logLine, userData: USER_DATA, getSettings: () => settings, targets: scheduleTargets,

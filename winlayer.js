@@ -11,6 +11,13 @@ const WM_WINDOWPOSCHANGING = 0x0046;
 const HWND_TOP = 0, HWND_BOTTOM = 1, HWND_TOPMOST = -1, HWND_NOTOPMOST = -2;
 const SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10;
 
+// Is Shift held right now? Asked once at start, for the safe theme.
+export function shiftDown() {
+    try {
+        return koffi.load('user32.dll').func('short __stdcall GetAsyncKeyState(int key)')(0x10) < 0;
+    } catch { return false; }
+}
+
 let SetWindowPos = null;
 function setZOrder(win, after) {
     if (!SetWindowPos) {

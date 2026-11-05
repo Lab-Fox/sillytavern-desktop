@@ -57,8 +57,10 @@ export const BUILTIN = [
 let dir = '';
 export function initThemes(userData) {
     dir = path.join(userData, 'themes');
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(packagesDir(), { recursive: true });
 }
+// Unpacked themes with their own files (see themeroute.js).
+export const packagesDir = () => path.join(dir, 'packages');
 
 // Returns a clean theme or throws a message fit to show the user.
 export function validate(raw) {

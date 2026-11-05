@@ -41,6 +41,7 @@
       "themes.js",
       "shell.js",
       "winlayer.js",
+      "themeroute.js",
       "instances.js",
       "extensions.js",
       "appupdate.js",

@@ -353,6 +353,8 @@ The translations were made with the help of AI and are waiting for native speake
 
 ### Themes
 
+**If a theme makes the app hard to use:** press **Ctrl+Alt+Shift+T** in the launcher to go back to the default theme, or hold **Shift** while the app starts to use the default theme for that run only.
+
 The launcher has a soft retro pixel look in **Departure Mono**, a pixel font where B and 8, I, l and 1, and O and 0 are easy to tell apart. **Settings → Appearance → App font** switches to DotGothic16, Pixelify Sans (the font before 1.6), VT323, Segoe UI or any font on your PC, and **Size** makes the launcher 80 to 150 % as large. The font also applies to the SillyTavern window's top bar; SillyTavern's own pages keep the font chosen in SillyTavern. Pick a theme, **SillyTavern** (default) or **Fox**, in **Settings → Appearance**, or click **New theme**: choose seven colors and a logo, and every logo turns into pixel art. **Export** and **Import theme…** share themes as small `.json` files. Themes are only colors and an image, never code.
 
 <details>

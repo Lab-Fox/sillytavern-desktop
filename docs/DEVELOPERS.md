@@ -94,6 +94,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 | `appupdate.js` | Self-update from GitHub releases (SHA256-checked) |
 | `lan.js` | Phone access: local networks, the server's environment variables, QR codes (`qrcode-generator`) |
 | `themes.js` | Built-in and custom themes, import/export |
+| `themeroute.js` | `st-theme://<package>/<path>`, the only way theme files reach a page (pictures, video and fonts only), and the block on `file:` addresses outside the app. `--safe-theme` starts with the default theme |
 | `installer.nsh` | Installer steps: ask a running app to close itself (`--quit`) first; the **Open with** entries for cards, lorebooks and presets |
 | `examples/`, `EXTENSIONS.md` | Example desktop extension and the extension guide |
 | `fonts/`, `icon.*`, `splash.bmp` | Pixel fonts (OFL), app icon, portable splash screen |
