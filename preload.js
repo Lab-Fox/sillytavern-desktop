@@ -188,6 +188,7 @@ contextBridge.exposeInMainWorld('desktop', {
     studioSave: (theme, id) => invoke('studio-save', theme, id),
     studioClose: () => invoke('studio-close'),
     themeFolder: id => invoke('theme-folder', id),
+    themeSceneAllow: on => invoke('theme-scene-allow', on),
     themeCheck: id => invoke('theme-check', id),
     themeContract: () => invoke('theme-contract'),
     themeStarter: () => invoke('theme-starter'),

@@ -22,6 +22,7 @@ A theme can change how the launcher and the SillyTavern window's top bar look. S
 - [Wallpaper and layers](#wallpaper-and-layers)
 - [Options](#options)
 - [Animation](#animation)
+- [Scenes](#scenes)
 - [What isn't allowed](#what-isnt-allowed)
 - [Before you share it](#before-you-share-it)
 
@@ -52,6 +53,7 @@ A `.sttheme` file is a zip. Everything sits at the top of the zip, or in one fol
 | Video | `.webm` `.mp4` (never any sound) |
 | Fonts | `.woff2` `.woff` `.ttf` `.otf` |
 | Text | `README.md`, `README.txt`, `LICENSE` |
+| `scene/` | Optional: `.html`, `.js` and `.css` of a [scene](#scenes) |
 
 Limits: 50 MB for the file, 150 MB unpacked, 2000 files, 512 KB of CSS per file. Every file must really be what its name says.
 
@@ -204,11 +206,33 @@ GIFs, WebP, APNG, video and CSS animation all work. People can turn them off wit
 
 Moving things use power. Keep video small, and prefer one looping video to many GIFs.
 
+## Scenes
+
+For what pictures and CSS can't do, like falling snow or a shader, a theme can have one **scene**: an HTML page with JavaScript, drawn as a layer.
+
+```json
+"layers": [{ "id": "snow", "src": "scene/index.html", "slot": "window", "z": "behind" }]
+```
+
+Everything it needs lives in the `scene/` folder (`.html`, `.js`, `.css`, plus pictures, video and fonts). It's sized and placed like any layer, and fills its slot unless you set a size.
+
+It runs sealed off. It has no access to the app, the page around it, your files, storage or the internet, and it can't catch clicks. People are asked before a scene runs, and can turn it off under **Theme options**.
+
+The app tells it what's going on. It can't answer:
+
+```js
+addEventListener('message', e => {
+  const { page, server, busy, update, time, motion, accent, bg, options } = e.data;
+});
+```
+
+A scene is stopped and removed, not paused, when animations are off, when its `when` doesn't match, and while the window is hidden; it starts again from the top when it comes back. Keep it light: it runs for as long as the window is in use.
+
 ## What isn't allowed
 
 Themes are shared files that run inside the app, so the app refuses:
 
-- Scripts and HTML, in any form.
+- Scripts and HTML, anywhere but in a sealed [scene](#scenes).
 - `@import`, `@layer` and `@charset`, and addresses outside the theme: `http:`, `file:`, absolute paths, `..`.
 - `src()`, `element()`, `paint()`, `image()`, `cross-fade()` and `-webkit-app-region`.
 - Files that aren't what their name says, links to other places, and names Windows treats specially.

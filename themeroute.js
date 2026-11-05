@@ -17,14 +17,17 @@ protocol.registerSchemesAsPrivileged([{
     privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true },
 }]);
 
-// Pictures, video and fonts only. CSS, HTML and scripts are never served from
-// here: a theme's CSS is checked first, and pages get the checked text.
+// Pictures, video and fonts. A theme's CSS is checked first, and pages get the
+// checked text. The one place for HTML and scripts is a theme's scene/ folder:
+// a scene runs sealed off, see sceneHeaders.
 export const TYPES = {
     '.png': 'image/png', '.apng': 'image/apng', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
     '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
     '.webm': 'video/webm', '.mp4': 'video/mp4',
     '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf',
 };
+export const SCENE_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const typeOf = rel => TYPES[path.extname(rel).toLowerCase()] || (rel.startsWith('scene/') ? SCENE_TYPES[path.extname(rel).toLowerCase()] : undefined);
 const APP_ORIGIN = 'file://';
 const PACKAGE_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const BAD_NAME = /[\\:*?"<>|\x00-\x1f]|[. ]$|^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i;
@@ -50,7 +53,7 @@ export function themePath(packagesDir, url) {
     if (/%(2f|5c|00)/i.test(u.pathname)) return null;
     let rel;
     try { rel = decodeURIComponent(u.pathname.slice(1)); } catch { return null; }
-    if (!safeRel(rel) || !TYPES[path.extname(rel).toLowerCase()]) return null;
+    if (!safeRel(rel) || !typeOf(rel)) return null;
     return path.join(packagesDir, u.hostname, ...rel.split('/'));
 }
 
@@ -82,20 +85,31 @@ export function parseRange(header, size) {
     return start > end || start >= size ? false : { start, end };
 }
 
+// A scene may draw and animate with its own files and nothing else: no network,
+// no other files, nothing of the page around it. The sandbox comes with the
+// response, so it holds however the page is opened.
+const sceneHeaders = self => [
+    'sandbox allow-scripts', "default-src 'none'", `script-src 'unsafe-inline' ${self}`, `style-src 'unsafe-inline' ${self}`,
+    `img-src ${self} data: blob:`, `media-src ${self} blob:`, `font-src ${self} data:`, "connect-src 'none'", "frame-src 'none'", "base-uri 'none'", "form-action 'none'", "webrtc 'block'",
+].join('; ');
+
 async function serve(packagesDir, request) {
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response(null, { status: 405 });
     // Web pages open in the app's other tabs have no business reading these.
+    // A sealed scene has no origin: 'null'.
     const origin = request.headers.get('origin');
-    if (origin && origin !== APP_ORIGIN) return new Response(null, { status: 403 });
+    if (origin && origin !== APP_ORIGIN && origin !== 'null') return new Response(null, { status: 403 });
     const found = await locate(packagesDir, request.url);
     if (!found) return new Response(null, { status: 404 });
     const { file, size } = found;
+    const url = new URL(request.url);
+    const scene = url.pathname.startsWith('/scene/');
     const headers = {
-        'content-type': TYPES[path.extname(file).toLowerCase()],
+        'content-type': typeOf(scene ? 'scene/x' + path.extname(file) : file),
         'x-content-type-options': 'nosniff',
         // An SVG opened as a page must stay a picture.
-        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-        'access-control-allow-origin': APP_ORIGIN,
+        'content-security-policy': scene ? sceneHeaders(`${url.protocol}//${url.host}`) : "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        'access-control-allow-origin': origin || APP_ORIGIN,
         'accept-ranges': 'bytes',
         'cache-control': 'no-cache',
     };

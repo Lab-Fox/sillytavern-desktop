@@ -9,7 +9,7 @@ import yazl from 'yazl';
 import yauzl from 'yauzl';
 import { t } from './i18n.js';
 import { validate, packagesDir, THEME_API } from './themes.js';
-import { TYPES, safeRel } from './themeroute.js';
+import { TYPES, SCENE_TYPES, safeRel } from './themeroute.js';
 import { checkCss } from './themecss.js';
 
 export const EXTENSION = '.sttheme';
@@ -120,11 +120,12 @@ const OFFSET = /^-?\d{1,4}(\.\d{1,2})?(%|px)$/;
 const MAX_LAYERS = 24, MAX_VIDEOS = 4;
 const VIDEO = new Set(['.webm', '.mp4']);
 const isMedia = rel => safeRel(rel) && /^(image|video)\//.test(TYPES[path.extname(rel).toLowerCase()] || '');
+const SCENE_PAGE = /^scene\/[\w-]+\.html$/;
 
 function layerOf(raw, i) {
     const bad = what => new Error(t('Layer {n} of this theme has a wrong {what}.', { n: i + 1, what }));
     if (!raw || typeof raw !== 'object') throw bad('entry');
-    if (typeof raw.src !== 'string' || !isMedia(raw.src)) throw bad('src');
+    if (typeof raw.src !== 'string' || !(isMedia(raw.src) || SCENE_PAGE.test(raw.src))) throw bad('src');
     const pick = (key, list, fallback) => {
         const v = raw[key] ?? fallback;
         if (!list.includes(v)) throw bad(key);
@@ -150,7 +151,7 @@ function layerOf(raw, i) {
     return {
         id, src: raw.src, slot: pick('slot', SLOTS, 'window'), anchor: pick('anchor', ANCHORS, 'center'), fit: pick('fit', FITS, 'contain'), z: pick('z', ['behind', 'above'], 'behind'),
         width: size('width'), height: size('height'), minWidth: size('minWidth'), maxWidth: size('maxWidth'), x: size('x', OFFSET), y: size('y', OFFSET),
-        opacity, hideBelow, when, pixelated: raw.pixelated === true, video: VIDEO.has(path.extname(raw.src).toLowerCase()),
+        opacity, hideBelow, when, pixelated: raw.pixelated === true, video: VIDEO.has(path.extname(raw.src).toLowerCase()), scene: SCENE_PAGE.test(raw.src),
     };
 }
 
@@ -162,6 +163,7 @@ function layersOf(raw) {
     if (list.length > MAX_LAYERS) throw new Error(t('This theme has too many layers.'));
     const layers = list.map(layerOf);
     if (layers.filter(l => l.video).length > MAX_VIDEOS) throw new Error(t('This theme has too many videos.'));
+    if (layers.filter(l => l.scene).length > 1) throw new Error(t('A theme can have one scene.'));
     if (new Set(layers.map(l => l.id)).size !== layers.length) throw new Error(t('Two layers of this theme have the same id.'));
     return layers;
 }
@@ -292,7 +294,8 @@ async function open(file) {
             if (seen.has(sameName(rel))) throw new Error(t('This theme has two files with the same name: {name}', { name: rel.slice(0, 80) }));
             seen.add(sameName(rel));
             const ext = path.extname(rel).toLowerCase();
-            if (!TYPES[ext] && !TEXT_FILES.has(sameName(rel))) throw new Error(t('This theme has a kind of file themes can\'t contain: {name}', { name: rel.slice(0, 80) }));
+            const sceneFile = rel.startsWith('scene/') && SCENE_TYPES[ext];
+            if (!TYPES[ext] && !sceneFile && !TEXT_FILES.has(sameName(rel))) throw new Error(t('This theme has a kind of file themes can\'t contain: {name}', { name: rel.slice(0, 80) }));
             files.set(rel, entry);
         }
         for (const [rel, entry] of files) {
@@ -311,7 +314,7 @@ async function open(file) {
             const { errors } = await checkCss((await readEntry(zip, files.get(css), 1024 * 1024)).toString('utf8'), id);
             if (errors.length) throw new Error(t('This theme\'s CSS isn\'t allowed.') + `\n${errors.slice(0, 5).map(e => cssError(css, e)).join('\n')}`);
         }
-        return { zip, files, manifest, id, hasCss: files.has('theme.css') || files.has('bar.css'), bytes: entries.reduce((n, e) => n + e.uncompressedSize, 0) };
+        return { zip, files, manifest, id, hasCss: files.has('theme.css') || files.has('bar.css'), hasScene: manifest.layers.some(l => l.scene), bytes: entries.reduce((n, e) => n + e.uncompressedSize, 0) };
     } catch (e) {
         zip.close();
         throw e;
@@ -325,7 +328,7 @@ export async function inspect(file) {
     const existing = read(p.id);
     return {
         id: p.id, name: p.manifest.name, author: p.manifest.author, version: p.manifest.version, description: p.manifest.description,
-        hasCss: p.hasCss, files: p.files.size, bytes: p.bytes,
+        hasCss: p.hasCss, hasScene: p.hasScene, files: p.files.size, bytes: p.bytes,
         replaces: !!existing && existing.author === p.manifest.author, taken: !!existing,
     };
 }
@@ -416,7 +419,7 @@ function read(id) {
         const { logoFile, ...theme } = m;
         const name = path.basename(dir);
         const layers = m.layers.filter(l => has(l.src)).map(l => ({ ...l, url: fileUrl(name, l.src) }));
-        return { ...theme, layers, logo, id: PREFIX + name, builtin: false, package: true, hasCss: has('theme.css') || has('bar.css') || layers.some(l => l.z === 'above') };
+        return { ...theme, layers, logo, id: PREFIX + name, builtin: false, package: true, hasCss: has('theme.css') || has('bar.css') || layers.some(l => l.z === 'above' || l.scene), hasScene: layers.some(l => l.scene) };
     } catch { return null; }
 }
 
@@ -448,13 +451,29 @@ export async function css(id, which) {
     return { css: r.css, errors: r.errors.map(e => cssError(which, e)) };
 }
 
+// Every file of the scene: yes to a scene is yes to exactly these.
+function sceneHash(id, h = crypto.createHash('sha256')) {
+    const walk = sub => {
+        let list = [];
+        try { list = fs.readdirSync(path.join(dirOf(id), sub), { withFileTypes: true }); } catch { return; }
+        for (const e of list.sort((a, b) => a.name.localeCompare(b.name))) {
+            const rel = `${sub}/${e.name}`;
+            if (e.isDirectory()) walk(rel);
+            else { h.update(rel); h.update(fs.readFileSync(path.join(dirOf(id), rel))); }
+        }
+    };
+    walk('scene');
+    return h.digest('hex').slice(0, 16);
+}
+export const sceneKey = id => `${id}:${sceneHash(id)}`;
+
 // Same CSS = the user has already said it's fine.
 export function fingerprint(id) {
     const h = crypto.createHash('sha256');
     for (const f of ['theme.css', 'bar.css']) {
         try { h.update(fs.readFileSync(path.join(dirOf(id), f))); } catch { /* not in this theme */ }
     }
-    return `${id}:${h.digest('hex').slice(0, 16)}`;
+    return `${id}:${sceneHash(id, h)}`;
 }
 
 export function exportTo(id, target) {

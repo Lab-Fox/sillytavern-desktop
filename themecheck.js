@@ -65,6 +65,7 @@ export async function check(theme) {
     }
     if (total > BIG_THEME) add('warn', `The theme is ${(total / 1048576).toFixed(0)} MiB in all: keep it under 30 MiB if you can.`);
     for (const l of theme.layers || []) {
+        if (l.scene) add('warn', 'The theme has a scene: keep it light, it runs for as long as the window is in use, and test it with Task Manager open.');
         if (l.z === 'above' && l.opacity > 0.8 && parseFloat(l.width) >= 50 && l.width.endsWith('%')) add('warn', `Layer "${l.id}" covers a lot of the window in front of the content.`);
         if (l.video && !l.width && !l.height) add('warn', `Layer "${l.id}" is a video without a size: it shows at its own size, whatever the window.`);
     }

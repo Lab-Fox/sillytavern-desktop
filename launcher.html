@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src data: st-theme:; media-src st-theme:; font-src 'self' st-theme:; frame-src 'none'; object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src data: st-theme:; media-src st-theme:; font-src 'self' st-theme:; frame-src st-theme:; object-src 'none'; base-uri 'none'">
 <title>SillyTavern Desktop</title>
 <style>
   /* ---------- fonts (bundled, OFL — see fonts/) ---------- */
@@ -565,6 +565,7 @@
   .layer-slot { position: absolute; inset: 0; overflow: hidden; z-index: 0; }
   .layer-slot[data-z="above"] { z-index: 2; }
   .layer { position: absolute; }
+  iframe.layer { border: 0; width: 100%; height: 100%; background: transparent; color-scheme: normal; }
   .set-ctl input[type=range] { width: 170px; accent-color: var(--accent); cursor: pointer; }
   .set-ctl input[type=color] { width: 44px; height: 30px; padding: 1px; border: var(--border-w) solid var(--border); border-radius: var(--input-radius); background: var(--input-bg); cursor: pointer; }
   .set-ctl output { min-width: 62px; text-align: right; font-size: 14px; color: var(--muted); }
@@ -3592,8 +3593,24 @@
   function renderThemeOptions() {
     const options = activeTheme()?.options || [];
     const box = $('themeOptions');
-    $('themeOptHead').hidden = box.hidden = !options.length;
-    box.replaceChildren(...options.map(o => {
+    const scene = activeTheme()?.hasScene;
+    $('themeOptHead').hidden = box.hidden = !options.length && !scene;
+    $('btnThemeOptReset').hidden = !options.length;
+    const sceneRow = () => {
+      const row = document.createElement('label');
+      row.className = 'set-row';
+      const left = document.createElement('div');
+      left.className = 'set-text';
+      left.innerHTML = `<b>${esc(T('Live scene'))}</b><span class="set-desc">${esc(T('A small program that draws behind the app, sealed off from your files and the internet. It can use your processor and battery.'))}</span>`;
+      const right = document.createElement('div');
+      right.className = 'set-ctl';
+      const el = Object.assign(document.createElement('input'), { type: 'checkbox', className: 'tgl', id: 'themeSceneOn', checked: !!themeState.sceneAllowed });
+      el.onchange = () => D.themeSceneAllow(el.checked);
+      right.append(el);
+      row.append(left, right);
+      return row;
+    };
+    box.replaceChildren(...(scene ? [sceneRow()] : []), ...options.map(o => {
       const row = document.createElement(o.type === 'toggle' ? 'label' : 'div');
       row.className = 'set-row';
       const left = document.createElement('div');
@@ -3648,14 +3665,16 @@
     if (def.pixelated) s.imageRendering = 'pixelated';
   }
   function layerNode(def) {
-    const el = document.createElement(def.video ? 'video' : 'img');
-    if (def.video) Object.assign(el, { muted: true, loop: true, playsInline: true, disableRemotePlayback: true, preload: 'auto' });
+    const el = document.createElement(def.scene ? 'iframe' : def.video ? 'video' : 'img');
+    // Sealed: no access to this page or window.desktop, and it's only told things (see sendScene).
+    if (def.scene) { el.setAttribute('sandbox', 'allow-scripts'); el.referrerPolicy = 'no-referrer'; el.tabIndex = -1; }
+    else if (def.video) Object.assign(el, { muted: true, loop: true, playsInline: true, disableRemotePlayback: true, preload: 'auto' });
     else Object.assign(el, { alt: '', decoding: 'async', draggable: false });
     el.className = 'layer';
     el.dataset.layer = def.id;
     el.setAttribute('aria-hidden', 'true');
     placeLayer(el, def);
-    el.src = def.url;
+    if (!def.scene) el.src = def.url;
     return el;
   }
   function applyLayers(list) {
@@ -3727,6 +3746,31 @@
     l.frozenFrom = img;
     l.node = c;
   }
+  // A scene only exists while it may run: stopped means gone, not paused, so it costs nothing.
+  function runScene(l, on, run) {
+    const running = l.node.hasAttribute('src');
+    if (run && !l.node.hidden && themeState.sceneAllowed) {
+      if (!running) {
+        l.node.onload = () => sendScene(l, true);
+        l.node.src = l.def.url;
+      } else sendScene(l);
+    } else if (running) {
+      const fresh = layerNode(l.def);
+      fresh.hidden = l.node.hidden;
+      l.node.replaceWith(fresh);
+      l.node = fresh;
+      l.sent = '';
+    }
+  }
+  // One way only: this page never listens to a scene.
+  function sendScene(l, fresh) {
+    const { page, server, busy, update, time, motion } = rootState;
+    const css = getComputedStyle(document.documentElement);
+    const state = JSON.stringify({ page, server, busy, update, time, motion, accent: css.getPropertyValue('--accent').trim(), bg: css.getPropertyValue('--bg').trim(), options: themeState.optionValues });
+    if (!fresh && state === l.sent) return;
+    l.sent = state;
+    l.node.contentWindow?.postMessage(JSON.parse(state), '*');
+  }
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   function updateMotion() {
     const mode = current?.themeAnimations || 'on';
@@ -3734,7 +3778,8 @@
     if (rootState.motion !== (on ? 'on' : 'off')) rootState.motion = on ? 'on' : 'off';
     const run = on && document.visibilityState === 'visible';
     for (const l of layers) {
-      if (l.def.video) {
+      if (l.def.scene) runScene(l, on, run);
+      else if (l.def.video) {
         if (run && !l.node.hidden) l.node.play().catch(() => { /* replaced or hidden meanwhile */ });
         else l.node.pause();
       } else freezeLayer(l, !on);
@@ -3757,6 +3802,7 @@
     $('themeCssErrors').hidden = !themeState.cssErrors.length;
     renderThemeList();
     renderThemeOptions();
+    refreshLayers();
   }
   async function renderThemeList() {
     const el = $('themeList');

@@ -111,6 +111,7 @@ const DEFAULT_SETTINGS = {
     themeAnimations: 'on',      // a theme's moving parts: on, focused (only while the launcher has focus), off
     themeOptions: {},           // the user's choices per theme: { "<id>": { "<option>": value } }
     themeWatch: false,          // for theme authors: apply the active theme's files as they change
+    themeScenes: [],            // live scenes the user allowed, as "<id>:<hash of the scene's files>"
     language: '',               // the app's language (i18n.js); '' = Windows' language
     syncStLanguage: true,       // a language change also sets SillyTavern's own language (where it has it)
     stLanguage: null,           // { code, done: [partitions] } after a change: each session gets it once
@@ -575,6 +576,9 @@ function createLauncherWindow() {
         },
     });
     Menu.setApplicationMenu(null);
+    // The only frames in the launcher are a theme's sealed scenes, and CSP doesn't
+    // cover WebRTC: without this one could send packets to any address.
+    launcherWin.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
     launcherWin.loadFile('launcher.html');
     // In the main process, so it works however broken a theme leaves the page.
     launcherWin.webContents.on('before-input-event', (e, input) => {
@@ -2565,6 +2569,12 @@ async function refreshThemeCss() {
     themeCss.errors = [...launcher.errors, ...bar.errors];
     stWins.forEach(w => w.push());
 }
+const sceneAllowed = theme => !!theme.hasScene && settings.themeScenes.includes(themepkg.sceneKey(theme.id));
+function allowScene(id, on) {
+    const key = themepkg.sceneKey(id);
+    settings.themeScenes = [...settings.themeScenes.filter(k => !k.startsWith(`${id}:`)), ...(on ? [key] : [])].slice(-50);
+    saveSettings(settings);
+}
 function activeOptions() {
     const theme = themes.get(activeThemeId());
     const stored = settings.themeOptions[theme.id];
@@ -2604,11 +2614,15 @@ async function installTheme(file) {
         [info.author && t('By {name}', { name: info.author }), info.version].filter(Boolean).join(' · '),
         info.description,
         info.hasCss ? t('This theme changes how the app looks with its own CSS. It can\'t reach your files or the internet, but it can change what you see: install themes from people you trust.') : '',
+        info.hasScene ? t('It has a live scene: a small program that draws behind the app. You can allow it next.') : '',
         info.replaces ? t('This replaces the version you have installed.') : '',
     ].filter(Boolean);
     if (!(await confirm(t('Install the theme "{name}"?', { name: info.name }), lines.join('\n\n'), t('Install')))) return { canceled: true };
     const id = await themepkg.install(file, { replace: info.replaces });
     logLine(`Installed the theme "${info.name}".`);
+    if (info.hasScene) {
+        allowScene(id, await confirm(t('Run this theme\'s live scene?'), t('It\'s a small program that draws behind the app. It runs sealed off: it can\'t reach your files, your chats, the app or the internet, but it can use your processor and battery. You can change this in Theme options.'), t('Run it')));
+    }
     broadcast('theme');
     await tryTheme(id);
     return { ok: true, id };
@@ -2626,7 +2640,7 @@ ipcMain.handle('set-ui-font', (_e, { font, zoom } = {}) => {
 });
 ipcMain.handle('list-themes', () => {
     const { theme, values, state } = activeOptions();
-    return { active: theme.id, safe: safeTheme, themes: themes.list(), optionValues: values, optionState: state, cssErrors: themeCss.errors };
+    return { active: theme.id, safe: safeTheme, themes: themes.list(), optionValues: values, optionState: state, cssErrors: themeCss.errors, sceneAllowed: sceneAllowed(theme) };
 });
 // Theme Studio and the tools for theme authors
 ipcMain.handle('studio-open', (_e, id) => studio.open(themes.get(id)?.id === id ? id : null));
@@ -2650,6 +2664,11 @@ ipcMain.handle('studio-save', async (_e, theme, id) => {
         await setTheme(saved);
         return { ok: true, id: saved };
     } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('theme-scene-allow', (_e, on) => {
+    const theme = themes.get(activeThemeId());
+    if (theme.hasScene) allowScene(theme.id, !!on);
+    broadcast('theme');
 });
 ipcMain.handle('theme-folder', (_e, id) => { if (themes.get(id).package) shell.openPath(themepkg.folderOf(id)); });
 ipcMain.handle('theme-check', (_e, id) => checkTheme(themes.get(id)));
@@ -2799,6 +2818,11 @@ if (gotLock) {
         themes.initThemes(USER_DATA);
         initThemeRoute(themes.packagesDir());
         guardFileRequests(session.defaultSession, __dirname, url => logLine(`Blocked a page from loading ${url}`));
+        // Electron says yes to every permission unless told otherwise. A scene gets none,
+        // like notifications it could fake a message with. Everything else stays as it was.
+        const inScene = (wc, details) => details?.isMainFrame === false && wc === launcherWin?.webContents;
+        session.defaultSession.setPermissionRequestHandler((wc, _permission, done, details) => done(!inScene(wc, details)));
+        session.defaultSession.setPermissionCheckHandler((wc, _permission, _origin, details) => !inScene(wc, details));
         safeTheme = process.argv.includes('--safe-theme') || shiftDown();
         if (safeTheme) logLine('Safe start: using the default theme for this run.');
         studio.close();
