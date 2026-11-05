@@ -1,0 +1,40 @@
+/* The launcher's CSS for this theme. Change something, save, and with
+   "Apply changes as I save" on, the app shows it at once. The guide is
+   docs/THEMES.md in the project. */
+
+/* 1. Settings: the easy way to change the whole app at once. */
+:root {
+  --radius: var(--opt-corners);          /* from the "Corners" option */
+  --border-w: 1px;
+  --divider: 1px solid var(--border);
+  --shadow-card: 0 6px 18px color-mix(in srgb, #000 35%, transparent);
+  --shadow-btn: none;
+  --btn-press: scale(.97);
+  --transition: all .12s ease;
+}
+
+/* 2. Parts: the sidebar, the header and so on have stable names. */
+[data-part="sidebar"] {
+  background: linear-gradient(180deg, var(--surface), var(--bg));
+}
+
+/* 3. Repeating things keep their class names: .btn, .card, .tag … */
+.btn.primary:hover:not(:disabled) {
+  box-shadow: 0 0 12px var(--opt-glow);  /* from the "Button glow" option */
+}
+
+/* 4. React to what the app is doing. */
+html[data-server="running"] [data-part="server-status"] {
+  border-color: var(--good);
+}
+html[data-time="night"] [data-part="brand"] {
+  filter: brightness(.85);
+}
+
+/* 5. Animate a layer. Stops by itself when animations are off. */
+[data-layer="badge"] {
+  animation: badge-float 4s ease-in-out infinite;
+}
+@keyframes badge-float {
+  50% { transform: translateY(-4px); }
+}

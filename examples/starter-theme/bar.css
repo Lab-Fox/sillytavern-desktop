@@ -1,0 +1,6 @@
+/* The top bar of the SillyTavern window. */
+:root {
+  --tab-radius: var(--opt-corners);
+  --btn-radius: var(--opt-corners);
+  --border-w: 1px;
+}

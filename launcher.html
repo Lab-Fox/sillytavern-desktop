@@ -391,6 +391,19 @@
   .color-field input[type=color] { width: 36px; height: 30px; border: var(--px) solid var(--border); background: var(--well); padding: 1px; cursor: pointer; }
   .color-field span { font-size: 14px; color: var(--muted); }
   .logo-pick { display: flex; align-items: center; gap: 12px; }
+  .studio { margin-top: 14px; padding-top: 12px; border-top: var(--divider); display: flex; flex-direction: column; gap: 8px; }
+  .studio-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-height: 32px; }
+  .studio-row > b { flex: 0 0 170px; font-weight: 600; color: var(--title); }
+  .studio-row select { width: auto; min-width: 170px; }
+  .studio-row input[type=range] { width: 170px; accent-color: var(--accent); cursor: pointer; }
+  .studio-row output { font-size: 14px; color: var(--muted); }
+  .st-layer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 8px 0; border-top: var(--divider); }
+  .st-layer .mono { flex: 1 1 100%; overflow-wrap: anywhere; }
+  .st-layer select { width: auto; }
+  .st-layer input[type=range] { width: 110px; accent-color: var(--accent); }
+  .st-layer label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+  #partBox { position: fixed; z-index: 95; pointer-events: none; outline: var(--px) solid var(--accent); background: var(--tint); }
+  #partTip { position: fixed; z-index: 96; pointer-events: none; background: var(--panel2); color: var(--title); border: var(--px) solid var(--accent); padding: 2px 8px; font: 13px var(--mono); white-space: nowrap; }
   .logo-pick img.logo { width: 48px; height: 48px; border: var(--px) solid var(--border); background: var(--well); }
 
   /* ---------- welcome / setup ---------- */
@@ -1111,6 +1124,20 @@
             </div>
             <div class="editor" id="themeColors"></div>
             <p class="muted small" style="margin-top:12px">Changes preview live. Other shades are mixed from these colors automatically.</p>
+            <div class="studio">
+              <div class="studio-row"><b>Look</b><div class="seg" id="stPreset"><button data-preset="pixel">Pixel</button><button data-preset="rounded">Rounded</button><button data-preset="pill">Pill</button><button data-preset="soft">Soft</button></div></div>
+              <div class="studio-row"><b>Corners</b><input type="range" id="stRadius" min="0" max="24" step="1"><output id="stRadiusOut"></output></div>
+              <div class="studio-row"><b>Pill buttons</b><input type="checkbox" class="tgl" id="stPill"></div>
+              <div class="studio-row"><b>Borders</b><input type="range" id="stBorder" min="0" max="4" step="1"><output id="stBorderOut"></output></div>
+              <div class="studio-row"><b>Shadows</b><select id="stShadow"></select></div>
+              <div class="studio-row"><b>Smooth icons and text</b><input type="checkbox" class="tgl" id="stSmooth"></div>
+              <div class="studio-row"><b>Font</b><select id="stFont"></select><button class="btn sm" id="btnStFont">Use a font file…</button></div>
+              <div class="studio-row"><b>Wallpaper</b><button class="btn sm" id="btnStWall">Choose…</button><button class="btn sm ghost" id="btnStWallOff" hidden>Remove</button><span class="muted small mono" id="stWallName"></span></div>
+              <div class="studio-row" id="stWallMore" hidden><b>Sharp pixels</b><input type="checkbox" class="tgl" id="stWallPixel"></div>
+              <div class="studio-row"><b>See-through panels</b><input type="range" id="stGlass" min="0" max="90" step="5"><output id="stGlassOut"></output></div>
+              <div class="studio-row"><b>Pictures</b><button class="btn sm" id="btnStAdd">Add a picture or video…</button></div>
+              <div id="stLayers"></div>
+            </div>
             <div class="row" style="margin-top:12px">
               <button class="btn primary" id="btnSaveTheme"><svg class="i"><use href="#i-check"/></svg>Save theme</button>
               <button class="btn ghost" id="btnCancelTheme">Cancel</button>
@@ -1120,6 +1147,14 @@
         </div>
         <h3 class="set-h" id="themeOptHead" hidden>Theme options<span class="act"><button class="btn sm ghost" id="btnThemeOptReset">Back to the defaults</button></span></h3>
         <div class="set-group" id="themeOptions" hidden></div>
+        <details class="set-more" data-k="theme creator author css">
+          <summary>For theme creators</summary>
+          <div class="set-group">
+            <div class="set-row"><div class="set-text"><b>Start a theme by hand</b><span class="set-desc">Makes a starter theme with comments and opens its folder.</span></div><div class="set-ctl"><button class="btn sm" id="btnThemeStarter">Make a starter theme</button><button class="btn sm ghost" data-link="themeGuide">Guide</button></div></div>
+            <label class="set-row"><div class="set-text"><b>Apply changes as I save</b><span class="set-desc">Watches the active theme's folder.</span></div><div class="set-ctl"><input type="checkbox" class="tgl" id="setThemeWatch"></div></label>
+            <div class="set-row"><div class="set-text"><b>Active theme</b><p class="err" id="themeCssErrors" style="white-space:pre-wrap" hidden></p><div id="themeCheckList" hidden></div></div><div class="set-ctl"><button class="btn sm" id="btnThemeCheck">Check it</button><button class="btn sm ghost" id="btnThemeFolder">Open its folder</button><button class="btn sm ghost" id="btnThemeParts">Show parts</button></div></div>
+          </div>
+        </details>
         <h3 class="set-h">Text</h3>
         <div class="set-group">
           <div class="set-row" data-k="language translation">
@@ -2409,6 +2444,7 @@
     $('setTabs').checked = current.tabs !== false;
     $('setSearchEngine').value = current.searchEngine || 'google';
     $('setThemeMotion').value = current.themeAnimations || 'on';
+    $('setThemeWatch').checked = !!current.themeWatch;
     $('setInspect').checked = !!current.inspectMenu;
     renderPortLock();
     loadSpellEngine();
@@ -3716,8 +3752,9 @@
     themeState = await D.listThemes();
     $('themeSafeNote').hidden = !themeState.safe;
     applyThemeOptions(themeState.optionState);
-    if (!editing) applyTheme(activeTheme());
-    $('themeCss').textContent = await D.themeCss();
+    if (!editing) { applyTheme(activeTheme()); $('themeCss').textContent = await D.themeCss(); }
+    $('themeCssErrors').textContent = themeState.cssErrors.join('\n');
+    $('themeCssErrors').hidden = !themeState.cssErrors.length;
     renderThemeList();
     renderThemeOptions();
   }
@@ -3727,7 +3764,7 @@
       const c = { ...FALLBACK, ...t.colors };
       const sw = [c.bg, c.panel, c.border, c.accent, c.text].map(x => `<i style="background:${x}"></i>`).join('');
       const acts = t.package
-        ? `<button class="btn sm ghost" data-export="${esc(t.id)}">${T('Export')}</button><button class="btn sm ghost danger" data-deltheme="${esc(t.id)}" title="${T('Delete')}">${icon('trash')}</button>`
+        ? `${t.studio ? `<button class="btn sm ghost" data-edit="${esc(t.id)}">${T('Edit')}</button>` : ''}<button class="btn sm ghost" data-export="${esc(t.id)}">${T('Export')}</button><button class="btn sm ghost danger" data-deltheme="${esc(t.id)}" title="${T('Delete')}">${icon('trash')}</button>`
         : t.builtin
         ? `<button class="btn sm ghost" data-copy="${esc(t.id)}">${T('Customize')}</button><button class="btn sm ghost" data-export="${esc(t.id)}">${T('Export')}</button>`
         : `<button class="btn sm ghost" data-edit="${esc(t.id)}">${T('Edit')}</button><button class="btn sm ghost" data-export="${esc(t.id)}">${T('Export')}</button><button class="btn sm ghost danger" data-deltheme="${esc(t.id)}" title="${T('Delete')}">${icon('trash')}</button>`;
@@ -3750,9 +3787,13 @@
 
   // ----- editor (live preview; Cancel restores the active theme) -----
   let editing = null; // { id, theme }
-  function openEditor(base, id) {
-    editing = { id, theme: { name: base.name, author: base.author || '', colors: { ...base.colors }, logo: base.logo } };
+  async function openEditor(base, id) {
+    await D.studioOpen(id);
+    // Copying a theme with a look of its own starts from plain colors: its files stay with it.
+    editing = { id, theme: { name: base.name, author: base.author || '', colors: { ...base.colors }, logo: base.logo, studio: id ? { ...(base.studio || {}) } : {} } };
+    if (id && base.studio) editing.theme.studio = JSON.parse(JSON.stringify(base.studio));
     $('themeEditor').hidden = false;
+    renderStudio();
     $('themeName').value = editing.theme.name;
     $('themeError').textContent = '';
     $('themeColors').innerHTML = EDIT_KEYS.map(([k, label]) =>
@@ -3760,22 +3801,177 @@
     $('themeColors').querySelectorAll('[data-color]').forEach(inp => inp.oninput = () => {
       editing.theme.colors[inp.dataset.color] = inp.value;
       if (inp.dataset.color === 'accent') delete editing.theme.colors.onAccent; // recomputed for contrast
-      applyTheme(editing.theme);
+      studioChanged();
     });
     previewEditorLogo();
-    applyTheme(editing.theme);
+    studioChanged();
     $('themeEditor').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   async function previewEditorLogo() {
     const src = await logoSrc(editing.theme.logo);
     $('themeLogoPreview').src = src;
-    applyTheme(editing.theme);
+    studioChanged();
   }
-  function closeEditor() {
+  async function closeEditor() {
     editing = null;
     $('themeEditor').hidden = true;
+    D.studioClose();
     applyTheme(activeTheme());
+    $('themeCss').textContent = await D.themeCss();
   }
+
+  // ----- Theme Studio -----
+  const ST_PRESETS = {
+    pixel: { radius: 0, pill: false, border: 2, shadow: 'hard', smooth: false },
+    rounded: { radius: 8, pill: false, border: 1, shadow: 'soft', smooth: true },
+    pill: { radius: 12, pill: true, border: 1, shadow: 'soft', smooth: true },
+    soft: { radius: 14, pill: false, border: 0, shadow: 'soft', smooth: true },
+  };
+  $('stShadow').innerHTML = [['hard', T('Hard (pixel)')], ['soft', T('Soft')], ['none', T('None')]].map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+  $('stFont').innerHTML = [['', T('App font')], ['dotgothic', 'DotGothic16'], ['pixelify', 'Pixelify Sans'], ['vt323', 'VT323'], ['segoe', 'Segoe UI']].map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+  const ST_SLOTS = () => [['window', T('Whole window')], ['sidebar', T('Sidebar')], ['header', T('Top of the page')], ['page', T('Page')], ['console', T('Console')], ['hero', T('Home card')]];
+  const ST_ANCHORS = () => [['top-left', T('Top left')], ['top', T('Top')], ['top-right', T('Top right')], ['left', T('Left')], ['center', T('Center')], ['right', T('Right')], ['bottom-left', T('Bottom left')], ['bottom', T('Bottom')], ['bottom-right', T('Bottom right')]];
+  let studioTimer = null;
+  function studioChanged() {
+    clearTimeout(studioTimer);
+    studioTimer = setTimeout(async () => {
+      if (!editing) return;
+      const r = await D.studioPreview(editing.theme);
+      if (!editing) return;
+      $('themeError').textContent = r.error || '';
+      if (r.error) return;
+      $('themeCss').textContent = r.css;
+      applyTheme({ ...editing.theme, layers: r.layers });
+    }, 80);
+  }
+  const studio = () => editing.theme.studio;
+  function renderStudio() {
+    const s = studio();
+    $('stRadius').value = s.radius ?? 0;
+    $('stRadiusOut').textContent = `${s.radius ?? 0} px`;
+    $('stPill').checked = !!s.pill;
+    $('stBorder').value = s.border ?? 2;
+    $('stBorderOut').textContent = `${s.border ?? 2} px`;
+    $('stShadow').value = s.shadow || 'hard';
+    $('stSmooth').checked = !!s.smooth;
+    $('stFont').value = s.font || '';
+    $('stFont').disabled = !!s.fontFile;
+    $('btnStFont').textContent = s.fontFile ? T('Remove the font file') : T('Use a font file…');
+    $('stWallName').textContent = s.wallpaper ? s.wallpaper.replace('assets/', '') : '';
+    $('btnStWallOff').hidden = $('stWallMore').hidden = !s.wallpaper;
+    $('stWallPixel').checked = !!s.wallpaperPixelated;
+    $('stGlass').value = s.glass ?? 0;
+    $('stGlassOut').textContent = `${s.glass ?? 0} %`;
+    const opts = (list, v) => list.map(([k, l]) => `<option value="${k}"${k === v ? ' selected' : ''}>${esc(l)}</option>`).join('');
+    $('stLayers').innerHTML = (s.layers || []).map((l, i) => `<div class="st-layer" data-i="${i}">
+      <span class="muted small mono">${esc(l.src.replace('assets/', ''))}</span>
+      <select data-k="slot">${opts(ST_SLOTS(), l.slot)}</select><select data-k="anchor">${opts(ST_ANCHORS(), l.anchor)}</select>
+      <label>${esc(T('Size'))} <input type="range" data-k="width" min="5" max="100" step="1" value="${parseFloat(l.width) || 30}"></label>
+      <label>${esc(T('Fade'))} <input type="range" data-k="opacity" min="10" max="100" step="5" value="${Math.round((l.opacity ?? 1) * 100)}"></label>
+      <label><input type="checkbox" class="tgl" data-k="z"${l.z === 'above' ? ' checked' : ''}> ${esc(T('In front'))}</label>
+      <button class="btn sm ghost danger" data-remove title="${esc(T('Remove'))}">${icon('trash')}</button>
+    </div>`).join('');
+    $('stLayers').querySelectorAll('.st-layer').forEach(row => {
+      const l = s.layers[Number(row.dataset.i)];
+      row.querySelector('[data-remove]').onclick = () => { s.layers.splice(Number(row.dataset.i), 1); renderStudio(); studioChanged(); };
+      row.querySelectorAll('[data-k]').forEach(el => el.oninput = () => {
+        const k = el.dataset.k;
+        if (k === 'width') l.width = `${el.value}%`;
+        else if (k === 'opacity') l.opacity = Number(el.value) / 100;
+        else if (k === 'z') l.z = el.checked ? 'above' : 'behind';
+        else l[k] = el.value;
+        studioChanged();
+      });
+    });
+    studioPresetMark();
+  }
+  function studioPresetMark() {
+    const s = studio();
+    document.querySelectorAll('#stPreset button').forEach(b => {
+      const p = ST_PRESETS[b.dataset.preset];
+      b.classList.toggle('on', Object.entries(p).every(([k, v]) => (s[k] ?? ST_PRESETS.pixel[k]) === v));
+    });
+  }
+  document.querySelectorAll('#stPreset button').forEach(b => b.onclick = () => { Object.assign(studio(), ST_PRESETS[b.dataset.preset]); renderStudio(); studioChanged(); });
+  for (const [id, key, read] of [['stRadius', 'radius', e => Number(e.value)], ['stBorder', 'border', e => Number(e.value)], ['stGlass', 'glass', e => Number(e.value)], ['stPill', 'pill', e => e.checked],
+    ['stSmooth', 'smooth', e => e.checked], ['stWallPixel', 'wallpaperPixelated', e => e.checked], ['stShadow', 'shadow', e => e.value], ['stFont', 'font', e => e.value]]) {
+    $(id).oninput = () => { studio()[key] = read($(id)); renderStudio(); studioChanged(); };
+  }
+  async function studioPick(kind, use) {
+    const r = await D.studioPick(kind);
+    if (r.canceled) return;
+    $('themeError').textContent = r.error || '';
+    if (r.error) return;
+    use(r);
+    renderStudio();
+    studioChanged();
+  }
+  $('btnStWall').onclick = () => studioPick('picture', r => { studio().wallpaper = r.rel; });
+  $('btnStWallOff').onclick = () => { studio().wallpaper = ''; renderStudio(); studioChanged(); };
+  $('btnStFont').onclick = () => {
+    if (studio().fontFile) { studio().fontFile = ''; renderStudio(); studioChanged(); return; }
+    studioPick('font', r => { studio().fontFile = r.rel; });
+  };
+  $('btnStAdd').onclick = () => studioPick('picture', r => {
+    const list = studio().layers = studio().layers || [];
+    let n = list.length + 1;
+    while (list.some(l => l.id === `picture-${n}`)) n++;
+    list.push({ id: `picture-${n}`, src: r.rel, slot: 'page', anchor: 'bottom-right', width: '30%', z: 'behind', opacity: 1, fit: 'contain' });
+  });
+
+  // ----- tools for theme authors -----
+  $('btnThemeFolder').onclick = () => D.themeFolder(activeTheme().id);
+  $('btnThemeStarter').onclick = () => D.themeStarter();
+  $('setThemeWatch').onchange = () => D.themeWatch($('setThemeWatch').checked);
+  $('btnThemeCheck').onclick = async () => {
+    const list = await D.themeCheck(activeTheme().id);
+    const box = $('themeCheckList');
+    box.replaceChildren(...list.map(r => {
+      const line = document.createElement('p');
+      line.className = `small ${r.level === 'bad' ? 'err' : r.level === 'warn' ? 'set-warn' : 'muted'}`;
+      line.textContent = r.text;
+      return line;
+    }));
+    box.hidden = false;
+  };
+  // Show parts: point at something to see the name a theme can use for it.
+  let inspector = null;
+  function stopInspector() {
+    if (!inspector) return;
+    for (const [e, f] of inspector.on) document.removeEventListener(e, f, true);
+    inspector.box.remove();
+    inspector.tip.remove();
+    inspector = null;
+  }
+  $('btnThemeParts').onclick = async () => {
+    if (inspector) return stopInspector();
+    const c = await D.themeContract();
+    const nameOf = el => {
+      for (let e = el; e && e !== document.documentElement; e = e.parentElement) {
+        if (e.dataset?.part) return { e, name: `[data-part="${e.dataset.part}"]` };
+        const cl = [...e.classList].find(x => c.classes.includes(x));
+        if (cl) return { e, name: `.${cl}` };
+      }
+      return null;
+    };
+    const box = document.body.appendChild(Object.assign(document.createElement('div'), { id: 'partBox' }));
+    const tip = document.body.appendChild(Object.assign(document.createElement('div'), { id: 'partTip' }));
+    tip.textContent = T('Point at something. Esc to stop.');
+    let found = null;
+    const move = ev => {
+      found = nameOf(document.elementFromPoint(ev.clientX, ev.clientY));
+      box.hidden = tip.hidden = !found;
+      if (!found) return;
+      const r = found.e.getBoundingClientRect();
+      Object.assign(box.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+      tip.textContent = `${found.name} · ${T('click to copy')}`;
+      Object.assign(tip.style, { left: `${Math.min(ev.clientX + 12, innerWidth - tip.offsetWidth - 8)}px`, top: `${Math.min(ev.clientY + 16, innerHeight - 32)}px` });
+    };
+    const click = ev => { ev.preventDefault(); ev.stopPropagation(); if (found) D.themeCopy(found.name); stopInspector(); };
+    const key = ev => { if (ev.key === 'Escape') { ev.preventDefault(); stopInspector(); } };
+    inspector = { box, tip, on: [['mousemove', move], ['click', click], ['keydown', key]] };
+    for (const [e, f] of inspector.on) document.addEventListener(e, f, true);
+  };
   $('btnNewTheme').onclick = () => openEditor({ ...activeTheme(), name: T('My theme'), author: '' }, null);
   $('btnCancelTheme').onclick = closeEditor;
   $('btnThemeLogo').onclick = () => $('themeLogoFile').click();
@@ -3803,7 +3999,9 @@
   };
   $('btnSaveTheme').onclick = async () => {
     editing.theme.name = $('themeName').value.trim();
-    const r = await D.saveTheme(editing.theme, editing.id);
+    $('btnSaveTheme').disabled = true;
+    const r = await D.studioSave(editing.theme, editing.id);
+    $('btnSaveTheme').disabled = false;
     if (r.error) { $('themeError').textContent = r.error; return; }
     editing = null;
     $('themeEditor').hidden = true;

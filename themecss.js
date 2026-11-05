@@ -81,6 +81,22 @@ function audit(css, packageId, L) {
     return problems;
 }
 
+// For "Check this theme": what a stylesheet leans on.
+export async function usedNames(source) {
+    const L = await load();
+    const classes = new Set(), vars = new Set();
+    let setsFont = false;
+    L.walk(L.parse(source, { parseCustomProperty: true, onParseError: () => { /* reported by checkCss */ } }), node => {
+        if (node.type === 'ClassSelector') classes.add(node.name);
+        else if (node.type === 'Function' && node.name === 'var' && node.children.first?.type === 'Identifier') vars.add(node.children.first.name.replace(/^--/, ''));
+        else if (node.type === 'Declaration') {
+            if (node.property.startsWith('--')) vars.add(node.property.slice(2));
+            if (['--body-font', '--heading-font', 'font-family'].includes(node.property)) setsFont = true;
+        }
+    });
+    return { classes: [...classes], vars: [...vars], setsFont };
+}
+
 // → { css, errors: [{ line, column, message }] }. css is '' when there are errors.
 export async function checkCss(source, packageId) {
     const text = String(source ?? '');

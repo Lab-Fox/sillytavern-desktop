@@ -44,6 +44,8 @@
       "themeroute.js",
       "themecss.js",
       "themepackage.js",
+      "themestudio.js",
+      "themecheck.js",
       "instances.js",
       "extensions.js",
       "appupdate.js",

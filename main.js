@@ -13,6 +13,8 @@ import * as mx from './maintenance.js';
 import * as setup from './setup.js';
 import * as themes from './themes.js';
 import * as themepkg from './themepackage.js';
+import * as studio from './themestudio.js';
+import { check as checkTheme } from './themecheck.js';
 import { StWindow, windowOf } from './shell.js';
 import { MODES as LAYERS, shiftDown } from './winlayer.js';
 import { initThemeRoute, guardFileRequests } from './themeroute.js';
@@ -108,6 +110,7 @@ const DEFAULT_SETTINGS = {
     themesKept: [],             // themes with CSS the user said yes to, as "<id>:<hash of the CSS>"
     themeAnimations: 'on',      // a theme's moving parts: on, focused (only while the launcher has focus), off
     themeOptions: {},           // the user's choices per theme: { "<id>": { "<option>": value } }
+    themeWatch: false,          // for theme authors: apply the active theme's files as they change
     language: '',               // the app's language (i18n.js); '' = Windows' language
     syncStLanguage: true,       // a language change also sets SillyTavern's own language (where it has it)
     stLanguage: null,           // { code, done: [partitions] } after a change: each session gets it once
@@ -1197,6 +1200,7 @@ const LINKS = {
     // The release on offer (a preview isn't on GitHub's "latest" page), else the latest.
     desktopReleases: () => appUpdate.releasePage(),
     extensionDocs: 'https://github.com/Lab-Fox/sillytavern-desktop/blob/main/EXTENSIONS.md',
+    themeGuide: 'https://github.com/Lab-Fox/sillytavern-desktop/blob/main/docs/THEMES.md',
     addonRepo: 'https://github.com/Lab-Fox/sillytavern-desktop-extensions',
     translate: 'https://github.com/Lab-Fox/sillytavern-desktop/blob/main/locales/README.md',
     issues: 'https://github.com/Lab-Fox/sillytavern-desktop/issues',
@@ -2522,11 +2526,33 @@ function setTheme(id) {
     settings.theme = themes.get(id).id;
     saveSettings(settings);
     stWins.forEach(w => w.setColors(themes.get(settings.theme).colors));
+    watchActiveTheme();
     return refreshThemeCss().then(() => broadcast('theme'));
+}
+// For theme authors: every save in the theme's folder shows at once.
+let themeWatcher = null;
+let themeWatchTimer = null;
+function stopWatchingTheme() {
+    clearTimeout(themeWatchTimer);
+    themeWatcher?.close();
+    themeWatcher = null;
+}
+function watchActiveTheme() {
+    stopWatchingTheme();
+    const id = activeThemeId();
+    if (!settings.themeWatch || !id.startsWith(themepkg.PREFIX)) return;
+    try {
+        themeWatcher = fs.watch(themepkg.folderOf(id), { recursive: true }, () => {
+            clearTimeout(themeWatchTimer);
+            themeWatchTimer = setTimeout(() => refreshThemeCss().then(() => broadcast('theme')), 250);
+        });
+        // The folder itself going away, when the theme is deleted or saved over.
+        themeWatcher.on('error', stopWatchingTheme);
+    } catch (e) { logLine(`Can't watch the theme's folder: ${e.message}`); }
 }
 // The active theme's checked CSS. A theme whose CSS no longer passes keeps its
 // colors and loses the CSS.
-const themeCss = { launcher: '', bar: '' };
+const themeCss = { launcher: '', bar: '', errors: [] };
 let cssRound = 0;
 async function refreshThemeCss() {
     const round = ++cssRound;
@@ -2536,6 +2562,7 @@ async function refreshThemeCss() {
     for (const e of [...launcher.errors, ...bar.errors]) logLine(`Theme CSS left out: ${e}`);
     themeCss.launcher = launcher.css;
     themeCss.bar = bar.css;
+    themeCss.errors = [...launcher.errors, ...bar.errors];
     stWins.forEach(w => w.push());
 }
 function activeOptions() {
@@ -2599,7 +2626,46 @@ ipcMain.handle('set-ui-font', (_e, { font, zoom } = {}) => {
 });
 ipcMain.handle('list-themes', () => {
     const { theme, values, state } = activeOptions();
-    return { active: theme.id, safe: safeTheme, themes: themes.list(), optionValues: values, optionState: state };
+    return { active: theme.id, safe: safeTheme, themes: themes.list(), optionValues: values, optionState: state, cssErrors: themeCss.errors };
+});
+// Theme Studio and the tools for theme authors
+ipcMain.handle('studio-open', (_e, id) => studio.open(themes.get(id)?.id === id ? id : null));
+ipcMain.handle('studio-close', () => studio.close());
+ipcMain.handle('studio-preview', async (_e, theme) => {
+    try { return await studio.preview(theme); } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('studio-pick', async (_e, kind) => {
+    const filters = { picture: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'apng', 'svg', 'webm', 'mp4'], font: ['woff2', 'woff', 'ttf', 'otf'] };
+    const r = await dialog.showOpenDialog(launcherWin, { title: t('Choose a file for the theme'), filters: [{ name: t('Theme files'), extensions: filters[kind] || filters.picture }], properties: ['openFile'] });
+    if (r.canceled) return { canceled: true };
+    try { return studio.addFile(r.filePaths[0]); } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('studio-save', async (_e, theme, id) => {
+    try {
+        stopWatchingTheme();
+        const saved = await studio.save(theme, id);
+        if (id?.startsWith('custom:')) themes.remove(id);
+        // Made here, by this user: no need to ask if they want to keep it.
+        settings.themesKept = [...settings.themesKept.filter(k => !k.startsWith(`${saved}:`)), themepkg.fingerprint(saved)].slice(-50);
+        await setTheme(saved);
+        return { ok: true, id: saved };
+    } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('theme-folder', (_e, id) => { if (themes.get(id).package) shell.openPath(themepkg.folderOf(id)); });
+ipcMain.handle('theme-check', (_e, id) => checkTheme(themes.get(id)));
+ipcMain.handle('theme-contract', () => ({ tokens: themes.TOKENS, parts: themes.PARTS, classes: themes.CLASSES, states: themes.STATES }));
+ipcMain.handle('theme-copy', (_e, text) => clipboard.writeText(String(text).slice(0, 500)));
+ipcMain.handle('theme-watch', (_e, on) => {
+    settings.themeWatch = !!on;
+    saveSettings(settings);
+    watchActiveTheme();
+});
+ipcMain.handle('theme-starter', async () => {
+    const id = themepkg.addStarter(path.join(__dirname, 'examples', 'starter-theme'));
+    settings.themesKept = [...settings.themesKept, themepkg.fingerprint(id)].slice(-50);
+    await setTheme(id);
+    shell.openPath(themepkg.folderOf(id));
+    return { id };
 });
 // values = null: back to the theme's defaults.
 ipcMain.handle('theme-options-set', (_e, values, id) => {
@@ -2618,17 +2684,12 @@ ipcMain.handle('theme-css', () => themeCss.launcher);
 ipcMain.handle('theme-install', async (_e, file) => {
     try { return await installTheme(file); } catch (e) { logLine(`Theme not installed: ${e.message}`); return { error: e.message }; }
 });
-ipcMain.handle('save-theme', (_e, raw, id) => {
-    try {
-        const newId = themes.save(raw, id);
-        setTheme(newId);
-        return { ok: true, id: newId };
-    } catch (e) { return { error: e.message }; }
-});
 ipcMain.handle('delete-theme', async (_e, id) => {
     const theme = themes.get(id);
     if (theme.builtin || !(await confirm(t('Delete the theme "{name}"?', { name: theme.name }), t('This removes it from this app. Export it first if you want to keep a copy.'), t('Delete')))) return false;
+    stopWatchingTheme();
     themes.remove(id);
+    watchActiveTheme();
     const { [id]: _gone, ...otherOptions } = settings.themeOptions;
     settings.themeOptions = otherOptions;
     if (settings.theme === id) setTheme('sillytavern');
@@ -2740,6 +2801,9 @@ if (gotLock) {
         guardFileRequests(session.defaultSession, __dirname, url => logLine(`Blocked a page from loading ${url}`));
         safeTheme = process.argv.includes('--safe-theme') || shiftDown();
         if (safeTheme) logLine('Safe start: using the default theme for this run.');
+        studio.close();
+        themepkg.cleanLeftovers();
+        watchActiveTheme();
         refreshThemeCss().then(() => { if (themeCss.launcher) broadcast('theme'); });
         appUpdate.initAppUpdate({ userData: USER_DATA, logLine, preview: () => settings.appPreview, send: s => { if (launcherWin && !launcherWin.isDestroyed()) launcherWin.webContents.send('app-update', s); } });
         bs.initBackupSchedule({

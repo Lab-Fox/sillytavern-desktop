@@ -355,69 +355,13 @@ The translations were made with the help of AI and are waiting for native speake
 
 **If a theme makes the app hard to use:** press **Ctrl+Alt+Shift+T** in the launcher to go back to the default theme, or hold **Shift** while the app starts to use the default theme for that run only.
 
-The launcher has a soft retro pixel look in **Departure Mono**, a pixel font where B and 8, I, l and 1, and O and 0 are easy to tell apart. **Settings → Appearance → App font** switches to DotGothic16, Pixelify Sans (the font before 1.6), VT323, Segoe UI or any font on your PC, and **Size** makes the launcher 80 to 150 % as large. The font also applies to the SillyTavern window's top bar; SillyTavern's own pages keep the font chosen in SillyTavern. Pick a theme, **SillyTavern** (default) or **Fox**, in **Settings → Appearance**, or click **New theme**: choose seven colors and a logo, and every logo turns into pixel art. **Export** and **Import theme…** share themes as small `.json` files.
+The launcher has a soft retro pixel look in **Departure Mono**, a pixel font where B and 8, I, l and 1, and O and 0 are easy to tell apart. **Settings → Appearance → App font** switches to DotGothic16, Pixelify Sans (the font before 1.6), VT323, Segoe UI or any font on your PC, and **Size** makes the launcher 80 to 150 % as large. The font also applies to the SillyTavern window's top bar; SillyTavern's own pages keep the font chosen in SillyTavern. Pick a theme, **SillyTavern** (default) or **Fox**, in **Settings → Appearance**, or click **New theme** to open Theme Studio: colors, a logo, the shape of buttons and cards, fonts, a wallpaper and pictures placed where you want them, with a live preview and no code. **Export** makes a `.sttheme` file anyone can install.
 
-Bigger themes come as `.sttheme` files, which can also change shapes, add pictures and use fonts with their own CSS. Install one with **Import theme…**, by dropping it on the launcher, or with **Open with**. The app shows what it is first, checks its CSS every time it loads, and after you apply one for the first time asks **Keep this theme?**: if you do nothing, it goes back after 15 seconds. A theme's CSS can't reach your files or the internet, and it never runs scripts, but it can change what you see, so install themes from people you trust.
+Install a theme with **Import theme…**, by dropping it on the launcher, or with **Open with**. The app shows what it is first, checks its CSS every time it loads, and after you apply one for the first time asks **Keep this theme?**: if you do nothing, it goes back after 15 seconds. A theme's CSS can't reach your files or the internet, and it never runs scripts, but it can change what you see, so install themes from people you trust.
 
-<details>
-<summary>Theme file format</summary>
+A theme can offer its own choices under **Theme options**. **Settings → Appearance → Theme animations** is **On**, **Only while this window is in use**, or **Off**; moving parts always stop while the window is hidden or the screen is off, and when Windows has animation effects turned off.
 
-```json
-{
-  "format": 1,
-  "name": "Midnight",
-  "author": "you",
-  "colors": {
-    "bg": "#14161f", "panel": "#1c1f2b", "border": "#30364a", "accent": "#7aa2f7",
-    "text": "#c8cde0", "title": "#eef0f8", "muted": "#8a90a8"
-  },
-  "logo": "st"
-}
-```
-
-The seven `colors` are required; `onAccent`, `good`, `warn` and `bad` are optional. `logo` is `"st"`, `"fox"`, or a `data:image/…;base64,…` image (PNG, JPEG, GIF or WebP, up to 512 KB).
-
-A `.sttheme` file is a zip with this same `theme.json` (plus `"apiVersion": 1`, and `logo` may be a path like `assets/logo.png`), and optionally `theme.css` for the launcher, `bar.css` for the SillyTavern window's top bar, and pictures, video and fonts. Paths in `url()` stay inside the theme. Scripts and HTML aren't allowed.
-
-`"wallpaper": "assets/bg.webm"` fills the window behind everything. `"layers"` places more pictures and video (PNG, JPEG, GIF, WebP, APNG, SVG, WebM, MP4; no sound; up to 24 layers and 4 videos):
-
-```json
-{
-  "id": "sleepy", "src": "assets/fox.gif", "slot": "sidebar", "anchor": "bottom-right",
-  "width": "40%", "minWidth": "48px", "maxWidth": "120px", "x": "5%", "y": "2%",
-  "z": "behind", "hideBelow": 900, "when": { "server": "stopped", "page": ["home", "profiles"] }
-}
-```
-
-| Key | Values |
-|---|---|
-| `slot` | The part of the window it lives in: `window`, `sidebar`, `header`, `page`, `console`, `hero` |
-| `anchor` | `top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, `bottom-right` |
-| `width`, `height`, `minWidth`, `maxWidth`, `x`, `y` | Percent of the slot or pixels, so it follows the window when it's resized |
-| `fit` | `contain`, `cover`, `fill`, `none` |
-| `z` | `behind` the content, or `above` it (clicks always pass through) |
-| `opacity`, `pixelated`, `hideBelow` | 0 to 1; `true` for sharp pixel art; hide when the window is narrower than this |
-| `when` | Show only for these `page`, `server`, `busy`, `update` or `time` values |
-
-`"options"` adds choices to **Settings → Appearance → Theme options**, so people can adjust your theme without editing it:
-
-```json
-[
-  { "id": "glow", "type": "toggle", "label": "Glowing buttons", "default": true },
-  { "id": "season", "type": "select", "label": "Season", "default": "winter",
-    "choices": [{ "value": "spring", "label": "Spring" }, { "value": "winter", "label": "Winter" }] },
-  { "id": "round", "type": "slider", "label": "Corners", "min": 0, "max": 24, "step": 2, "unit": "px", "default": 8 },
-  { "id": "tint", "type": "color", "label": "Tint", "default": "#3388ff" }
-]
-```
-
-Toggles and lists reach your CSS as `html[data-opt-glow="on"]` (`on` or `off`) and `html[data-opt-season="winter"]`; sliders and colors as `var(--opt-round)` and `var(--opt-tint)`. Layers can use them too: `"when": { "opt-season": "winter" }`. Up to 30 options; each theme remembers its own values.
-
-Your CSS can reach a layer as `[data-layer="sleepy"]`, for example to animate it. In your CSS, `html[data-motion="off"]` means animations are switched off.
-
-**Settings → Appearance → Theme animations** is **On**, **Only while this window is in use**, or **Off**. Moving parts always stop while the window is hidden or the screen is off, and when Windows has animation effects turned off.
-
-</details>
+Want to go further, with your own CSS, animation and options? See [Making themes](THEMES.md).
 
 ### Settings
 

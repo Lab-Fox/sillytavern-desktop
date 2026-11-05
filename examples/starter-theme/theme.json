@@ -1,0 +1,38 @@
+{
+  "format": 2,
+  "apiVersion": 1,
+  "name": "My Theme",
+  "author": "",
+  "version": "1.0",
+  "description": "Made from the starter theme.",
+  "colors": {
+    "bg": "#16181f",
+    "panel": "#20242e",
+    "border": "#3a4152",
+    "accent": "#6fb7ff",
+    "text": "#d8dde8",
+    "title": "#f2f4f8",
+    "muted": "#a0a8b8"
+  },
+  "logo": "st",
+  "layers": [
+    {
+      "id": "badge",
+      "src": "assets/badge.svg",
+      "slot": "sidebar",
+      "anchor": "bottom-right",
+      "width": "22%",
+      "maxWidth": "64px",
+      "x": "6%",
+      "y": "12%",
+      "opacity": 0.5,
+      "hideBelow": 900,
+      "when": { "opt-badge": "on" }
+    }
+  ],
+  "options": [
+    { "id": "badge", "type": "toggle", "label": "Show the badge", "default": true },
+    { "id": "corners", "type": "slider", "label": "Corners", "min": 0, "max": 20, "step": 2, "unit": "px", "default": 6 },
+    { "id": "glow", "type": "color", "label": "Button glow", "default": "#6fb7ff" }
+  ]
+}

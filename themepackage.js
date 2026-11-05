@@ -14,6 +14,7 @@ import { checkCss } from './themecss.js';
 
 export const EXTENSION = '.sttheme';
 export const PREFIX = 'pkg:';
+export const DRAFT = 'studio-draft';   // Theme Studio's working folder (themestudio.js)
 const MAX_FILE = 50 * 1024 * 1024;
 const MAX_UNPACKED = 150 * 1024 * 1024;
 const MAX_ENTRIES = 2000;
@@ -22,7 +23,12 @@ const MAX_LOGO = 512 * 1024;
 const TEXT_FILES = new Set(['theme.json', 'theme.css', 'bar.css', 'readme.md', 'readme.txt', 'license', 'license.txt', 'license.md']);
 
 const slug = name => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'theme';
-const dirOf = id => path.join(packagesDir(), id.startsWith(PREFIX) ? id.slice(PREFIX.length) : id);
+// Ids also come from the page: only a plain folder name gets through.
+function dirOf(id) {
+    const name = id.startsWith(PREFIX) ? id.slice(PREFIX.length) : id;
+    if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(name)) throw new Error(t('This file is not a theme.'));
+    return path.join(packagesDir(), name);
+}
 
 // The first bytes of each kind of file, so a renamed file isn't taken for a picture.
 const SIGNS = {
@@ -99,6 +105,7 @@ function manifestOf(raw) {
         logoFile: typeof raw.logo === 'string' && !['st', 'fox'].includes(raw.logo) ? raw.logo : '',
         layers: layersOf(raw),
         options: optionsOf(raw),
+        studio: raw.studio ? cleanStudio(raw.studio) : null,
     };
 }
 
@@ -241,8 +248,29 @@ export function optionState(options = [], stored = {}) {
     return state;
 }
 
+// What Theme Studio stores, so a theme it made can be edited again.
+const clamp = (v, min, max, fallback) => (Number.isFinite(Number(v)) ? Math.min(max, Math.max(min, Number(v))) : fallback);
+export function cleanStudio(raw = {}) {
+    const rel = v => (typeof v === 'string' && safeRel(v) ? v : '');
+    return {
+        radius: clamp(raw.radius, 0, 24, 0), pill: raw.pill === true, border: clamp(raw.border, 0, 4, 2),
+        shadow: ['hard', 'soft', 'none'].includes(raw.shadow) ? raw.shadow : 'hard', smooth: raw.smooth === true,
+        font: ['', 'dotgothic', 'pixelify', 'vt323', 'segoe'].includes(raw.font) ? raw.font : '', fontFile: rel(raw.fontFile),
+        glass: clamp(raw.glass, 0, 90, 0), wallpaper: rel(raw.wallpaper), wallpaperPixelated: raw.wallpaperPixelated === true,
+        layers: Array.isArray(raw.layers) ? raw.layers : [],
+    };
+}
+
 const sameName = rel => rel.toLowerCase();
 const cssError = (file, e) => `${file}, line ${e.line}: ${e.message}`;
+
+export function validateManifest(raw) { return manifestOf(raw); }
+export const fileUrl = (id, rel) => `st-theme://${id}/${rel.split('/').map(encodeURIComponent).join('/')}`;
+export const layersFor = (raw, id) => manifestOf(raw).layers.map(l => ({ ...l, url: fileUrl(id, l.src) }));
+export function checkSign(ext, head, name) {
+    const sign = SIGNS[ext];
+    if (sign && (head.length < 12 || !sign(head))) throw new Error(t('This file in the theme isn\'t what its name says: {name}', { name: String(name).slice(0, 80) }));
+}
 
 // Reads and checks a file without installing it. → { manifest, id, replaces, files, bytes, hasCss, entries, zip, root }
 async function open(file) {
@@ -268,10 +296,8 @@ async function open(file) {
             files.set(rel, entry);
         }
         for (const [rel, entry] of files) {
-            const sign = SIGNS[path.extname(rel).toLowerCase()];
-            if (!sign) continue;
-            const head = await headOf(zip, entry);
-            if (head.length < 12 || !sign(head)) throw new Error(t('This file in the theme isn\'t what its name says: {name}', { name: rel.slice(0, 80) }));
+            const ext = path.extname(rel).toLowerCase();
+            if (SIGNS[ext]) checkSign(ext, await headOf(zip, entry), rel);
         }
         let raw;
         const text = (await readEntry(zip, files.get('theme.json'), MAX_MANIFEST)).toString('utf8');
@@ -310,6 +336,49 @@ function freeId(id) {
     return free;
 }
 
+// The old version goes only once the new one is in place.
+function swapIn(temp, id) {
+    const old = fs.existsSync(dirOf(id)) ? path.join(packagesDir(), `.old-${crypto.randomBytes(6).toString('hex')}`) : null;
+    if (old) fs.renameSync(dirOf(id), old);
+    try {
+        fs.renameSync(temp, dirOf(id));
+    } catch (e) {
+        if (old) fs.renameSync(old, dirOf(id));
+        throw e;
+    }
+    if (old) fs.rmSync(old, { recursive: true, force: true });
+}
+// Theme Studio's draft becomes a theme: over `id` when it edited a package.
+export function adoptDraft(name, id) {
+    const target = id?.startsWith(PREFIX) ? id.slice(PREFIX.length) : freeId(slug(name));
+    swapIn(dirOf(DRAFT), target);
+    return PREFIX + target;
+}
+export function copyInto(id, target) {
+    const dir = dirOf(id);
+    const copy = sub => {
+        for (const e of fs.readdirSync(path.join(dir, sub), { withFileTypes: true })) {
+            const rel = path.join(sub, e.name);
+            if (e.isDirectory()) { fs.mkdirSync(path.join(target, rel), { recursive: true }); copy(rel); } else if (e.isFile()) fs.copyFileSync(path.join(dir, rel), path.join(target, rel));
+        }
+    };
+    copy('');
+}
+export const folderOf = id => dirOf(id);
+// The starter theme, as a package to play with. → its id.
+export function addStarter(srcDir) {
+    const id = freeId('my-theme');
+    const walk = sub => {
+        fs.mkdirSync(path.join(dirOf(id), sub), { recursive: true });
+        for (const e of fs.readdirSync(path.join(srcDir, sub), { withFileTypes: true })) {
+            const rel = path.join(sub, e.name);
+            if (e.isDirectory()) walk(rel); else fs.writeFileSync(path.join(dirOf(id), rel), fs.readFileSync(path.join(srcDir, rel)));
+        }
+    };
+    walk('');
+    return PREFIX + id;
+}
+
 // → the theme's id. `replace` overwrites the installed theme of the same name.
 export async function install(file, { replace = false } = {}) {
     const p = await open(file);
@@ -323,16 +392,7 @@ export async function install(file, { replace = false } = {}) {
             fs.writeFileSync(target, data);
         }
         p.zip.close();
-        // The old version goes only once the new one is in place.
-        const old = replace && fs.existsSync(dirOf(id)) ? `${temp}-old` : null;
-        if (old) fs.renameSync(dirOf(id), old);
-        try {
-            fs.renameSync(temp, dirOf(id));
-        } catch (e) {
-            if (old) fs.renameSync(old, dirOf(id));
-            throw e;
-        }
-        if (old) fs.rmSync(old, { recursive: true, force: true });
+        swapIn(temp, id);
         return PREFIX + id;
     } catch (e) {
         p.zip.close();
@@ -355,33 +415,36 @@ function read(id) {
         const has = name => fs.existsSync(path.join(dir, name));
         const { logoFile, ...theme } = m;
         const name = path.basename(dir);
-        const layers = m.layers.filter(l => has(l.src)).map(l => ({ ...l, url: `st-theme://${name}/${l.src.split('/').map(encodeURIComponent).join('/')}` }));
+        const layers = m.layers.filter(l => has(l.src)).map(l => ({ ...l, url: fileUrl(name, l.src) }));
         return { ...theme, layers, logo, id: PREFIX + name, builtin: false, package: true, hasCss: has('theme.css') || has('bar.css') || layers.some(l => l.z === 'above') };
     } catch { return null; }
 }
 
 export function list() {
     let names = [];
-    try { names = fs.readdirSync(packagesDir(), { withFileTypes: true }).filter(d => d.isDirectory() && !d.name.startsWith('.')).map(d => d.name); } catch { /* none yet */ }
+    try { names = fs.readdirSync(packagesDir(), { withFileTypes: true }).filter(d => d.isDirectory() && !d.name.startsWith('.') && d.name !== DRAFT).map(d => d.name); } catch { /* none yet */ }
     return names.map(read).filter(Boolean);
 }
 
 export function remove(id) {
     if (!id?.startsWith(PREFIX)) return false;
-    const name = path.basename(id.slice(PREFIX.length));
-    if (!name || name.startsWith('.')) return false;
-    fs.rmSync(path.join(packagesDir(), name), { recursive: true, force: true });
+    fs.rmSync(dirOf(id), { recursive: true, force: true });
     return true;
+}
+// What an interrupted install or save left behind.
+export function cleanLeftovers() {
+    let names = [];
+    try { names = fs.readdirSync(packagesDir()); } catch { return; }
+    for (const n of names) if (/^\.(partial|old)-/.test(n)) fs.rmSync(path.join(packagesDir(), n), { recursive: true, force: true });
 }
 
 // The checked CSS for the launcher ('theme.css') or the top bar ('bar.css').
 // Checked here every time, not only at install: the files can change on disk.
 export async function css(id, which) {
     if (!id?.startsWith(PREFIX)) return { css: '', errors: [] };
-    const name = path.basename(id.slice(PREFIX.length));
     let text;
-    try { text = fs.readFileSync(path.join(packagesDir(), name, which), 'utf8'); } catch { return { css: '', errors: [] }; }
-    const r = await checkCss(text, name);
+    try { text = fs.readFileSync(path.join(dirOf(id), which), 'utf8'); } catch { return { css: '', errors: [] }; }
+    const r = await checkCss(text, id.slice(PREFIX.length));
     return { css: r.css, errors: r.errors.map(e => cssError(which, e)) };
 }
 
