@@ -45,6 +45,7 @@ export const CLASSES = [
     'set-group', 'set-row', 'item', 'tab', 'chip',
 ];
 // <html data-…>: what a theme's CSS can react to, launcher only.
+// Also: data-opt-<id> and --opt-<id> for a theme's own options (themepackage.js).
 export const STATES = { page: 'the open page', server: 'running | stopped', busy: 'yes | no', update: 'available | none', time: 'morning | day | evening | night', motion: 'on | off' };
 
 // Required keys; the launcher derives the in-between shades from these.

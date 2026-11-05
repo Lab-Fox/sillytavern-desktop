@@ -98,6 +98,7 @@ function manifestOf(raw) {
         description: String(raw.description || '').trim().slice(0, 300),
         logoFile: typeof raw.logo === 'string' && !['st', 'fox'].includes(raw.logo) ? raw.logo : '',
         layers: layersOf(raw),
+        options: optionsOf(raw),
     };
 }
 
@@ -134,7 +135,7 @@ function layerOf(raw, i) {
     const when = {};
     for (const [k, v] of Object.entries(raw.when ?? {})) {
         const list = [v].flat();
-        if (!WHEN.includes(k) || !list.length || !list.every(x => typeof x === 'string' && /^[a-z-]{1,20}$/.test(x))) throw bad('when');
+        if ((!WHEN.includes(k) && !/^opt-[a-z][a-z0-9-]{0,30}$/.test(k)) || !list.length || !list.every(x => typeof x === 'string' && /^[a-z-]{1,20}$/.test(x))) throw bad('when');
         when[k] = list;
     }
     const id = raw.id == null ? `layer-${i + 1}` : String(raw.id);
@@ -156,6 +157,88 @@ function layersOf(raw) {
     if (layers.filter(l => l.video).length > MAX_VIDEOS) throw new Error(t('This theme has too many videos.'));
     if (new Set(layers.map(l => l.id)).size !== layers.length) throw new Error(t('Two layers of this theme have the same id.'));
     return layers;
+}
+
+// Choices a theme offers in Settings. They reach its CSS as <html data-opt-<id>>
+// and --opt-<id>, and layers can use them in "when".
+const OPTION_ID = /^[a-z][a-z0-9-]{0,30}$/;
+const OPTION_VALUE = /^[a-z0-9][a-z0-9-]{0,30}$/;
+const UNITS = ['', 'px', '%', 'em', 'rem', 's', 'ms', 'deg', 'vw', 'vh'];
+const MAX_OPTIONS = 30, MAX_CHOICES = 30;
+const COLOR = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+const fullColor = c => (c.length === 4 ? `#${[...c.slice(1)].map(x => x + x).join('')}` : c).toLowerCase();
+const text = (v, max) => String(v ?? '').trim().slice(0, max);
+
+function optionOf(raw, i) {
+    const bad = what => new Error(t('Option {n} of this theme has a wrong {what}.', { n: i + 1, what }));
+    if (!raw || typeof raw !== 'object') throw bad('entry');
+    if (typeof raw.id !== 'string' || !OPTION_ID.test(raw.id)) throw bad('id');
+    const label = text(raw.label, 60);
+    if (!label) throw bad('label');
+    const o = { id: raw.id, type: raw.type, label, description: text(raw.description, 200) };
+    if (raw.type === 'toggle') {
+        if (typeof (raw.default ?? false) !== 'boolean') throw bad('default');
+        return { ...o, default: raw.default ?? false };
+    }
+    if (raw.type === 'select') {
+        if (!Array.isArray(raw.choices) || raw.choices.length < 2 || raw.choices.length > MAX_CHOICES) throw bad('choices');
+        const choices = raw.choices.map(c => ({ value: c?.value, label: text(c?.label, 60) }));
+        if (choices.some(c => typeof c.value !== 'string' || !OPTION_VALUE.test(c.value) || !c.label)) throw bad('choices');
+        if (new Set(choices.map(c => c.value)).size !== choices.length) throw bad('choices');
+        const value = raw.default ?? choices[0].value;
+        if (!choices.some(c => c.value === value)) throw bad('default');
+        return { ...o, choices, default: value };
+    }
+    if (raw.type === 'slider') {
+        const [min, max, step, value] = [raw.min, raw.max, raw.step ?? 1, raw.default ?? raw.min].map(Number);
+        if (![min, max, step, value].every(Number.isFinite) || min >= max || step <= 0 || Math.abs(min) > 1e6 || Math.abs(max) > 1e6) throw bad('range');
+        if (value < min || value > max) throw bad('default');
+        const unit = raw.unit ?? '';
+        if (!UNITS.includes(unit)) throw bad('unit');
+        return { ...o, min, max, step, unit, default: value };
+    }
+    if (raw.type === 'color') {
+        if (typeof raw.default !== 'string' || !COLOR.test(raw.default)) throw bad('default');
+        return { ...o, default: fullColor(raw.default) };
+    }
+    throw bad('type');
+}
+
+function optionsOf(raw) {
+    if (raw.options == null) return [];
+    if (!Array.isArray(raw.options)) throw new Error(t('This theme\'s options must be a list.'));
+    if (raw.options.length > MAX_OPTIONS) throw new Error(t('This theme has too many options.'));
+    const options = raw.options.map(optionOf);
+    if (new Set(options.map(o => o.id)).size !== options.length) throw new Error(t('Two options of this theme have the same id.'));
+    return options;
+}
+
+// What is stored comes back through here: the theme may have changed since,
+// and anything that isn't one of its values is left out for its default.
+export function cleanOptions(options = [], stored = {}) {
+    const values = {};
+    for (const o of options) {
+        const v = stored?.[o.id];
+        const ok = o.type === 'toggle' ? typeof v === 'boolean'
+            : o.type === 'select' ? o.choices.some(c => c.value === v)
+                : o.type === 'slider' ? typeof v === 'number' && v >= o.min && v <= o.max
+                    : typeof v === 'string' && COLOR.test(v);
+        values[o.id] = !ok ? o.default : o.type === 'color' ? fullColor(v) : v;
+    }
+    return values;
+}
+
+// → { attrs: { 'data-opt-x': 'on' }, vars: { '--opt-x': '12px' } }
+export function optionState(options = [], stored = {}) {
+    const values = cleanOptions(options, stored);
+    const state = { attrs: {}, vars: {} };
+    for (const o of options) {
+        const v = values[o.id];
+        if (o.type === 'toggle') state.attrs[`data-opt-${o.id}`] = v ? 'on' : 'off';
+        else if (o.type === 'select') state.attrs[`data-opt-${o.id}`] = v;
+        else state.vars[`--opt-${o.id}`] = o.type === 'slider' ? `${v}${o.unit}` : v;
+    }
+    return state;
 }
 
 const sameName = rel => rel.toLowerCase();

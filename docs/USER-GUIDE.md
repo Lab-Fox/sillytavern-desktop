@@ -399,6 +399,20 @@ A `.sttheme` file is a zip with this same `theme.json` (plus `"apiVersion": 1`, 
 | `opacity`, `pixelated`, `hideBelow` | 0 to 1; `true` for sharp pixel art; hide when the window is narrower than this |
 | `when` | Show only for these `page`, `server`, `busy`, `update` or `time` values |
 
+`"options"` adds choices to **Settings → Appearance → Theme options**, so people can adjust your theme without editing it:
+
+```json
+[
+  { "id": "glow", "type": "toggle", "label": "Glowing buttons", "default": true },
+  { "id": "season", "type": "select", "label": "Season", "default": "winter",
+    "choices": [{ "value": "spring", "label": "Spring" }, { "value": "winter", "label": "Winter" }] },
+  { "id": "round", "type": "slider", "label": "Corners", "min": 0, "max": 24, "step": 2, "unit": "px", "default": 8 },
+  { "id": "tint", "type": "color", "label": "Tint", "default": "#3388ff" }
+]
+```
+
+Toggles and lists reach your CSS as `html[data-opt-glow="on"]` (`on` or `off`) and `html[data-opt-season="winter"]`; sliders and colors as `var(--opt-round)` and `var(--opt-tint)`. Layers can use them too: `"when": { "opt-season": "winter" }`. Up to 30 options; each theme remembers its own values.
+
 Your CSS can reach a layer as `[data-layer="sleepy"]`, for example to animate it. In your CSS, `html[data-motion="off"]` means animations are switched off.
 
 **Settings → Appearance → Theme animations** is **On**, **Only while this window is in use**, or **Off**. Moving parts always stop while the window is hidden or the screen is off, and when Windows has animation effects turned off.

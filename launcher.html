@@ -552,6 +552,9 @@
   .layer-slot { position: absolute; inset: 0; overflow: hidden; z-index: 0; }
   .layer-slot[data-z="above"] { z-index: 2; }
   .layer { position: absolute; }
+  .set-ctl input[type=range] { width: 170px; accent-color: var(--accent); cursor: pointer; }
+  .set-ctl input[type=color] { width: 44px; height: 30px; padding: 1px; border: var(--border-w) solid var(--border); border-radius: var(--input-radius); background: var(--input-bg); cursor: pointer; }
+  .set-ctl output { min-width: 62px; text-align: right; font-size: 14px; color: var(--muted); }
 
   /* ---------- corners (the tokens above) ---------- */
   .btn { border-radius: var(--btn-radius); }
@@ -1115,6 +1118,8 @@
             </div>
           </div>
         </div>
+        <h3 class="set-h" id="themeOptHead" hidden>Theme options<span class="act"><button class="btn sm ghost" id="btnThemeOptReset">Back to the defaults</button></span></h3>
+        <div class="set-group" id="themeOptions" hidden></div>
         <h3 class="set-h">Text</h3>
         <div class="set-group">
           <div class="set-row" data-k="language translation">
@@ -3499,6 +3504,88 @@
     document.querySelectorAll('img[data-logo]').forEach(i => i.src = src);
   }
 
+  // ----- a theme's own options -----
+  let optionsNow = { attrs: {}, vars: {} };
+  function applyThemeOptions(next) {
+    const root = document.documentElement;
+    for (const k of Object.keys(optionsNow.attrs)) root.removeAttribute(k);
+    for (const k of Object.keys(optionsNow.vars)) root.style.removeProperty(k);
+    for (const [k, v] of Object.entries(next.attrs)) root.setAttribute(k, v);
+    for (const [k, v] of Object.entries(next.vars)) root.style.setProperty(k, v);
+    optionsNow = next;
+    refreshLayers();
+  }
+  let optionSave = null;
+  function setThemeOption(id, value) {
+    themeState.optionValues[id] = value;
+    clearTimeout(optionSave);
+    // A slider sends many values; only the last one needs saving. Saved under
+    // the theme they belong to, in case another one is picked meanwhile.
+    const values = themeState.optionValues, theme = themeState.active;
+    optionSave = setTimeout(async () => {
+      const r = await D.themeOptionsSet(values, theme);
+      if (theme === themeState.active) applyThemeOptions(r.state);
+    }, 100);
+  }
+  // Text here comes from the theme file: textContent only, never innerHTML.
+  function optionControl(o) {
+    const value = themeState.optionValues[o.id];
+    const add = (tag, props) => Object.assign(document.createElement(tag), props);
+    if (o.type === 'toggle') {
+      const el = add('input', { type: 'checkbox', className: 'tgl', checked: value });
+      el.onchange = () => setThemeOption(o.id, el.checked);
+      return [el];
+    }
+    if (o.type === 'select') {
+      const el = add('select', {});
+      for (const c of o.choices) el.append(add('option', { value: c.value, textContent: c.label }));
+      el.value = value;
+      el.onchange = () => setThemeOption(o.id, el.value);
+      return [el];
+    }
+    if (o.type === 'color') {
+      const el = add('input', { type: 'color', value });
+      el.oninput = () => setThemeOption(o.id, el.value);
+      return [el];
+    }
+    const el = add('input', { type: 'range', min: o.min, max: o.max, step: o.step, value });
+    const out = add('output', { textContent: `${value}${o.unit}` });
+    el.oninput = () => { out.textContent = `${el.value}${o.unit}`; setThemeOption(o.id, Number(el.value)); };
+    return [el, out];
+  }
+  function renderThemeOptions() {
+    const options = activeTheme()?.options || [];
+    const box = $('themeOptions');
+    $('themeOptHead').hidden = box.hidden = !options.length;
+    box.replaceChildren(...options.map(o => {
+      const row = document.createElement(o.type === 'toggle' ? 'label' : 'div');
+      row.className = 'set-row';
+      const left = document.createElement('div');
+      left.className = 'set-text';
+      const name = document.createElement('b');
+      name.textContent = o.label;
+      left.append(name);
+      if (o.description) {
+        const d = document.createElement('span');
+        d.className = 'set-desc';
+        d.textContent = o.description;
+        left.append(d);
+      }
+      const right = document.createElement('div');
+      right.className = 'set-ctl';
+      right.append(...optionControl(o));
+      row.append(left, right);
+      return row;
+    }));
+  }
+  $('btnThemeOptReset').onclick = async () => {
+    clearTimeout(optionSave);
+    const r = await D.themeOptionsSet(null, themeState.active);
+    themeState.optionValues = r.values;
+    applyThemeOptions(r.state);
+    renderThemeOptions();
+  };
+
   // ----- pictures and video a theme places in the window -----
   // Each layer sits in a slot that fills part of the window, and is sized and
   // placed in percent of that slot, so resizing and zoom need no code here.
@@ -3560,7 +3647,7 @@
     refreshLayers();
   }
   const layerShows = def => !(def.hideBelow && innerWidth < def.hideBelow)
-    && Object.entries(def.when).every(([k, list]) => list.includes(rootState[k]));
+    && Object.entries(def.when).every(([k, list]) => list.includes(document.documentElement.getAttribute(`data-${k}`)));
   // The page slot is the part of the window pages use, which moves with the console.
   function placePageSlots() {
     const page = document.querySelector('.page.show'), main = document.querySelector('main');
@@ -3628,9 +3715,11 @@
   async function loadThemes() {
     themeState = await D.listThemes();
     $('themeSafeNote').hidden = !themeState.safe;
+    applyThemeOptions(themeState.optionState);
     if (!editing) applyTheme(activeTheme());
     $('themeCss').textContent = await D.themeCss();
     renderThemeList();
+    renderThemeOptions();
   }
   async function renderThemeList() {
     const el = $('themeList');

@@ -246,6 +246,15 @@
   // Checked by the main process (themecss.js); never anything but CSS here.
   const themeStyle = document.head.appendChild(document.createElement('style'));
   bar.onThemeCss(css => { themeStyle.textContent = css; });
+  let themeOptions = {};
+  bar.onThemeOptions(next => {
+    const root = document.documentElement;
+    for (const k of Object.keys(themeOptions.attrs || {})) root.removeAttribute(k);
+    for (const k of Object.keys(themeOptions.vars || {})) root.style.removeProperty(k);
+    for (const [k, v] of Object.entries(next.attrs || {})) root.setAttribute(k, v);
+    for (const [k, v] of Object.entries(next.vars || {})) root.style.setProperty(k, v);
+    themeOptions = next;
+  });
   bar.onState(s => {
     for (const [k, v] of Object.entries(VARS)) if (s.colors[k]) document.documentElement.style.setProperty(v, s.colors[k]);
     if (s.font) document.body.style.fontFamily = s.font;

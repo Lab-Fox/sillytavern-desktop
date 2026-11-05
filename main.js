@@ -107,6 +107,7 @@ const DEFAULT_SETTINGS = {
     theme: 'sillytavern',       // launcher theme id (see themes.js)
     themesKept: [],             // themes with CSS the user said yes to, as "<id>:<hash of the CSS>"
     themeAnimations: 'on',      // a theme's moving parts: on, focused (only while the launcher has focus), off
+    themeOptions: {},           // the user's choices per theme: { "<id>": { "<option>": value } }
     language: '',               // the app's language (i18n.js); '' = Windows' language
     syncStLanguage: true,       // a language change also sets SillyTavern's own language (where it has it)
     stLanguage: null,           // { code, done: [partitions] } after a change: each session gets it once
@@ -1059,6 +1060,7 @@ function createStWindow(instance, extra = {}) {
         colors: themes.get(activeThemeId()).colors,
         font: () => themes.uiFontCss(settings.uiFont),
         themeCss: () => themeCss.bar,
+        themeOptions: () => activeOptions().state,
         motion: () => settings.themeAnimations === 'on',
         icon: path.join(__dirname, 'icon.ico'),
         setupPage: lockToServer,
@@ -1983,7 +1985,7 @@ ipcMain.handle('app-update-check', () => appUpdate.check({ fresh: true }));
 // Switching the channel asks GitHub again right away.
 // Settings → About → Reset: look, start-up, updates and window options go back to the
 // defaults. Folders, profiles, phone access, server options, programs and add-ons stay.
-const RESETTABLE = ['theme', 'themeAnimations', 'uiFont', 'uiZoom', 'consoleFont', 'consoleFontSize', 'autoStart', 'confirmBeforeQuit', 'closeToTray',
+const RESETTABLE = ['theme', 'themeAnimations', 'themeOptions', 'uiFont', 'uiZoom', 'consoleFont', 'consoleFontSize', 'autoStart', 'confirmBeforeQuit', 'closeToTray',
     'backupBeforeUpdate', 'backupKeep', 'checkUpdatesOnLaunch', 'updateOnLaunch', 'checkAppUpdates', 'appPreview', 'windowLayer', 'tabs', 'searchEngine', 'inspectMenu', 'syncStLanguage'];
 ipcMain.handle('settings-reset', async () => {
     if (!(await confirm(t('Reset this app\'s settings?'),
@@ -2536,6 +2538,11 @@ async function refreshThemeCss() {
     themeCss.bar = bar.css;
     stWins.forEach(w => w.push());
 }
+function activeOptions() {
+    const theme = themes.get(activeThemeId());
+    const stored = settings.themeOptions[theme.id];
+    return { theme, values: themepkg.cleanOptions(theme.options, stored), state: themepkg.optionState(theme.options, stored) };
+}
 // A theme with CSS could leave the app hard to use, and a broken page can't show
 // its own way back: a native box, and doing nothing goes back.
 const KEEP_SECONDS = 15;
@@ -2590,7 +2597,22 @@ ipcMain.handle('set-ui-font', (_e, { font, zoom } = {}) => {
     broadcast('settings', publicSettings());
     return publicSettings();
 });
-ipcMain.handle('list-themes',() => ({ active: themes.get(activeThemeId()).id, safe: safeTheme, themes: themes.list() }));
+ipcMain.handle('list-themes', () => {
+    const { theme, values, state } = activeOptions();
+    return { active: theme.id, safe: safeTheme, themes: themes.list(), optionValues: values, optionState: state };
+});
+// values = null: back to the theme's defaults.
+ipcMain.handle('theme-options-set', (_e, values, id) => {
+    const theme = themes.get(id);
+    if (theme.id === id && theme.options?.length) {
+        const { [id]: _old, ...others } = settings.themeOptions;
+        settings.themeOptions = values ? { ...others, [id]: themepkg.cleanOptions(theme.options, values) } : others;
+        saveSettings(settings);
+        stWins.forEach(w => w.push());
+    }
+    const { values: now, state } = activeOptions();
+    return { values: now, state };
+});
 ipcMain.handle('set-theme', (_e, id) => tryTheme(id));
 ipcMain.handle('theme-css', () => themeCss.launcher);
 ipcMain.handle('theme-install', async (_e, file) => {
@@ -2607,6 +2629,8 @@ ipcMain.handle('delete-theme', async (_e, id) => {
     const theme = themes.get(id);
     if (theme.builtin || !(await confirm(t('Delete the theme "{name}"?', { name: theme.name }), t('This removes it from this app. Export it first if you want to keep a copy.'), t('Delete')))) return false;
     themes.remove(id);
+    const { [id]: _gone, ...otherOptions } = settings.themeOptions;
+    settings.themeOptions = otherOptions;
     if (settings.theme === id) setTheme('sillytavern');
     else broadcast('theme');
     return true;

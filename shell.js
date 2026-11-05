@@ -83,7 +83,7 @@ export class StWindow {
             }
         });
 
-        this.bar.webContents.on('did-finish-load', () => { this.sentCss = null; this.push(); });
+        this.bar.webContents.on('did-finish-load', () => { this.sentCss = this.sentOptions = null; this.push(); });
         this.bar.webContents.loadFile(path.join(__dirname, 'stbar.html'));
         if (opts.tab) this.takeTab(opts.tab);
         else this.newTab(opts.instance);
@@ -314,6 +314,11 @@ export class StWindow {
     push() {
         if (this.bar.webContents.isDestroyed()) return;
         // Up to 512 KB, and push() runs a lot: only when it changed.
+        const options = JSON.stringify(this.opts.themeOptions?.() ?? {});
+        if (options !== this.sentOptions) {
+            this.sentOptions = options;
+            this.bar.webContents.send('bar:theme-options', JSON.parse(options));
+        }
         const css = this.opts.themeCss?.() ?? '';
         if (css !== (this.sentCss ?? '')) {
             this.sentCss = css;

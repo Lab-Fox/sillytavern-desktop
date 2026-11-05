@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('bar', {
     action: (name, data) => ipcRenderer.send('bar:action', name, data),
     onState: cb => ipcRenderer.on('bar:state', (_e, s) => cb(s)),
     onThemeCss: cb => ipcRenderer.on('bar:theme-css', (_e, css) => cb(css)),
+    onThemeOptions: cb => ipcRenderer.on('bar:theme-options', (_e, o) => cb(o)),
     i18n: () => ipcRenderer.sendSync('i18n-dict'),
 });
 
