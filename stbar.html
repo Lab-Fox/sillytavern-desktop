@@ -10,12 +10,26 @@
   @font-face { font-family: "Departure Mono"; src: url("fonts/departure-mono-400.woff2") format("woff2"); }
   @font-face { font-family: "DotGothic16"; src: url("fonts/dotgothic16-latin-400-normal.woff2") format("woff2"); }
   @font-face { font-family: "VT323"; src: url("fonts/vt323-latin-400-normal.woff2") format("woff2"); }
+  /* Same layers as the launcher: see launcher.html. */
+  @layer guard, app, theme;
+  @layer guard {
+    [hidden] { display: none !important; }
+    #btnMenu, #btnReload { visibility: visible !important; opacity: 1 !important; }
+  }
+  @layer app {
   /* Same base colors as the launcher theme (set from bar:state). */
   :root {
     --bg: #1c1d21; --panel: #26272d; --border: #3d3e47; --accent: #d65a52;
     --text: #d9d7d0; --title: #efede6; --muted: #9c9ba4; --warn: #e6c36a;
     --tint: color-mix(in srgb, var(--accent) 18%, transparent);
     --px: 2px;
+    /* The launcher's tokens that apply here, plus the bar's own. */
+    --radius: 0px;
+    --btn-radius: var(--radius);
+    --tab-radius: var(--radius);
+    --border-w: var(--px);
+    --bar-bg: var(--panel);
+    --tab-active-bg: var(--bg);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; background: transparent; }
@@ -25,7 +39,7 @@
   }
   .bar {
     height: 34px; display: flex; align-items: center; gap: 4px; padding-left: 8px;
-    background: var(--panel); border-bottom: var(--px) solid var(--border);
+    background: var(--bar-bg); border-bottom: var(--border-w) solid var(--border);
     -webkit-app-region: drag;
   }
   /* Tab strip; the empty space around the tabs drags the window. */
@@ -35,10 +49,10 @@
   .tab {
     -webkit-app-region: no-drag; flex: 0 1 210px; min-width: 58px; height: 28px; margin-bottom: calc(var(--px) * -1); overflow: hidden;
     display: flex; align-items: center; gap: 7px; padding: 0 4px 0 9px;
-    border: var(--px) solid transparent; border-bottom: 0; color: var(--muted); cursor: default; position: relative;
+    border: var(--border-w) solid transparent; border-bottom: 0; border-radius: var(--tab-radius) var(--tab-radius) 0 0; color: var(--muted); cursor: default; position: relative;
   }
   .tab:hover { background: var(--tint); color: var(--text); }
-  .tab.on { background: var(--bg); border-color: var(--border); color: var(--title); }
+  .tab.on { background: var(--tab-active-bg); border-color: var(--border); color: var(--title); }
   .tab.on::before { content: ""; position: absolute; left: calc(var(--px) * -1); right: calc(var(--px) * -1); top: calc(var(--px) * -1); height: var(--px); background: var(--accent); }
   /* One tab and tabs turned off: just the page title, like before. */
   .tabs.solo .tab { background: none; border-color: transparent; color: var(--title); font-weight: 600; padding-left: 0; }
@@ -60,7 +74,7 @@
   .tab button { height: 20px; min-width: 20px; padding: 0; }
   .tab button svg { width: 12px; height: 12px; }
   /* Pinned to the right end of the strip, so they stay reachable with many tabs. */
-  #btnNewTab, #btnNewMenu { margin: 0 0 3px 2px; flex-shrink: 0; position: sticky; background: var(--panel); }
+  #btnNewTab, #btnNewMenu { margin: 0 0 3px 2px; flex-shrink: 0; position: sticky; background: var(--bar-bg); }
   #btnNewTab { right: 24px; }
   #btnNewMenu { right: 0; }
   /* Narrow window: the active tab's details make room for the tabs (each tab's chip still shows the port). */
@@ -70,7 +84,7 @@
   button {
     -webkit-app-region: no-drag; height: 26px; min-width: 30px; padding: 0 7px;
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    background: transparent; border: var(--px) solid transparent; color: var(--text); font: inherit; cursor: pointer;
+    background: transparent; border: var(--border-w) solid transparent; border-radius: var(--btn-radius); color: var(--text); font: inherit; cursor: pointer;
   }
   button:hover { background: var(--tint); border-color: var(--border); color: var(--title); }
   button.on { color: var(--accent); border-color: var(--accent); background: var(--tint); }
@@ -85,13 +99,13 @@
   .tabs.sorting .tab { transition: transform .15s ease-out; }
   .tabs.sorting .tab.dragging { transition: none; z-index: 2; background: var(--bg); border-color: var(--accent); color: var(--title); }
   .tab.dragging.out { opacity: .55; }
-  [hidden] { display: none !important; }
+  }
 </style>
 </head>
 <body>
-  <div class="bar" id="bar">
-    <div class="tabs" id="tabs"><button id="btnNewTab" title="New tab (Ctrl+T)" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button id="btnNewMenu" title="New SillyTavern: another tab, a read-only copy, another port or another install"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></button></div>
-    <div class="info" id="info"></div>
+  <div class="bar" id="bar" data-part="topbar">
+    <div class="tabs" id="tabs" data-part="tab-strip"><button id="btnNewTab" title="New tab (Ctrl+T)" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button id="btnNewMenu" title="New SillyTavern: another tab, a read-only copy, another port or another install"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></button></div>
+    <div class="info" id="info" data-part="tab-info"></div>
     <div id="crx"></div>
     <button id="btnReload" title="Reload (F5)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button>
     <button id="btnLayer" title="Window layer"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5zM3 13l9 5 9-5"/></svg><span id="layerText" hidden></span></button>

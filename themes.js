@@ -22,6 +22,30 @@ export function uiFontCss(font) {
     return `${name}, var(--lang-fonts, "Segoe UI"), system-ui, sans-serif`;
 }
 
+// What themes may rely on. Bump THEME_API when something here has to go; a
+// theme says which version it was made for. Anything else in the pages
+// (other class names, the order of elements) can change in any release.
+export const THEME_API = 1;
+export const TOKENS = [
+    'radius', 'btn-radius', 'card-radius', 'input-radius', 'tag-radius', 'nav-radius', 'switch-radius', 'tab-radius',
+    'border-w', 'divider', 'shadow-card', 'shadow-btn', 'btn-press', 'nav-active-mark', 'transition',
+    'app-bg', 'sidebar-bg', 'header-bg', 'page-bg', 'card-bg', 'hero-bg', 'btn-bg', 'btn-primary-bg', 'input-bg',
+    'dock-bg', 'console-bg', 'bar-bg', 'tab-active-bg', 'scrollbar-track', 'scrollbar-thumb',
+    'body-font', 'heading-font', 'sidebar-w', 'card-pad', 'scrollbar-w', 'icon-stroke', 'logo-render',
+];
+// [data-part="…"]: one per page or window, or the sidebar's buttons.
+export const PARTS = [
+    'sidebar', 'brand', 'nav', 'nav-item', 'sidebar-footer', 'main', 'header', 'page-title', 'server-status',
+    'power-button', 'busy-bar', 'page', 'console-dock', 'console', 'dialog', 'topbar', 'tab-strip', 'tab-info',
+];
+// Components that repeat everywhere keep their class names as their hook.
+export const CLASSES = [
+    'btn', 'primary', 'ghost', 'danger', 'sm', 'card', 'hero', 'tag', 'pill', 'tip', 'seg', 'tgl',
+    'set-group', 'set-row', 'item', 'tab', 'chip',
+];
+// <html data-…>: what a theme's CSS can react to, launcher only.
+export const STATES = { page: 'the open page', server: 'running | stopped', busy: 'yes | no', update: 'available | none', time: 'morning | day | evening | night' };
+
 // Required keys; the launcher derives the in-between shades from these.
 export const COLOR_KEYS = ['bg', 'panel', 'border', 'accent', 'text', 'title', 'muted'];
 const OPTIONAL_KEYS = ['onAccent', 'good', 'warn', 'bad'];

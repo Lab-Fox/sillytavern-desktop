@@ -13,9 +13,24 @@
   @font-face { font-family: "Departure Mono"; src: url("fonts/departure-mono-400.woff2") format("woff2"); }
   @font-face { font-family: "DotGothic16"; src: url("fonts/dotgothic16-latin-400-normal.woff2") format("woff2"); }
 
+  /* Three layers. app: everything below. theme: a theme's own CSS, which beats
+     app without needing !important. guard: what a theme can't take away, not
+     even with !important (the first layer wins among !important rules). Keep
+     it short: every rule here is something a theme author can't change. */
+  @layer guard, app, theme;
+  @layer guard {
+    [hidden] { display: none !important; }
+    .warn-line:not([hidden]), .warnbox:not([hidden]), .modal.show, #btnPower:not(:disabled) { visibility: visible !important; opacity: 1 !important; }
+    p.warn-line:not([hidden]), .warnbox:not([hidden]), .modal.show { display: block !important; }
+    #btnPower { display: inline-flex !important; }
+  }
+  @layer app {
+
   /* ---------- theme ----------
-     A theme sets only the base colors (applyTheme() in the script);
-     every other shade is mixed from them, so custom themes stay simple. */
+     A simple theme sets only the base colors (applyTheme() in the script);
+     every other shade is mixed from them. The tokens under them are what a
+     theme's CSS may change (themes.js lists them): each one is a promise to
+     theme authors, so don't rename or drop one. */
   :root {
     --bg: #1c1d21; --panel: #26272d; --border: #3d3e47; --accent: #d65a52;
     --text: #d9d7d0; --title: #efede6; --muted: #9c9ba4;
@@ -35,29 +50,67 @@
     --console-pixel: "VT323", "Cascadia Code", Consolas, monospace;   /* the console's "Pixel (default)" */
     --log-font: var(--console-pixel);   /* Settings → Console font */
     --log-size: 18px;
+
+    /* shape */
+    --radius: 0px;
+    --btn-radius: var(--radius);
+    --card-radius: var(--radius);
+    --input-radius: var(--radius);
+    --tag-radius: var(--radius);
+    --nav-radius: var(--radius);
+    --switch-radius: var(--radius);
+    --border-w: var(--px);
+    --divider: var(--px) dashed var(--border);
+    --shadow-card: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow);
+    --shadow-btn: var(--px) var(--px) 0 var(--shadow);
+    --btn-press: translate(var(--px), var(--px));
+    --nav-active-mark: inset calc(var(--px) * 2) 0 0 var(--accent);
+    --transition: none;
+    /* surfaces */
+    --app-bg: var(--bg);
+    --sidebar-bg: var(--surface);
+    --header-bg: var(--surface);
+    --page-bg: transparent;
+    --card-bg: var(--panel);
+    --hero-bg: repeating-linear-gradient(0deg, transparent 0 6px, color-mix(in srgb, var(--accent) 5%, transparent) 6px 8px), var(--panel);
+    --btn-bg: var(--panel2);
+    --btn-primary-bg: var(--accent);
+    --input-bg: var(--well);
+    --dock-bg: var(--surface);
+    --console-bg: var(--well);
+    --scrollbar-track: var(--bg);
+    --scrollbar-thumb: var(--border);
+    /* type and sizes */
+    --body-font: var(--pixel-font);
+    --heading-font: var(--body-font);
+    --sidebar-w: 228px;
+    --card-pad: 18px;
+    --scrollbar-w: 12px;
+    --icon-stroke: 2;
+    --logo-render: pixelated;
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
-  [hidden] { display: none !important; }
+  * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0; }
   html, body { height: 100%; }
   body {
-    background: var(--bg); color: var(--text);
-    font: 15px/1.5 var(--pixel-font); letter-spacing: .2px;
+    background: var(--app-bg); color: var(--text);
+    font: 15px/1.5 var(--body-font); letter-spacing: .2px;
     display: flex; overflow: hidden; user-select: none;
     -webkit-font-smoothing: none;
   }
   button { font: inherit; color: inherit; }
-  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: square; stroke-linejoin: miter; flex-shrink: 0; shape-rendering: crispEdges; }
-  img.logo { image-rendering: pixelated; flex-shrink: 0; display: block; }
+  h1, h2, h3 { font-family: var(--heading-font); }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: var(--icon-stroke); stroke-linecap: square; stroke-linejoin: miter; flex-shrink: 0; shape-rendering: crispEdges; }
+  img.logo { image-rendering: var(--logo-render); flex-shrink: 0; display: block; }
 
   /* ---------- pixel primitives ---------- */
   .card, .btn, input[type=text], input[type=password], input[type=number], input[type=search], .pill, .seg, #console, .path, .tag, .theme-card {
-    border: var(--px) solid var(--border);
+    border: var(--border-w) solid var(--border);
   }
-  .card { box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
+  .card { box-shadow: var(--shadow-card); }
 
   /* ---------- sidebar ---------- */
   aside {
-    width: 228px; flex-shrink: 0; background: var(--surface);
+    width: var(--sidebar-w); flex-shrink: 0; background: var(--sidebar-bg);
     border-right: var(--px) solid var(--border); display: flex; flex-direction: column; padding: 18px 12px; overflow-y: auto;
   }
   .brand { display: flex; align-items: center; gap: 12px; padding: 2px 6px 20px; }
@@ -65,7 +118,7 @@
   .brand b { display: block; font-size: 17px; font-weight: 700; color: var(--title); line-height: 1.15; }
   .brand span { font-size: 13px; color: var(--muted); }
   nav { display: flex; flex-direction: column; gap: 3px; flex: 1; min-height: 0; }
-  nav hr { border: 0; border-top: var(--px) dashed var(--border); margin: 5px 10px; }
+  nav hr { border: 0; border-top: var(--divider); margin: 5px 10px; }
   nav .nav-end { margin-top: auto; }
   @media (max-height: 700px) {
     aside { padding-block: 12px; }
@@ -80,7 +133,7 @@
     color: var(--muted); cursor: pointer; text-align: left; font-size: 15.5px;
   }
   nav button:hover { background: var(--panel); color: var(--text); }
-  nav button.active { background: var(--panel2); color: var(--title); border-color: var(--border); box-shadow: inset calc(var(--px) * 2) 0 0 var(--accent); }
+  nav button.active { background: var(--panel2); color: var(--title); border-color: var(--border); box-shadow: var(--nav-active-mark); }
   nav button.active svg { color: var(--accent); }
   nav .badge { margin-left: auto; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; padding: 0 6px; line-height: 18px; }
   .side-foot { margin-top: 10px; border-top: var(--px) solid var(--border); padding-top: 10px; display: flex; justify-content: space-around; }
@@ -91,7 +144,7 @@
   main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
   header {
     display: flex; align-items: center; gap: 12px; padding: 14px 26px;
-    border-bottom: var(--px) solid var(--border); background: var(--surface);
+    border-bottom: var(--px) solid var(--border); background: var(--header-bg);
   }
   header h1 { font-size: 22px; font-weight: 700; color: var(--title); letter-spacing: .5px; min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pill {
@@ -109,13 +162,13 @@
   .busy.show { display: flex; }
   .spin { width: 12px; height: 12px; background: var(--accent2); animation: spin 1s steps(4) infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .page { display: none; flex: 1; overflow-y: auto; padding: 22px 26px 30px; }
+  .page { display: none; flex: 1; overflow-y: auto; padding: 22px 26px 30px; background: var(--page-bg); }
   .page.show { display: block; }
   .page.fill.show { display: flex; flex-direction: column; }
   .lead { color: var(--muted); margin: -4px 0 18px; max-width: 660px; }
 
   /* ---------- building blocks ---------- */
-  .card { background: var(--panel); padding: 18px; }
+  .card { background: var(--card-bg); padding: var(--card-pad); }
   .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; white-space: nowrap; color: var(--muted); font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
   .card h2 .act { margin-left: auto; text-transform: none; letter-spacing: .2px; }
   .grid { display: grid; gap: 16px; }
@@ -129,15 +182,15 @@
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    background: var(--panel2); color: var(--text);
+    background: var(--btn-bg); color: var(--text);
     padding: 6px 13px; cursor: pointer; font-size: 15px; white-space: nowrap;
-    box-shadow: var(--px) var(--px) 0 var(--shadow);
-    transition: none;
+    box-shadow: var(--shadow-btn);
+    transition: var(--transition);
   }
   .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--title); }
-  .btn:active:not(:disabled) { transform: translate(var(--px), var(--px)); box-shadow: none; }
+  .btn:active:not(:disabled) { transform: var(--btn-press); box-shadow: none; }
   .btn:disabled { opacity: .45; cursor: default; }
-  .btn.primary { background: var(--accent); border-color: var(--accent2); color: var(--on-accent); font-weight: 700; }
+  .btn.primary { background: var(--btn-primary-bg); border-color: var(--accent2); color: var(--on-accent); font-weight: 700; }
   .btn.primary:hover:not(:disabled) { background: var(--accent2); color: var(--on-accent); }
   .btn.ghost { background: transparent; box-shadow: none; }
   .btn.danger:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }
@@ -153,16 +206,14 @@
   /* ---------- home ---------- */
   .hero {
     display: flex; align-items: center; gap: 22px; padding: 22px;
-    background:
-      repeating-linear-gradient(0deg, transparent 0 6px, color-mix(in srgb, var(--accent) 5%, transparent) 6px 8px),
-      var(--panel);
+    background: var(--hero-bg);
   }
-  .hero img.logo { width: 88px; height: 88px; border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
+  .hero img.logo { width: 88px; height: 88px; border: var(--px) solid var(--border); box-shadow: var(--shadow-card); }
   .hero h3 { font-size: 24px; color: var(--title); font-weight: 700; line-height: 1.2; }
   .hero-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
   .hero h3 .tip { margin-left: 4px; }
   .hero .btn.primary { padding: 9px 20px; font-size: 16px; }
-  .hero-ver { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding-top: 12px; border-top: var(--px) dashed var(--border); font-size: 14px; }
+  .hero-ver { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding-top: 12px; border-top: var(--divider); font-size: 14px; }
   #infoVersion { color: var(--title); }
   .hero-links { margin-left: auto; display: flex; gap: 14px; }
   .quick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -172,8 +223,8 @@
   .tip { display: inline-grid; place-items: center; width: 18px; height: 18px; border: var(--px) solid var(--border); background: var(--panel2); color: var(--muted); cursor: help; vertical-align: middle; flex-shrink: 0; }
   .tip svg.i { width: 14px; height: 14px; stroke-width: 3; }
   .tip:hover, .tip:focus-visible, .tip.open { color: var(--accent2); border-color: var(--accent); outline: none; }
-  #tipPop { position: fixed; z-index: 90; max-width: min(340px, calc(100vw - 24px)); background: var(--panel2); color: var(--text); border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); padding: 8px 11px; font-size: 14px; line-height: 1.45; pointer-events: none; white-space: normal; text-transform: none; letter-spacing: .2px; font-weight: 400; }
-  .update-box { margin-top: 14px; padding-top: 14px; border-top: var(--px) dashed var(--border); display: flex; align-items: center; gap: 10px; }
+  #tipPop { position: fixed; z-index: 90; max-width: min(340px, calc(100vw - 24px)); background: var(--panel2); color: var(--text); border: var(--px) solid var(--border); box-shadow: var(--shadow-card); padding: 8px 11px; font-size: 14px; line-height: 1.45; pointer-events: none; white-space: normal; text-transform: none; letter-spacing: .2px; font-weight: 400; }
+  .update-box { margin-top: 14px; padding-top: 14px; border-top: var(--divider); display: flex; align-items: center; gap: 10px; }
   .notes summary { cursor: pointer; color: var(--muted); font-size: 14px; }
   .notes div { white-space: pre-wrap; max-height: 220px; overflow: auto; margin-top: 8px; font-size: 14px; }
   .progress { flex: 1; height: 12px; border: var(--px) solid var(--border); background: var(--bg); }
@@ -187,7 +238,7 @@
 
   /* ---------- lists ---------- */
   .list { display: flex; flex-direction: column; }
-  .item { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-top: var(--px) dashed var(--border); }
+  .item { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-top: var(--divider); }
   .item:first-child { border-top: 0; }
   .item .main { flex: 1; min-width: 0; }
   .item .title { color: var(--title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -210,7 +261,7 @@
   .seg { display: flex; background: var(--panel); padding: 2px; }
   .seg button { background: none; border: 0; padding: 2px 11px; cursor: pointer; color: var(--muted); font-size: 14px; }
   .seg button.on { background: var(--accent); color: var(--on-accent); }
-  .dock { flex: none; height: var(--dock-h, min(240px, 32vh)); display: flex; flex-direction: column; position: relative; background: var(--surface); border-top: var(--px) solid var(--border); }
+  .dock { flex: none; height: var(--dock-h, min(240px, 32vh)); display: flex; flex-direction: column; position: relative; background: var(--dock-bg); border-top: var(--px) solid var(--border); }
   .dock.closed { height: auto; }
   .dock:not(.closed):not(.max) { min-height: 110px; max-height: calc(100% - 230px); }
   .dock.max { flex: 1; height: auto; border-top: 0; }
@@ -232,7 +283,7 @@
   .btn.icon { padding: 4px 6px; }
   .btn.icon[aria-pressed=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent2); }
   #console {
-    flex: 1; min-height: 0; overflow-y: auto; background: var(--well); border-width: var(--px) 0 0;
+    flex: 1; min-height: 0; overflow-y: auto; background: var(--console-bg); border-width: var(--px) 0 0;
     padding: 8px 14px; font-family: var(--log-font); font-size: var(--log-size); line-height: 1.25; letter-spacing: 0;
     white-space: pre-wrap; word-break: break-word; color: var(--text); user-select: text;
   }
@@ -244,14 +295,14 @@
   /* ---------- forms ---------- */
   .field label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
   input[type=text], input[type=password], input[type=number], input[type=search], select {
-    width: 100%; background: var(--well); color: var(--title);
+    width: 100%; background: var(--input-bg); color: var(--title);
     padding: 6px 10px; font: inherit; outline: none; user-select: text;
   }
   input:focus, select:focus { border-color: var(--accent); }
   select { border: var(--px) solid var(--border); cursor: pointer; }
   select option, select optgroup { background: var(--panel); color: var(--text); }
   .log-preview { background: var(--well); border: var(--px) solid var(--border); padding: 8px 12px; font-family: var(--log-font); font-size: var(--log-size); line-height: 1.25; letter-spacing: 0; color: var(--text); white-space: pre-wrap; }
-  .switch { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 10px 0; border-top: var(--px) dashed var(--border); }
+  .switch { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 10px 0; border-top: var(--divider); }
   .switch:first-of-type { border-top: 0; }
   .switch input { appearance: none; width: 36px; height: 20px; background: var(--well); border: var(--px) solid var(--border); position: relative; flex-shrink: 0; cursor: pointer; margin-top: 2px; }
   .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; background: var(--muted); }
@@ -278,10 +329,10 @@
   .set-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 600; margin: 22px 2px 8px; }
   .set-pane > .set-h:first-child, .set-pane > .set-group:first-child { margin-top: 0; }
   .set-h .act { margin-left: auto; display: flex; gap: 8px; text-transform: none; letter-spacing: .2px; }
-  .set-group { background: var(--panel); border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); container-type: inline-size; }
+  .set-group { background: var(--card-bg); border: var(--px) solid var(--border); box-shadow: var(--shadow-card); container-type: inline-size; }
   .set-group + .set-group { margin-top: 14px; }
   .set-free { padding: 14px 16px; }
-  .set-row { display: flex; align-items: center; gap: 8px 18px; padding: 11px 16px; min-height: 52px; border-top: var(--px) dashed var(--border); }
+  .set-row { display: flex; align-items: center; gap: 8px 18px; padding: 11px 16px; min-height: 52px; border-top: var(--divider); }
   .set-row:first-child { border-top: 0; }
   label.set-row { cursor: pointer; }
   label.set-row:hover { background: var(--panel2); }
@@ -321,9 +372,9 @@
 
   /* ---------- themes ---------- */
   .themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
-  .theme-card { background: var(--panel2); padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--px) var(--px) 0 var(--shadow); }
+  .theme-card { background: var(--panel2); padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow-btn); }
   .theme-card:hover { border-color: var(--accent2); }
-  .theme-card.on { border-color: var(--accent); box-shadow: 0 0 0 var(--px) var(--accent), calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
+  .theme-card.on { border-color: var(--accent); box-shadow: 0 0 0 var(--px) var(--accent), var(--shadow-card); }
   .theme-card .top { display: flex; align-items: center; gap: 10px; }
   .theme-card img.logo { width: 32px; height: 32px; }
   .theme-card b { color: var(--title); font-weight: 600; }
@@ -342,7 +393,7 @@
   .setup.show { display: block; }
   .setup-inner { max-width: 800px; margin: 0 auto; padding: 36px 28px 40px; }
   .setup-head { display: flex; align-items: center; gap: 18px; margin-bottom: 24px; }
-  .setup-head img.logo { width: 72px; height: 72px; border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); }
+  .setup-head img.logo { width: 72px; height: 72px; border: var(--px) solid var(--border); box-shadow: var(--shadow-card); }
   .setup-head h1 { font-size: 26px; color: var(--title); font-weight: 700; }
   .setup-head p { color: var(--muted); }
   .setup-head .btn { margin-left: auto; align-self: flex-start; }
@@ -366,7 +417,7 @@
   .ai-card .acts { display: flex; gap: 6px; flex-wrap: wrap; }
   .ai-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
   .ai-head h3 { font-size: 17px; color: var(--title); font-weight: 700; }
-  .ai-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding-top: 10px; border-top: var(--px) dashed var(--border); }
+  .ai-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding-top: 10px; border-top: var(--divider); }
   .ai-foot .act { margin-left: auto; display: flex; gap: 14px; }
   .ai-auto { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; color: var(--text); }
   .ai-card { gap: 12px; }
@@ -393,7 +444,7 @@
   @media (max-width: 960px) { header .lang-btn span, header #btnPower span { display: none; } }
   #langPop {
     position: fixed; z-index: 90; display: none; width: min(460px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto;
-    background: var(--panel); border: var(--px) solid var(--border); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); padding: 12px 14px;
+    background: var(--panel); border: var(--px) solid var(--border); box-shadow: var(--shadow-card); padding: 12px 14px;
   }
   #langPop.show { display: block; }
   #langPop h3 { font-size: 15px; color: var(--title); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
@@ -405,18 +456,18 @@
   .lang-grid button small { color: var(--muted); font-size: 12px; }
   .lang-grid button:hover { background: var(--tint); }
   .lang-grid button.on { border-color: var(--accent); background: var(--tint); color: var(--title); }
-  #langPop .switch { border-top: var(--px) dashed var(--border); margin-top: 10px; padding: 10px 0 0; }
+  #langPop .switch { border-top: var(--divider); margin-top: 10px; padding: 10px 0 0; }
   #langPop .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
   #langToast {
     position: fixed; right: 18px; bottom: 18px; z-index: 80; max-width: 420px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-    background: var(--panel); border: var(--px) solid var(--accent); box-shadow: calc(var(--px) * 2) calc(var(--px) * 2) 0 var(--shadow); padding: 10px 12px; font-size: 14px;
+    background: var(--panel); border: var(--px) solid var(--accent); box-shadow: var(--shadow-card); padding: 10px 12px; font-size: 14px;
   }
   .item.current { background: var(--tint); }
   .item .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
   #profList .item { flex-wrap: wrap; }
   #profList .item .main { min-width: 300px; }
   .item .meta.mono { font-size: 12.5px; word-break: break-all; }
-  .form { margin-top: 14px; padding-top: 14px; border-top: var(--px) dashed var(--border); }
+  .form { margin-top: 14px; padding-top: 14px; border-top: var(--divider); }
   .err { color: var(--bad); font-size: 13.5px; }
 
   /* ---------- download dialog ---------- */
@@ -441,7 +492,7 @@
   .health-ok > summary { display: flex; align-items: center; gap: 12px; padding: 6px 4px; cursor: pointer; list-style: none; color: var(--text); }
   .health-ok > summary::-webkit-details-marker { display: none; }
   .health-ok[open] > summary .link { display: none; }
-  .health-ok > .item:first-of-type { border-top: var(--px) dashed var(--border); }
+  .health-ok > .item:first-of-type { border-top: var(--divider); }
   .warnbox ul { margin: 6px 0 6px 18px; color: var(--text); }
   .warnbox li { margin: 2px 0; }
   .warnbox .switch { border: 0; padding: 6px 0 0; }
@@ -465,7 +516,7 @@
   .mig-cat b { color: var(--title); font-weight: 600; }
   .mig-cat .meta { font-size: 13px; color: var(--muted); }
   .mig-cat .warn { font-size: 13px; color: var(--warn); }
-  .mig-group { border-top: var(--px) dashed var(--border); }
+  .mig-group { border-top: var(--divider); }
   .mig-group > summary { display: flex; gap: 10px; align-items: center; padding: 8px 2px; cursor: pointer; list-style: none; }
   .mig-group > summary::before { content: "▸"; color: var(--muted); }
   .mig-group[open] > summary::before { content: "▾"; }
@@ -479,34 +530,43 @@
   .mig-item .sz { color: var(--muted); font-size: 13px; width: 70px; text-align: right; flex-shrink: 0; }
   .mig-foot { position: sticky; bottom: -30px; z-index: 2; padding: 12px 18px; box-shadow: 0 -6px 14px var(--shadow); border-color: var(--accent); }
 
-  ::-webkit-scrollbar { width: 12px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border: 3px solid var(--bg); }
+  ::-webkit-scrollbar { width: var(--scrollbar-w); }
+  ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: 3px solid var(--scrollbar-track); }
   ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
   @media (max-width: 960px) { .g3 { grid-template-columns: 1fr 1fr; } }
   /* Narrow window: one card per row, so buttons have room. */
   @media (max-width: 900px) { .g2 { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---------- corners (the tokens above) ---------- */
+  .btn { border-radius: var(--btn-radius); }
+  .card, .set-group, .theme-card, .warnbox, .set-restart, .mig-cat, .ai-connect, #tipPop, #langPop, #langToast, .hero img.logo { border-radius: var(--card-radius); }
+  input[type=text], input[type=password], input[type=number], input[type=search], select, .path, .log-preview { border-radius: var(--input-radius); }
+  .tag, .pill, .tip, .check-ico, .badge, .step-num, .progress, .progress i, .seg, .seg button { border-radius: var(--tag-radius); }
+  nav button, .side-foot button, .lang-grid button { border-radius: var(--nav-radius); }
+  .switch input, input.tgl, .switch input::after, input.tgl::after { border-radius: var(--switch-radius); }
+  }
 </style>
 </head>
 <body>
-  <aside>
-    <div class="brand">
+  <aside data-part="sidebar">
+    <div class="brand" data-part="brand">
       <img class="logo" data-logo alt="">
       <div translate="no"><b>SillyTavern</b><span>Desktop <span id="appVer"></span></span></div>
     </div>
-    <nav id="nav">
-      <button data-page="home" class="active"><svg class="i"><use href="#i-home"/></svg>Home<span class="badge" id="navUpdate" hidden>1</span></button>
+    <nav id="nav" data-part="nav">
+      <button data-part="nav-item" data-page="home" class="active"><svg class="i"><use href="#i-home"/></svg>Home<span class="badge" id="navUpdate" hidden>1</span></button>
       <hr>
-      <button data-page="profiles"><svg class="i"><use href="#i-layers"/></svg>Profiles</button>
-      <button data-page="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions<span class="badge" id="navExt" hidden></span></button>
-      <button data-page="aiapps"><svg class="i"><use href="#i-chip"/></svg>AI apps</button>
+      <button data-part="nav-item" data-page="profiles"><svg class="i"><use href="#i-layers"/></svg>Profiles</button>
+      <button data-part="nav-item" data-page="extensions"><svg class="i"><use href="#i-puzzle"/></svg>Extensions<span class="badge" id="navExt" hidden></span></button>
+      <button data-part="nav-item" data-page="aiapps"><svg class="i"><use href="#i-chip"/></svg>AI apps</button>
       <hr>
-      <button data-page="backups"><svg class="i"><use href="#i-archive"/></svg>Backups</button>
-      <button data-page="migrate"><svg class="i"><use href="#i-swap"/></svg>Migrate data</button>
-      <button data-page="maintenance"><svg class="i"><use href="#i-wrench"/></svg>Tools</button>
-      <button data-page="settings" class="nav-end"><svg class="i"><use href="#i-sliders"/></svg>Settings</button>
+      <button data-part="nav-item" data-page="backups"><svg class="i"><use href="#i-archive"/></svg>Backups</button>
+      <button data-part="nav-item" data-page="migrate"><svg class="i"><use href="#i-swap"/></svg>Migrate data</button>
+      <button data-part="nav-item" data-page="maintenance"><svg class="i"><use href="#i-wrench"/></svg>Tools</button>
+      <button data-part="nav-item" data-page="settings" class="nav-end"><svg class="i"><use href="#i-sliders"/></svg>Settings</button>
     </nav>
-    <div class="side-foot">
+    <div class="side-foot" data-part="sidebar-footer">
       <button data-link="docs" title="SillyTavern documentation" aria-label="SillyTavern documentation"><svg class="i"><use href="#i-book"/></svg></button>
       <button data-link="discord" title="Discord" aria-label="Discord"><svg class="i"><use href="#i-chat"/></svg></button>
       <button data-link="reddit" title="r/SillyTavernAI" aria-label="r/SillyTavernAI"><svg class="i"><use href="#i-users"/></svg></button>
@@ -514,18 +574,18 @@
     </div>
   </aside>
 
-  <main>
-    <header>
-      <h1 id="pageTitle">Home</h1>
+  <main data-part="main">
+    <header data-part="header">
+      <h1 id="pageTitle" data-part="page-title">Home</h1>
       <label class="hdr-profile" title="Profile: which SillyTavern folder the app runs"><svg class="i"><use href="#i-layers"/></svg><select id="hdrProfile" data-task></select></label>
-      <div class="pill"><span class="dot" id="dot"></span><span id="statusText">Server stopped</span></div>
-      <button class="btn sm" id="btnPower"><svg class="i"><use href="#i-play"/></svg><span>Start</span></button>
+      <div class="pill" data-part="server-status"><span class="dot" id="dot"></span><span id="statusText">Server stopped</span></div>
+      <button class="btn sm" id="btnPower" data-part="power-button"><svg class="i"><use href="#i-play"/></svg><span>Start</span></button>
       <button class="btn sm ghost lang-btn" data-lang-open title="Language"><svg class="i"><use href="#i-globe"/></svg><span data-lang-name translate="no"></span></button>
     </header>
-    <div class="busy" id="busy"><div class="spin"></div><span id="busyText"></span></div>
+    <div class="busy" id="busy" data-part="busy-bar"><div class="spin"></div><span id="busyText"></span></div>
 
     <!-- ===== Home ===== -->
-    <section class="page show" id="page-home">
+    <section class="page show" data-part="page" id="page-home">
       <div class="stack">
         <div class="card" id="appUpdCard" hidden>
           <h2>SillyTavern Desktop <span id="appUpdVer"></span> is available<button class="link act" data-link="desktopReleases">Release page</button></h2>
@@ -610,7 +670,7 @@
     </section>
 
     <!-- ===== Profiles ===== -->
-    <section class="page" id="page-profiles">
+    <section class="page" data-part="page" id="page-profiles">
       <p class="lead">Each profile is a SillyTavern folder with its own chats, characters and settings.</p>
       <div class="stack">
         <div class="card">
@@ -665,7 +725,7 @@
     </section>
 
     <!-- ===== Migrate ===== -->
-    <section class="page" id="page-migrate">
+    <section class="page" data-part="page" id="page-migrate">
       <p class="lead">The source is never changed, and every migration can be undone.</p>
       <div class="stack">
         <div class="card stack">
@@ -734,7 +794,7 @@
     </section>
 
     <!-- ===== Backups ===== -->
-    <section class="page" id="page-backups">
+    <section class="page" data-part="page" id="page-backups">
       <p class="lead">Restoring a backup never deletes anything: your current data is moved aside first.</p>
       <h3 class="set-h">Saved backups <span class="tip" tabindex="0" role="note" aria-label="A backup is a zip of your data folder: characters, chats, settings, presets and extensions."><svg class="i"><use href="#i-info"/></svg></span>
         <span class="act">
@@ -768,7 +828,7 @@
     </section>
 
     <!-- ===== Extensions ===== -->
-    <section class="page" id="page-extensions">
+    <section class="page" data-part="page" id="page-extensions">
       <div class="seg" id="extTabs" style="width:max-content;margin-bottom:14px">
         <button data-ext-tab="st" class="on" translate="no">SillyTavern</button>
         <button data-ext-tab="desktop">Desktop add-ons</button>
@@ -854,7 +914,7 @@
     </section>
 
     <!-- ===== Maintenance ===== -->
-    <section class="page" id="page-maintenance">
+    <section class="page" data-part="page" id="page-maintenance">
       <h3 class="set-h">Health check<span class="act"><button class="btn sm ghost" id="btnHealth"><svg class="i"><use href="#i-refresh"/></svg>Run again</button></span></h3>
       <div class="set-group set-free"><div class="list" id="healthList"></div></div>
 
@@ -932,7 +992,7 @@
     </section>
 
     <!-- ===== AI apps ===== -->
-    <section class="page" id="page-aiapps">
+    <section class="page" data-part="page" id="page-aiapps">
       <div class="stack">
         <div class="row ai-top">
           <div class="seg" id="aiGroup">
@@ -990,7 +1050,7 @@
 
 
     <!-- ===== Settings ===== -->
-    <section class="page" id="page-settings">
+    <section class="page" data-part="page" id="page-settings">
       <div class="set-top">
         <div class="seg set-tabs" id="setTabsBar" role="tablist">
           <button data-pane="look" class="on" role="tab" aria-selected="true">Appearance</button>
@@ -1250,7 +1310,7 @@
     </section>
 
     <!-- ===== Console (docked under every page) ===== -->
-    <section class="dock" id="dock">
+    <section class="dock" id="dock" data-part="console-dock">
       <div class="dock-grip" id="dockGrip" title="Drag to resize"></div>
       <div class="dock-bar">
         <button class="dock-toggle" id="dockToggle" aria-controls="console"><svg class="i"><use href="#i-chev"/></svg><svg class="i"><use href="#i-terminal"/></svg>Console<span class="badge" id="dockProblems" hidden></span></button>
@@ -1265,7 +1325,7 @@
           <button class="btn sm ghost icon" id="btnDockMax" title="Bigger" aria-label="Bigger"><svg class="i"><use href="#i-max"/></svg></button>
         </div>
       </div>
-      <div id="console"></div>
+      <div id="console" data-part="console"></div>
     </section>
   </main>
 
@@ -1310,7 +1370,7 @@
   </div>
 
   <!-- ===== Download SillyTavern ===== -->
-  <div class="modal" id="dlModal">
+  <div class="modal" data-part="dialog" id="dlModal">
     <div class="card stack">
       <h2>Download SillyTavern<button class="btn sm ghost act" id="btnDlClose">Close</button></h2>
       <p class="muted">Into a new folder, with its own profile. Your current SillyTavern is not touched.</p>
@@ -1354,7 +1414,7 @@
   </div>
 
   <!-- ===== Extension review (update all, install from a Kit) ===== -->
-  <div class="modal" id="xModal">
+  <div class="modal" data-part="dialog" id="xModal">
     <div class="card stack">
       <h2><span id="xTitle"></span><button class="btn sm ghost act" id="btnXClose">Close</button></h2>
       <p class="muted" id="xLead"></p>
@@ -1365,7 +1425,7 @@
   </div>
 
   <!-- ===== Import cards, lorebooks, presets ===== -->
-  <div class="modal" id="impModal">
+  <div class="modal" data-part="dialog" id="impModal">
     <div class="card stack">
       <h2>Import into SillyTavern<button class="btn sm ghost act" id="btnImpClose">Close</button></h2>
       <p class="muted">Names that are already taken get a number.</p>
@@ -1377,7 +1437,7 @@
   <div class="drop-hint" id="dropHint"><div><svg class="i"><use href="#i-download"/></svg>Drop character cards, lorebooks or presets to import them</div></div>
 
   <!-- ===== Find extensions (Tavernary catalog) ===== -->
-  <div class="modal" id="xfModal">
+  <div class="modal" data-part="dialog" id="xfModal">
     <div class="card stack">
       <h2>Find extensions<button class="btn sm ghost act" id="btnXfClose">Close</button></h2>
       <input type="search" id="xfSearch" placeholder="What should it do? e.g. memory, image generation, tracker…">
@@ -1387,7 +1447,7 @@
   </div>
 
   <!-- ===== What changed / history ===== -->
-  <div class="modal" id="chgModal">
+  <div class="modal" data-part="dialog" id="chgModal">
     <div class="card stack">
       <h2><span id="chgTitle"></span><span class="act row"><button class="btn sm ghost" id="btnChgBack" hidden>Back</button><button class="btn sm ghost" id="btnChgClose">Close</button></span></h2>
       <p class="muted" id="chgSub"></p>
@@ -1477,10 +1537,20 @@
   // The page stays open across a language change (which reloads the launcher).
   const remember = (k, v) => { try { sessionStorage.setItem(k, v); } catch { /* not available */ } };
   const recall = k => { try { return sessionStorage.getItem(k); } catch { return null; } };
+  // What a theme's CSS can react to: <html data-page="home" data-server="stopped" …>.
+  const rootState = document.documentElement.dataset;
+  Object.assign(rootState, { page: 'home', server: 'stopped', busy: 'no', update: 'none' });
+  function markTime() {
+    const now = new Date(), h = now.getHours();
+    rootState.time = h < 5 ? 'night' : h < 11 ? 'morning' : h < 17 ? 'day' : h < 21 ? 'evening' : 'night';
+    setTimeout(markTime, (60 - now.getMinutes()) * 60000 - now.getSeconds() * 1000 + 500);
+  }
+  markTime();
   function go(page) {
     const [name, pane] = page.split(':');
     page = name;
     state.page = page;
+    rootState.page = page;
     remember('page', page);
     document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('show', p.id === `page-${page}`));
@@ -1541,6 +1611,7 @@
     return m < 1 ? T('just now') : m < 60 ? T('{m} min', { m }) : T('{h} h {m} min', { h: Math.floor(m / 60), m: m % 60 });
   }
   function renderStatus() {
+    rootState.server = state.running ? 'running' : 'stopped';
     $('dot').classList.toggle('on', state.running);
     $('statusText').textContent = state.running ? `${T('Running')} · ${uptime()}` : T('Server stopped');
     $('btnPower').innerHTML = state.running ? `${icon('stop')}<span>${T('Stop')}</span>` : `${icon('play')}<span>${T('Start')}</span>`;
@@ -1555,6 +1626,7 @@
   }
   function setBusy(label) {
     state.busy = label;
+    rootState.busy = label ? 'yes' : 'no';
     $('busy').classList.toggle('show', !!label);
     $('busyText').textContent = label ? T('{task}…', { task: label }) : '';
     document.querySelectorAll('[data-task]').forEach(b => b.disabled = !!label);
@@ -1602,6 +1674,7 @@
       upd.hidden = true;
     }
     const nb = $('navUpdate');
+    rootState.update = info.behind > 0 ? 'available' : 'none';
     nb.hidden = !(info.behind > 0);
     nb.textContent = '1';
   }
