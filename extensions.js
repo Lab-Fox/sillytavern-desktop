@@ -208,12 +208,12 @@ function makeApi(id, entry) {
             add: words => forSessions(s => words.forEach(w => s.addWordToSpellCheckerDictionary(String(w)))),
             remove: words => forSessions(s => words.forEach(w => s.removeWordFromSpellCheckerDictionary(String(w)))),
             list: () => session.defaultSession.listWordsInSpellCheckerDictionary(),
-            // { engine: in use now, chosen: after the next start } — 'windows' | 'builtin'
-            engine: () => host.spellEngine(),
-            // Returns { engine, restart } (restart: the app must restart to switch).
-            setEngine: engine => host.setSpellEngine(String(engine)),
+            // Windows' spellchecker is the only one left (Electron 41 has no other).
+            // Add-ons already released call these, so they keep answering.
+            engine: () => ({ engine: 'windows', chosen: 'windows' }),
+            setEngine: () => ({ engine: 'windows', restart: false }),
         }),
-        // Restart the whole app (after setEngine, for example). Asks nothing.
+        // Restart the whole app. Asks nothing.
         app: Object.freeze({ relaunch: () => host.relaunch() }),
         // Items under "Extensions" in the SillyTavern window's menu.
         menu: Object.freeze({

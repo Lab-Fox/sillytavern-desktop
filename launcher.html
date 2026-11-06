@@ -1266,15 +1266,11 @@
             <div class="set-text"><b>Keyboard shortcuts</b> <span class="tip" tabindex="0" role="note" aria-label="F11: full screen (move the mouse to the top edge for the bar). Ctrl+T: new tab. Ctrl+W: close tab. Ctrl+Tab or Ctrl+PgUp/PgDn: switch tabs. Ctrl+Shift+PgUp/PgDn: move a tab. Drag a tab out of the bar for a window of its own."><svg class="i"><use href="#i-info"/></svg></span></div>
           </div>
         </div>
-        <h3 class="set-h">Right-click and spelling</h3>
+        <h3 class="set-h">Right-click menu</h3>
         <div class="set-group">
           <div class="set-row" data-k="search right-click google duckduckgo bing">
             <div class="set-text"><b>Search selected text with</b></div>
             <div class="set-ctl"><select id="setSearchEngine"><option value="google">Google</option><option value="duckduckgo">DuckDuckGo</option><option value="bing">Bing</option></select></div>
-          </div>
-          <div class="set-row" data-k="spellchecker spelling red underline dictionary">
-            <div class="set-text"><b>Spellchecker</b> <span class="tip" tabindex="0" role="note" aria-label="Windows' own only marks mistakes in languages installed in Windows. The built-in one downloads an English dictionary once from Google."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc" id="setSpellNote" hidden>Takes effect after a restart.</span></div>
-            <div class="set-ctl"><select id="setSpell"><option value="windows">Windows' own</option><option value="builtin">Built-in English</option></select><button class="btn sm" id="btnSpellRestart" hidden><svg class="i"><use href="#i-refresh"/></svg>Restart now</button></div>
           </div>
           <label class="set-row" data-k="inspect element developer tools devtools">
             <div class="set-text"><b>"Inspect element" in the right-click menu</b> <span class="tip" tabindex="0" role="note" aria-label="Opens the developer tools on what you clicked. For making themes, userscripts and extensions."><svg class="i"><use href="#i-info"/></svg></span></div>
@@ -2448,7 +2444,6 @@
     $('setThemeWatch').checked = !!current.themeWatch;
     $('setInspect').checked = !!current.inspectMenu;
     renderPortLock();
-    loadSpellEngine();
     renderLangForm();
     renderLogFontForm();
     renderUiFontForm();
@@ -2470,13 +2465,6 @@
   $('setSearchEngine').onchange = () => saveNow({ searchEngine: $('setSearchEngine').value });
   $('setThemeMotion').innerHTML = [['on', T('On')], ['focused', T('Only while this window is in use')], ['off', T('Off')]].map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
   $('setThemeMotion').onchange = async () => { await saveNow({ themeAnimations: $('setThemeMotion').value }); updateMotion(); };
-  async function loadSpellEngine() {
-    const s = await D.spellEngine();
-    $('setSpell').value = s.chosen;
-    $('btnSpellRestart').hidden = $('setSpellNote').hidden = s.chosen === s.engine;
-  }
-  $('setSpell').onchange = async () => { await D.setSpellEngine($('setSpell').value); loadSpellEngine(); };
-  $('btnSpellRestart').onclick = () => D.relaunch();
   $('btnSetReset').onclick = async () => {
     if (!(await D.settingsReset())) return;
     current = (await D.getState()).settings;

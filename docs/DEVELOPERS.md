@@ -150,7 +150,7 @@ Like the exe, `npm start` finds your SillyTavern install by itself or shows the 
 - [x] Preview versions of the app, SillyTavern on another computer, a clearer pixel font and font/size settings
 - [x] Right-click menu, dragging tabs (also into their own window), installing desktop extensions from a list
 - [x] Chrome extensions from the Chrome Web Store
-- [x] Writing helper add-on: dictionary, suggestions, autocorrect; built-in English spellchecker
+- [x] Writing helper add-on: dictionary, suggestions, autocorrect
 - [x] Languages: English, Indonesian, Japanese, Korean, Chinese (Simplified and Traditional); more from contributors
 - [x] Launcher.bat's SillyTavern tools: remote link, Tailscale, HTTPS, server options, start with SillyTavern, PC check, troubleshooting
 - [x] AI apps for text: KoboldCpp, llama.cpp, Text generation web UI, TabbyAPI, with model downloads

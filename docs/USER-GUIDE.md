@@ -384,7 +384,6 @@ Settings has six tabs: **Appearance**, **Start & updates**, **Window**, **Server
 | Port | `8000` | The port SillyTavern runs on |
 | Phone & tablet | Off | Let devices on your Wi-Fi open SillyTavern, with an optional password ([how](#on-your-phone-or-tablet)) |
 | Window layer, tabs | Normal, on | The SillyTavern window's defaults (also in its right-click menu) |
-| Spellchecker | Windows' own | **Built-in English** marks mistakes on every PC (Windows' own only does for languages installed in Windows). Needs a restart |
 | Right-click search, Inspect element | Google, off | Which site **Search for "…"** uses, and an **Inspect element** entry (developer tools) for making themes and extensions |
 | App font, Size | Departure Mono, 100 % | The font of the launcher and the SillyTavern window's top bar, and the launcher's size |
 | Console font | Pixel | Any font on your PC, and its size |

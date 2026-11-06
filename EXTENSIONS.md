@@ -102,7 +102,7 @@ export function deactivate() {}
 | `api.contextMenu.add({ label, contexts, when, click })` | An entry in the right-click menu of SillyTavern pages. See below. Returns `{ remove() }` |
 | `api.download(url, { file, sha256, maxBytes })` | Downloads an `https` file into your `downloads/` folder (`file` is its name there, folders allowed). Checks `sha256` if given; refuses files over `maxBytes` (default 200 MiB). Returns a promise of `{ path, bytes, sha256 }` |
 | `api.spellcheck.add(words)` / `.remove(words)` / `.list()` | Words the spellchecker (the red underline) accepts, in every SillyTavern page. They stay after your extension turns off: remove them yourself if needed |
-| `api.spellcheck.engine()` / `.setEngine('windows' \| 'builtin')` | Which spellchecker the app uses: `{ engine, chosen }` (in use now / after the next start). `setEngine` returns `{ engine, restart }` |
+| `api.spellcheck.engine()` / `.setEngine()` | Deprecated: the app always uses Windows' spellchecker now. `engine()` returns `{ engine: 'windows', chosen: 'windows' }`, and `setEngine()` changes nothing and returns `{ engine: 'windows', restart: false }` |
 | `api.app.relaunch()` | Restarts the app (ask the user first) |
 | `api.handle(channel, fn)` | Lets your launcher panel call `fn` with `ext.invoke(channel, ...args)`. Return a value (or a promise) to answer |
 
