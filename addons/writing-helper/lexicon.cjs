@@ -175,11 +175,10 @@ const PAIR_WEIGHT = 3.5, PAIR_SCALE = 100;
 // Typo-corrected word starts come after real ones of about the same score.
 const FUZZY_EXTRA = 1.2;
 
-// Contractions people type without the apostrophe. Only ones that are never
-// a real word on their own ("cant", "wont", "its", "were", "ill", "id",
-// "well", "lets", "hell", "shell", "wed" are words, so they're left alone).
+// Contractions people type without the apostrophe. "cant" and "wont" are
+// words in the dictionary too, but nobody means those in a story.
 const CONTRACTIONS = {
-    dont: "don't", doesnt: "doesn't", didnt: "didn't", isnt: "isn't", wasnt: "wasn't", arent: "aren't", werent: "weren't",
+    cant: "can't", wont: "won't", dont: "don't", doesnt: "doesn't", didnt: "didn't", isnt: "isn't", wasnt: "wasn't", arent: "aren't", werent: "weren't",
     havent: "haven't", hasnt: "hasn't", hadnt: "hadn't", wouldnt: "wouldn't", couldnt: "couldn't", shouldnt: "shouldn't",
     mustnt: "mustn't", neednt: "needn't", aint: "ain't", im: "I'm", ive: "I've", youre: "you're", youve: "you've",
     youll: "you'll", youd: "you'd", theyre: "they're", theyve: "they've", theyll: "they'll", theyd: "they'd",
@@ -187,6 +186,19 @@ const CONTRACTIONS = {
     thats: "that's", hes: "he's", shes: "she's", yall: "y'all", wheres: "where's", whos: "who's",
     hows: "how's", theres: "there's", heres: "here's", i: 'I', "i'm": "I'm", "i've": "I've", "i'll": "I'll", "i'd": "I'd",
 };
+
+// Real words that may be a contraction without its apostrophe: offered next
+// to the word, never changed on their own.
+const MAYBE_SHORT = { its: "it's", lets: "let's", were: "we're", well: "we'll", ill: "I'll", id: "I'd", hed: "he'd", shed: "she'd", wed: "we'd", shell: "she'll", hell: "he'll" };
+
+// The frequency list splits contractions ("can" + "'t"), so without this list
+// none of them would ever be suggested. `SHORT_SCORE`: how common, for the
+// ones that can't be told from the word before the apostrophe.
+const SHORT = ["can't", "don't", "won't", "isn't", "aren't", "wasn't", "weren't", "hasn't", "haven't", "hadn't", "doesn't", "didn't", "wouldn't", "couldn't", "shouldn't", "mustn't", "needn't", "shan't", "ain't",
+    "I'm", "I've", "I'll", "I'd", "you're", "you've", "you'll", "you'd", "he's", "he'll", "he'd", "she's", "she'll", "she'd", "it's", "it'll", "it'd", "we're", "we've", "we'll", "we'd",
+    "they're", "they've", "they'll", "they'd", "that's", "that'll", "that'd", "there's", "there'll", "here's", "what's", "what'll", "who's", "who'll", "who'd", "where's", "how's", "when's", "why's",
+    "let's", "y'all", "ma'am", "o'clock", "would've", "could've", "should've", "might've", "must've"];
+const SHORT_SCORE = { "can't": 6.3, "won't": 5.9, "ain't": 5, "let's": 5.6, "y'all": 4.3, "ma'am": 4.7, "o'clock": 4.7, "shan't": 3.2, "i'm": 6.4, "i'll": 6, "i've": 5.9, "i'd": 5.7 };
 
 // Words run together or split wrong, that a one-letter fix can't repair.
 const FIXES = {
@@ -197,15 +209,18 @@ const FIXES = {
 // ---------- the dictionary ----------
 class Lexicon {
     // sources: { words: Map word→nosuggest (SCOWL), freq: Map lower→count,
-    //            adult: [words], adultOn: bool,
+    //            adult: [words], adultOn: bool, common: [words] (packs/common.txt),
     //            scene: { strong: [words], mild: [words] } (packs/adult-context.txt) }
-    constructor({ words, freq, adult = [], adultOn = true, scene = { strong: [], mild: [] } }) {
+    constructor({ words, freq, adult = [], adultOn = true, common = [], scene = { strong: [], mild: [] } }) {
         // lower → its spellings: '' (only the lowercase one), a string (one
         // other spelling, like "London") or an array. Compact on purpose:
         // with objects per word this took ~125 MB in the app.
         this.base = new Map();
         this.nosug = new Set();  // lower: never suggested (slurs)
         for (const [w, ns] of words) this.addBase(w, ns && !VULGAR.test(w));
+        for (const w of common) this.addBase(w, false);
+        for (const w of SHORT) if (!this.base.has(w.toLowerCase())) this.addBase(w, false);
+        this.common = common.map(w => w.toLowerCase());
         this.adult = new Set(adultOn ? adult.map(w => w.toLowerCase()) : []);
         if (adultOn) for (const w of adult) this.addBase(w, false);
         // Explicit words: the adult pack plus the strong scene words (shown in
@@ -291,6 +306,15 @@ class Lexicon {
             if (!this.base.has(l) || this.nosug.has(l) || this.blocked.has(l)) continue;
             add(l, this.preferred(l), Math.log10(count + 1));
         }
+        // Contractions: as common as the word they start with.
+        for (const w of SHORT) {
+            const l = w.toLowerCase();
+            if (this.blocked.has(l)) continue;
+            const stem = this.freq.get(l.slice(0, l.indexOf("'"))) || 1000;
+            add(l, w, SHORT_SCORE[l] ?? Math.min(6.4, Math.log10(stem + 1) - (l.endsWith("n't") ? 0.1 : 0.7)));
+        }
+        // Everyday words the word list lacks, however rare in subtitles.
+        for (const l of this.common) if (!this.blocked.has(l)) add(l, this.preferred(l), Math.max(3.4, Math.log10((this.freq.get(l) || 0) + 1)));
         // Adult words: at least about as likely as an everyday word (subtitles
         // rarely have them, or not at all), so a rare count doesn't sink one.
         for (const l of this.adult) if (this.base.has(l) && !this.nosug.has(l) && !this.blocked.has(l)) add(l, this.preferred(l), Math.max(3.6, Math.log10((this.freq.get(l) || 0) + 1)), true);
@@ -300,6 +324,9 @@ class Lexicon {
         for (const [l, e] of this.fresh) if (e.n >= 2 && !this.blocked.has(l) && !vocab.has(l)) add(l, e.form, 4.3 + Math.min(2, Math.log10(e.n + 1)), true);
         this.vocab = vocab;
         this.sorted = [...vocab.keys()].sort();
+        // Every other word of the dictionary: too rare to rank, but offered
+        // when nothing better starts like that ("tentatively", "sheepishly").
+        this.rare ||= [...this.base.keys()].filter(l => l.length > 2 && !/\d/.test(l)).sort();
         // Deletes (distance 1) of every suggestable word, for corrections.
         // A string for one word, an array for more (most have one).
         this.del = new Map();
@@ -394,9 +421,9 @@ class Lexicon {
         const gnext = prev ? this.general.get(pl) : null;
         const gtotal = gnext ? gnext.total : 1;
         const found = new Map();
-        const consider = (l, base, penalty = 0) => {
+        const consider = (l, base, penalty = 0, rare = false) => {
             if (this.blocked.has(l)) return;
-            const v = vocab.get(l), c = this.ctxWord(l);
+            const v = rare ? [this.preferred(l), 0, false] : vocab.get(l), c = this.ctxWord(l);
             if (!v && !c?.story) return;
             let score = base - penalty;
             if (c) score += 0.6 + 0.35 * Math.log2(1 + c.n);
@@ -430,6 +457,17 @@ class Lexicon {
             };
             scan(this.sorted, p, 0);
             for (const part of [this.ctxBase, this.ctxNear]) if (part) scan(part.unknown, p, 0);
+            if (p.length >= 3) {
+                const list = this.rare;
+                let lo = 0, hi = list.length;
+                while (lo < hi) { const m = (lo + hi) >> 1; if (list[m] < p) lo = m + 1; else hi = m; }
+                for (let i = lo, k = 0; i < list.length && list[i].startsWith(p) && k < 1500; i++, k++) {
+                    const l = list[i];
+                    // A possessive ("dog's") only once the apostrophe is typed.
+                    if (l === p || vocab.has(l) || this.nosug.has(l) || (l.includes("'") && !p.includes("'"))) continue;
+                    consider(l, (p.includes("'") ? 5 : 1.4) + this.bonus(l) - (l.length - p.length) * 0.02, 0, true);
+                }
+            }
             if (fuzzy) for (const [v, cost] of variants(p)) { scan(this.sorted, v, cost + FUZZY_EXTRA, 60); for (const part of [this.ctxBase, this.ctxNear]) if (part) scan(part.unknown, v, cost + FUZZY_EXTRA, 20); }
         }
         const all = [...found.values()];
@@ -445,7 +483,8 @@ class Lexicon {
     // opts: { near (text before the cursor), chat (last messages on screen),
     // autocorrect, adultRow, sceneBoost }
     suggest(prefix, prev = '', { near = '', chat = '', autocorrect = true, adultRow = false, sceneBoost = false } = {}) {
-        const p = String(prefix || '');
+        const p = String(prefix || '').replace(/’/g, "'");
+        prev = String(prev || '').replace(/’/g, "'");
         // Not a word: a run of letters without spaces (Japanese, a pasted code).
         // The typo search below grows fast with the length of the word.
         if (p.length > 30) return { words: [], fixes: 0, adult: [], explicit: false };
@@ -455,6 +494,12 @@ class Lexicon {
         const unknown = p.length >= 3 && !this.known(p) && !this.ctxWord(p.toLowerCase())?.story;
         const rows = this.completeRows(p, prev, 3, { explicit, adultRow, fuzzy: unknown });
         const extra = { adult: rows.adult, explicit: explicit >= 0.5 };
+        const l = p.toLowerCase();
+        // "cant" counts as a word, but can't is what was meant.
+        if (CONTRACTIONS[l] && !unknown) {
+            const sure = this.autocorrect(p, prev);
+            if (sure) return { words: [sure, ...rows.words.filter(w => w !== sure)].slice(0, 3), fixes: 1, ...extra };
+        }
         if (unknown) {
             // What a space would correct it to comes first ("teh" → the, "dont" → don't).
             const sure = autocorrect ? this.autocorrect(p, prev) : null;
@@ -464,6 +509,8 @@ class Lexicon {
             }
             if (sure) return { words: [sure, ...rows.words.filter(w => w !== sure)].slice(0, 3), fixes: 1, ...extra };
         }
+        const short = MAYBE_SHORT[l] && !this.names.has(l) && !this.user.has(l) && !this.blocked.has(MAYBE_SHORT[l].toLowerCase()) ? matchCase(p, MAYBE_SHORT[l]) : null;
+        if (short) return { words: [short, ...rows.words.filter(w => w !== short)].slice(0, 3), fixes: 0, ...extra };
         return { words: rows.words, fixes: 0, ...extra };
     }
 

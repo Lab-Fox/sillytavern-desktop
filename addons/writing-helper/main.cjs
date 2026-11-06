@@ -120,7 +120,7 @@ async function build() {
         for (const w of pack('roleplay.txt')) words.set(w, false);
         await breathe();
         const s = settings();
-        const next = new L.Lexicon({ words, freq: L.parseFreq(freqText), adult: pack('adult.txt'), adultOn: s.adult, scene: scenePack() });
+        const next = new L.Lexicon({ words, freq: L.parseFreq(freqText), adult: pack('adult.txt'), adultOn: s.adult, common: [...pack('roleplay.txt'), ...pack('common.txt')], scene: scenePack() });
         await breathe();
         next.setUser(userWords.words);
         for (const w of userWords.ignored) next.ignored.add(w.toLowerCase());
@@ -174,13 +174,56 @@ async function scanNames() {
     lex.setNames(nameList);
 }
 
-// Chromium's red underline: our extra words (packs, your words, names) are
-// spelled right there too. Remembered, so removed words can be taken back out.
+// The red underlines come from Windows' spellchecker, whatever the app's
+// setting says (the switch to Chromium's own one is gone from Electron). It
+// lacks everyday words ("gotta", "kinda"), and a Windows profile can hold a
+// list of words it always rejects ("doctor" and "pregnant" were on one).
+// So it is asked which of the words we know it rejects, and those get added
+// below. Once added it stops rejecting them, so the list only grows: a word
+// that dropped off would be marked wrong again.
+const WINDOWS_CHECK_DAYS = 7;
+function askWindows(words) {
+    return new Promise((resolve, reject) => {
+        const input = userFile('windows-check-in.txt'), output = userFile('windows-check-out.txt');
+        fs.mkdirSync(path.dirname(input), { recursive: true });
+        fs.writeFileSync(input, words.join('\n'));
+        require('child_process').execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'windows-spelling.ps1'), '-In', input, '-Out', output], { windowsHide: true, timeout: 90000 }, err => {
+            let found = null;
+            if (!err) try { found = fs.readFileSync(output, 'utf8').split(/\r?\n/).filter(Boolean); } catch { /* reported below */ }
+            for (const f of [input, output]) fs.rmSync(f, { force: true });
+            if (found) resolve(found); else reject(err || new Error('no answer'));
+        });
+    });
+}
+async function windowsRejected() {
+    const file = userFile('windows-rejected.json');
+    const saved = readJson(file, null) || { at: 0, words: [] };
+    if (process.platform !== 'win32' || !lex || Date.now() - saved.at < WINDOWS_CHECK_DAYS * 864e5) return saved.words;
+    // What gets suggested, and what you write (with or without a capital).
+    const words = new Set();
+    for (const [l, v] of lex.suggestable()) if (!/\s/.test(v[0])) { words.add(v[0]); words.add(cap(v[0])); if (l !== v[0].toLowerCase()) words.add(l); }
+    for (const l of lex.learned.keys()) if (lex.known(l)) { words.add(l); words.add(cap(l)); }
+    try {
+        const merged = [...new Set([...saved.words, ...await askWindows([...words])])];
+        writeJson(file, { at: Date.now(), words: merged });
+        api.log(`Windows' spellchecker rejects ${merged.length} words we know; added them.`);
+        return merged;
+    } catch (e) {
+        api.log(`Could not ask Windows' spellchecker: ${e.message}`);
+        return saved.words;
+    }
+}
+
+// The red underline: our extra words (packs, your words, names) are spelled
+// right there too. Remembered, so removed words can be taken back out.
 async function syncWords() {
     if (!lex) return;
-    const want = new Set();
+    const rejected = await windowsRejected();
+    if (!lex) return;
+    // Only what still counts as a word (not the adult pack after turning it off).
+    const want = new Set(rejected.filter(w => lex.known(w)));
     const s = settings();
-    for (const w of [...pack('roleplay.txt'), ...(s.adult ? pack('adult.txt') : [])]) { want.add(w); want.add(cap(w)); }
+    for (const w of [...pack('roleplay.txt'), ...pack('common.txt'), ...(s.adult ? pack('adult.txt') : [])]) { want.add(w); want.add(cap(w)); }
     for (const w of userWords.words) { want.add(w); if (w === w.toLowerCase()) want.add(cap(w)); }
     for (const w of userWords.ignored) want.add(w);
     for (const n of nameList) want.add(n);

@@ -36,8 +36,7 @@ panel.innerHTML = `
     <div class="set-row set-free"><span class="set-desc" id="whLearn"></span>
       <div class="row" style="margin-top:8px"><button class="btn sm" id="whChats">Learn from my chats</button><button class="btn sm ghost" id="whForget">Forget what it learned</button></div></div>`)}
   ${box('whEngineBox', 'Red underlines', `
-    <div class="set-row set-free"><span class="set-desc" id="whEngine"></span>
-      <div class="row" style="margin-top:8px"><button class="btn sm" id="whEngineBtn" hidden></button><button class="btn sm primary" id="whRestart" hidden>Restart now</button></div></div>`, ` ${tip('The spellchecker marks misspelled words in SillyTavern. Your words, the packs and the names count as spelled right in both kinds.')}`)}
+    <div class="set-row set-free"><span class="set-desc">Windows' spellchecker marks misspelled words in SillyTavern. This add-on tells it about your words, the packs, the names and the everyday words it wrongly rejects.</span></div>`)}
   ${box('whDictBox', 'My dictionary', `
     <div class="set-row set-free">
       <div class="row">
@@ -187,15 +186,6 @@ async function load() {
     $('whKeysBox').hidden = s.mode !== 'helper' || !s.suggestions;
     renderKeys();
 
-    const e = state.engine;
-    const builtin = e.chosen === 'builtin';
-    $('whEngine').textContent = e.engine === 'builtin' ? 'Using the built-in English spellchecker.' : 'Using Windows\' spellchecker: it marks mistakes only in languages installed in Windows, so on many PCs English isn\'t underlined at all.';
-    $('whEngineBtn').hidden = false;
-    $('whEngineBtn').textContent = builtin ? 'Use Windows\' spellchecker' : 'Use the built-in English spellchecker';
-    $('whEngineBtn').onclick = async () => { await ext.invoke('engine', builtin ? 'windows' : 'builtin'); load(); };
-    $('whRestart').hidden = e.chosen === e.engine;
-    $('whRestart').textContent = 'Restart now to switch';
-
     const c = state.chats;
     $('whLearn').textContent = `Knows ${state.learned.toLocaleString('en-US')} of your words and ${state.pairs.toLocaleString('en-US')} word pairs`
         + (c && (c.messages || c.characters) ? `, including ${c.messages.toLocaleString('en-US')} of your messages${c.characters ? ` and ${c.characters.toLocaleString('en-US')} of the characters'` : ''} from ${c.files} chats.` : '.')
@@ -228,7 +218,6 @@ $('whNew').onkeydown = e => { if (e.key === 'Enter') $('whAdd').click(); };
 $('whSearch').oninput = () => renderWords();
 $('whImport').onclick = async () => { const n = await ext.invoke('import'); if (n) renderWords(); };
 $('whExport').onclick = () => ext.invoke('export');
-$('whRestart').onclick = () => ext.invoke('relaunch');
 $('whChats').onclick = async () => { await ext.invoke('learn-chats'); load(); setTimeout(load, 3000); };
 $('whForget').onclick = async () => { await ext.invoke('forget'); load(); };
 panel.querySelectorAll('a[href]').forEach(a => a.onclick = e => { e.preventDefault(); window.desktop?.openUrl(a.href); });
