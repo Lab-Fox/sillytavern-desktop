@@ -17,6 +17,39 @@ const byBar = new Map(); // bar webContents id → StWindow
 const byPage = new Map(); // tab webContents id → StWindow (tabs can move between windows)
 export const windowOf = wc => byPage.get(wc.id) || null;
 
+const MAX_ICON = 64 * 1024;
+const sameOrigin = (a, b) => { try { return new URL(a).origin === new URL(b).origin; } catch { return false; } };
+
+// A tab's icon as a data: URL. The bar is a file: page and can't show it by
+// address: SillyTavern sends Cross-Origin-Resource-Policy: same-origin, and
+// the bar's CSP lists only local http. The tab's own page reads its server's
+// icon, so HTTPS and logins just work; other sites go through its session.
+async function iconData(wc, url) {
+    if (!/^https?:/i.test(url) || wc.isDestroyed()) return '';
+    if (sameOrigin(url, wc.getURL())) {
+        const data = await wc.executeJavaScriptInIsolatedWorld(1000, [{ code: `(async () => {
+            const r = await fetch(${JSON.stringify(url)});
+            const b = r.ok ? await r.blob() : null;
+            if (!b || !b.type.startsWith('image/') || b.size > ${MAX_ICON}) return '';
+            return new Promise(done => {
+                const f = new FileReader();
+                f.onload = () => done(f.result);
+                f.onerror = () => done('');
+                f.readAsDataURL(b);
+            });
+        })()` }]);
+        return typeof data === 'string' && data.startsWith('data:image/') ? data : '';
+    }
+    const r = await wc.session.fetch(url);
+    const type = (r.headers.get('content-type') || '').split(';')[0].trim();
+    if (!r.ok || !type.startsWith('image/') || Number(r.headers.get('content-length')) > MAX_ICON) {
+        r.body?.cancel().catch(() => {});
+        return '';
+    }
+    const bytes = Buffer.from(await r.arrayBuffer());
+    return bytes.length > MAX_ICON ? '' : `data:${type};base64,${bytes.toString('base64')}`;
+}
+
 export class StWindow {
     // opts: instance (the SillyTavern its first tab shows), width, height,
     //       fullScreen, layer, colors, icon, tabsEnabled() → bool,
@@ -186,7 +219,7 @@ export class StWindow {
             if (tab === this.active) this.win.setTitle(windowTitle(tab));
             this.push();
         });
-        on('page-favicon-updated', (_e, icons) => { tab.favicon = icons[0] || ''; this.push(); });
+        on('page-favicon-updated', (_e, icons) => this.setFavicon(tab, icons[0] || ''));
         on('did-start-loading', () => { tab.loading = true; this.push(); });
         on('did-stop-loading', () => { tab.loading = false; if (!tab.title || tab.title === t('Loading…')) tab.title = wc.getTitle() || wc.getURL(); this.push(); });
         on('before-input-event', (e, input) => this.onKey(e, input));
@@ -203,6 +236,18 @@ export class StWindow {
         on('destroyed', () => this.removeTab(tab), true);
         tab.unbind = () => { offs.forEach(f => f()); if (byPage.get(tab.id) === this) byPage.delete(tab.id); };
         this.opts.tabHook?.('bound', tab, this);
+    }
+    // The bar can't load the icon itself (see iconData). The tab may move to
+    // another window while this runs, so the answer goes to its current one.
+    setFavicon(tab, url) {
+        if (tab.faviconUrl === url) return;
+        tab.faviconUrl = url;
+        iconData(tab.view.webContents, url).catch(() => '').then(data => {
+            if (tab.faviconUrl !== url) return; // the page moved on
+            if (!data) tab.faviconUrl = '';     // a later load may try again
+            tab.favicon = data;
+            byPage.get(tab.id)?.push();
+        });
     }
     // Takes a tab out of this window without closing its page (it moves to
     // another window). The window closes when it was the last one.

@@ -151,7 +151,7 @@
     display: flex; align-items: center; gap: 12px; padding: 14px 26px;
     border-bottom: var(--px) solid var(--border); background: var(--header-bg);
   }
-  header h1 { font-size: 22px; font-weight: 700; color: var(--title); letter-spacing: .5px; min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header h1 { font-size: 22px; font-weight: 700; color: var(--title); letter-spacing: .5px; flex: 0 0 auto; white-space: nowrap; }
   .pill {
     margin-left: auto; display: flex; align-items: center; gap: 8px;
     background: var(--panel); padding: 4px 12px; font-size: 14px; color: var(--muted);
@@ -424,10 +424,14 @@
   .path { font-family: var(--mono); font-size: 14px; color: var(--title); background: var(--well); padding: 4px 10px; word-break: break-all; user-select: text; letter-spacing: 0; }
 
   /* ---------- profiles ---------- */
-  .hdr-profile { display: flex; align-items: center; gap: 6px; margin-left: auto; min-width: 70px; flex: 0 1 220px; }
+  .hdr-profile { display: flex; align-items: center; gap: 6px; margin-left: auto; min-width: 70px; flex: 0 1000 220px; }
   .hdr-profile svg.i { color: var(--muted); width: 16px; height: 16px; }
   .hdr-profile select { min-width: 0; padding: 3px 8px; font-size: 14px; text-overflow: ellipsis; }
   header .pill, header .btn { flex-shrink: 0; white-space: nowrap; }
+  /* Out of room: the picker gives way first, then this text (the dot stays). */
+  header .pill { flex-shrink: 1; min-width: 34px; overflow: hidden; }
+  header .pill .dot { flex-shrink: 0; }
+  #statusText { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .hdr-profile + .pill { margin-left: 0; }
 
   /* ---------- AI apps ---------- */

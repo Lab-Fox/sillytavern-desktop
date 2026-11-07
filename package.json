@@ -12,6 +12,7 @@
     "dist": "electron-builder --win portable",
     "dist:installer": "electron-builder --win nsis",
     "dist:all": "electron-builder --win portable nsis",
+    "test": "node tests/theme/tcss.mjs",
     "i18n": "electron tools/i18n-check.mjs"
   },
   "devDependencies": {
@@ -84,7 +85,8 @@
     },
     "portable": {
       "artifactName": "SillyTavern-Desktop.exe",
-      "splashImage": "splash.bmp"
+      "splashImage": "splash.bmp",
+      "unpackDirName": true
     },
     "nsis": {
       "oneClick": true,
