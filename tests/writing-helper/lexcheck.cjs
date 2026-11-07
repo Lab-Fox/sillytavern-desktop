@@ -17,5 +17,22 @@ ok('British colour',lex.known('colour')&&s('colo').words.length>0,JSON.stringify
 lex.setBlocked(["can't"]);ok('blocked contraction stays out',!s('can').words.includes("can't")&&s('cant').words[0]!=="can't",JSON.stringify(s('cant').words));lex.setBlocked([]);
 lex.setBlocked(["it's"]);ok('blocked maybe-short stays out',!s('its').words.includes("it's"));lex.setBlocked([]);
 ok('slur stays out of rare words',!lex.suggest('nigg','',{}).words.some(w=>/^nigg/i.test(w)),JSON.stringify(lex.suggest('nigg','',{}).words));
+// A name (lorebook key) that is also an everyday word must not stop an obvious fix;
+// a real name close to a typo still does.
+ok('teh fixed with no names',lex.autocorrect('teh','said')==='the');
+lex.setNames(['ten','Seraphina']);
+ok('teh fixed when "ten" is a lorebook key',lex.autocorrect('teh','said')==='the',String(lex.autocorrect('teh','said')));
+lex.setNames(['tef','Teo']); // short keys the dictionary lacks
+ok('teh fixed when short unknown names are as close',lex.autocorrect('teh','said')==='the',String(lex.autocorrect('teh','said')));
+lex.setNames([]);
+ok('adult pack rival still stops a guess (cuming)',lex.autocorrect('cuming','said')===null,String(lex.autocorrect('cuming','said')));
+ok('adult pack rival still stops a guess (dik)',lex.autocorrect('dik','said')===null,String(lex.autocorrect('dik','said')));
+lex.setNames(['Seraphina']);
+ok('a typo of a name still becomes the name',lex.autocorrect('seraphna','said')==='Seraphina',String(lex.autocorrect('seraphna','said')));
+lex.setNames([]);
+ok('control: becuase is fixed without the name',lex.autocorrect('becuase','said')==='because',String(lex.autocorrect('becuase','said')));
+lex.setNames(['Becuas']);
+ok('a real name as close still blocks the guess',lex.autocorrect('becuase','said')===null,String(lex.autocorrect('becuase','said')));
+lex.setNames([]);
 let t=performance.now();for(let i=0;i<200;i++)lex.suggest(['pre','con','the','und','com'][i%5],'','');console.log('ms per query on a busy start',((performance.now()-t)/200).toFixed(2));
 console.log(pass,'passed',fail,'failed');

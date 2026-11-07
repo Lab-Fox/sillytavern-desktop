@@ -174,6 +174,10 @@ function variants(p) {
 const PAIR_WEIGHT = 3.5, PAIR_SCALE = 100;
 // Typo-corrected word starts come after real ones of about the same score.
 const FUZZY_EXTRA = 1.2;
+// A name (all score 6.5) stops an autocorrect only when the top word leads it
+// by less than this (~30×): "becuase" with a name "Becuas" waits, "teh" with a
+// lorebook key "tef" still becomes "the" (it leads by 1.66 on a fresh install).
+const NAME_MARGIN = 1.5;
 
 // Contractions people type without the apostrophe. "cant" and "wont" are
 // words in the dictionary too, but nobody means those in a story.
@@ -298,10 +302,12 @@ class Lexicon {
     // the user or a name has them).
     suggestable() {
         if (!this.dirty) return this.vocab;
-        // lower → [word, score, special]; special = from the adult pack, the
-        // user's dictionary or a name (autocorrect doesn't guess against those).
+        // lower → [word, score, special]; special = true for the adult pack,
+        // the user's dictionary and their new words, 'name' for a name the
+        // other lists lack (autocorrect is careful with both; see autocorrect).
         const vocab = new Map();
-        const add = (l, word, score, special = false) => { const v = vocab.get(l); if (!v || v[1] < score) vocab.set(l, [word, score, special || !!v?.[2]]); else if (special) v[2] = true; };
+        const stronger = (a, b) => (a === true || b === true ? true : a || b || false);
+        const add = (l, word, score, special = false) => { const v = vocab.get(l); if (!v || v[1] < score) vocab.set(l, [word, score, stronger(special, v?.[2])]); else v[2] = stronger(special, v[2]); };
         for (const [l, count] of this.freq) {
             if (!this.base.has(l) || this.nosug.has(l) || this.blocked.has(l)) continue;
             add(l, this.preferred(l), Math.log10(count + 1));
@@ -319,7 +325,9 @@ class Lexicon {
         // rarely have them, or not at all), so a rare count doesn't sink one.
         for (const l of this.adult) if (this.base.has(l) && !this.nosug.has(l) && !this.blocked.has(l)) add(l, this.preferred(l), Math.max(3.6, Math.log10((this.freq.get(l) || 0) + 1)), true);
         for (const [l, forms] of this.user) if (!this.blocked.has(l)) add(l, forms.has(l) ? l : [...forms][0], 6, true);
-        for (const [l, n] of this.names) if (!this.blocked.has(l)) add(l, n, 6.5, true);
+        // A name that is also an everyday word (a lorebook key like "tea")
+        // isn't a reason to stop guessing: only names the dictionary lacks are.
+        for (const [l, n] of this.names) if (!this.blocked.has(l)) add(l, n, 6.5, vocab.has(l) ? false : 'name');
         // Your own new words, once you used them twice.
         for (const [l, e] of this.fresh) if (e.n >= 2 && !this.blocked.has(l) && !vocab.has(l)) add(l, e.form, 4.3 + Math.min(2, Math.log10(e.n + 1)), true);
         this.vocab = vocab;
@@ -582,9 +590,11 @@ class Lexicon {
         const c = this.corrections(word, 4);
         if (!c.length || c[0].score < 3) return null;
         const rivals = c.slice(1).filter(x => x.dist === c[0].dist);
-        // Equally close to a word from the packs, the user's dictionary or a
-        // name ("cuming": coming or cumming?): don't guess.
-        if (rivals.some(x => x.special) && !c[0].special) return null;
+        // Equally close to a word from the packs or the user's dictionary
+        // ("cuming": coming or cumming?): don't guess. A name only counts when
+        // it is about as likely: every name scores the same, so a short
+        // lorebook key mustn't stop "teh" → the.
+        if (!c[0].special && rivals.some(x => x.special === true || (x.special === 'name' && c[0].score - x.score < NAME_MARGIN))) return null;
         if (c[0].dist === 1) {
             if (rivals.length && c[0].score - rivals[0].score < 1) return null; // not sure enough (~10× more likely)
             return c[0].word;

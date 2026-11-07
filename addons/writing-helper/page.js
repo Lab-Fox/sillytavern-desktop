@@ -259,17 +259,57 @@ kbd, .hint { all: unset; opacity: .55; font-size: .78em; margin-left: 6px; }
     function hide() { current = null; sel = null; forget(); close(); }
     // Words still on their way aren't wanted any more.
     function forget() { seq++; clearTimeout(timer); }
+    // SillyTavern's popups and big editors are modal <dialog>s. From the page
+    // the strip still shows above them (top layer), but can't be clicked: for
+    // that it has to be inside the dialog. Moving it there makes the browser
+    // restyle the whole page, 17-35 ms on a big install whatever is moved
+    // (measured), so it moves only when the mouse comes close, before a click
+    // is possible. Typing and the keys never need it.
+    const NEAR = 24;
+    function goHome() {
+        const p = strip.parentElement;
+        if (!strip.isConnected || (p !== document.body && !(p.nodeName === 'DIALOG' && p.open))) { close(); document.body.append(strip); }
+    }
+    // The dialog the strip was last shown for: shown again when that changes,
+    // so it goes on top of a dialog that opened after it.
+    let shownIn;
     function open(el) {
-        // Inside a modal dialog the strip must be part of it, or the dialog
-        // makes it unclickable.
-        const home = el.closest('dialog') || document.body;
-        if (strip.parentElement !== home) { close(); home.append(strip); }
+        goHome();
+        const ctx = el.closest('dialog');
+        if (isOpen() && shownIn !== ctx) close();
+        shownIn = ctx;
         if (isOpen()) return;
         if (canPopover) {
             try { strip.showPopover(); return; } catch { strip.removeAttribute('popover'); }
         }
         strip.hidden = false;
     }
+    // → true when the strip had to move into the field's dialog for this point.
+    function comeCloser(x, y) {
+        if (!current || !isOpen()) return false;
+        const dlg = current.el.closest('dialog');
+        if (!dlg || strip.parentElement === dlg) return false;
+        const r = box.getBoundingClientRect();
+        if (x < r.left - NEAR || x > r.right + NEAR || y < r.top - NEAR || y > r.bottom + NEAR) return false;
+        close();
+        dlg.append(strip);
+        open(current.el);
+        return true;
+    }
+    const onPointerMove = e => { if (e.pointerType === 'mouse') comeCloser(e.clientX, e.clientY); };
+    // A pen or a finger arrives without hovering: move, then press the word.
+    let swallow = false;
+    const onPointerDown = e => {
+        if (e.pointerType === 'mouse' || !comeCloser(e.clientX, e.clientY)) return;
+        swallow = true;
+        e.preventDefault();
+        shadow.elementFromPoint(e.clientX, e.clientY)?.closest('button')?.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true, composed: true }));
+    };
+    // Only the device's own press that follows: the one sent to the word above isn't trusted.
+    const onMouseDownSwallow = e => { if (swallow && e.isTrusted) { swallow = false; e.preventDefault(); e.stopPropagation(); } };
+    // Out of a dialog that closes, so it isn't lost with it.
+    const onDialogClose = e => { if (e.target?.nodeName === 'DIALOG' && e.target.contains(strip)) { close(); document.body.append(strip); } };
+
     // measure: the text or the strip changed. Without it (scrolling) this only
     // reads positions and moves the strip, which needs no layout of the page.
     function place(el, measure) {
@@ -604,6 +644,9 @@ kbd, .hint { all: unset; opacity: .55; font-size: .78em; margin-left: 6px; }
         [document, 'focusin', onFocusIn], [document, 'input', onInput], [document, 'keydown', onKeyDown], [document, 'keyup', onKeyUp],
         [document, 'click', onClick], [document, 'focusout', onFocusOut], [document, 'mouseup', onMouseUp],
         [document, 'scroll', onScroll], [document, 'compositionstart', onComposition], [window, 'resize', onResize],
+        [document, 'pointermove', onPointerMove], [document, 'pointerdown', onPointerDown], [document, 'mousedown', onMouseDownSwallow],
+        // 'close' doesn't bubble: caught on its way down.
+        [document, 'close', onDialogClose],
     ];
     for (const [t, ev, fn] of listeners) t.addEventListener(ev, fn, true);
     // Pressing anywhere on the strip keeps the focus in the text box; a right
