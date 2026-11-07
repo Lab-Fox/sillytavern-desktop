@@ -38,7 +38,7 @@ It doesn't modify SillyTavern: your SillyTavern stays the standard version, and 
 ## Get started
 
 1. **Download** from the [latest release](https://github.com/Lab-Fox/sillytavern-desktop/releases/latest). Pick one:
-   - `SillyTavern-Desktop-Setup.exe`, the installer (recommended): Start menu and desktop shortcuts, opens in under a second. No admin rights needed.
+   - `SillyTavern-Desktop-Setup.exe`, the installer (recommended): you choose where it goes, Start menu and desktop shortcuts, opens in under a second. No admin rights needed.
    - `SillyTavern-Desktop.exe`, the portable version: nothing to install, just run it, even from a USB stick.
 2. **Run it.** If you already have SillyTavern, the app finds it and uses it as it is. If not, the welcome screen installs it for you, along with Node.js and Git, which SillyTavern needs.
 

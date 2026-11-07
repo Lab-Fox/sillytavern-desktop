@@ -633,6 +633,11 @@
           </div>
         </div>
 
+        <div class="card" id="adminCard" hidden>
+          <h2>Running as administrator</h2>
+          <p class="warn-line small">SillyTavern asks not to run it as administrator: files it makes then belong to the admin account. Close this app and start it normally, not with "Run as administrator".</p>
+        </div>
+
         <div class="card" id="bkErrCard" hidden>
           <h2>A scheduled backup failed<button class="link act" data-goto="backups">Backups</button></h2>
           <div class="list" id="bkErrList"></div>
@@ -1361,6 +1366,19 @@
           <button class="btn sm ghost" data-link="reddit" translate="no"><svg class="i"><use href="#i-users"/></svg>r/SillyTavernAI</button>
         </div>
         <p class="muted small" style="margin:10px 2px">Free software under the AGPL-3.0 license. Not made by the SillyTavern team.</p>
+        <div class="set-group" data-k="app data folder drive move disk space">
+          <div class="set-row set-wrap">
+            <div class="set-text"><b>App data</b> <span class="tip" tabindex="0" role="note" aria-label="This app's settings, logs, logins and add-ons. Your chats and characters are not in it: they stay in SillyTavern's folder."><svg class="i"><use href="#i-info"/></svg></span><span class="set-desc mono" id="dataDirPath">—</span><span class="set-desc" id="dataDirNote"></span></div>
+            <div class="set-ctl">
+              <button class="btn sm" id="btnDataMove" hidden>Move beside the app…</button>
+              <button class="btn sm ghost" data-place="logs"><svg class="i"><use href="#i-folder"/></svg>Open</button>
+            </div>
+          </div>
+          <div class="set-row set-wrap" id="dataOldRow" hidden>
+            <div class="set-text"><b>Old app data</b><span class="set-desc mono" id="dataOldNote"></span></div>
+            <div class="set-ctl"><button class="btn sm" id="btnDataOld">Move to Recycle Bin…</button></div>
+          </div>
+        </div>
         <div class="set-group" data-k="reset defaults restore">
           <div class="set-row">
             <div class="set-text"><b>Reset settings</b> <span class="tip" tabindex="0" role="note" aria-label="Look, start-up, updates and SillyTavern window options go back to their defaults. Your SillyTavern folders, profiles, phone access, server options and programs stay as they are."><svg class="i"><use href="#i-info"/></svg></span></div>
@@ -1408,8 +1426,8 @@
         <div class="list" id="reqList"></div>
         <div class="row" style="margin-top:12px">
           <span class="muted small" id="reqHint" style="flex:1"></span>
-          <button class="btn sm" data-task id="btnSetupRt" hidden title="A private copy for this app: nothing is installed in Windows, no admin permission"><svg class="i"><use href="#i-download"/></svg>Get them for this app only</button>
-          <button class="btn sm primary" data-task id="btnInstallReq" hidden><svg class="i"><use href="#i-download"/></svg>Install for me</button>
+          <button class="btn sm primary" data-task id="btnSetupRt" hidden title="A private copy for this app: nothing is installed in Windows, no admin permission"><svg class="i"><use href="#i-download"/></svg>Get them for this app only</button>
+          <button class="btn sm" data-task id="btnInstallReq" hidden><svg class="i"><use href="#i-download"/></svg>Install for me</button>
         </div>
       </div>
 
@@ -2428,8 +2446,25 @@
   let current = {};
   const unsaved = { lan: false };
   ['setLanUser', 'setLanPass'].forEach(id => $(id).addEventListener('input', () => { unsaved.lan = true; }));
+  // Settings → About → App data: where it is, moving it beside the app, the old copy.
+  async function loadDataDir() {
+    const d = await D.dataDir();
+    $('dataDirPath').textContent = d.dir;
+    $('btnDataMove').hidden = !d.canMove;
+    $('dataDirNote').textContent = d.moveFailed ? T('The last move didn\'t work: {error}', { error: d.moveFailed })
+      : d.canMove ? T('On the Windows drive. It can move next to the app, off that drive.')
+      : d.onC && d.besideOnC ? T('On the Windows drive. Install the app on another drive to keep its data off it.')
+      : '';
+    $('dataDirNote').classList.toggle('warn-line', !!d.moveFailed);
+    $('dataOldRow').hidden = !d.movedFrom;
+    if (d.movedFrom) $('dataOldNote').textContent = `${d.movedFrom} · ${Math.round(d.oldBytes / 1024 ** 2)} MB`;
+  }
+  $('btnDataMove').onclick = async () => { const r = await D.dataMove(); if (r?.error) append(T('ERROR:') + ' ' + r.error); };
+  $('btnDataOld').onclick = async () => { const r = await D.dataOldRemove(); if (r?.error) append(T('ERROR:') + ' ' + r.error); else if (r?.ok) loadDataDir(); };
+
   function loadSettingsForm({ fresh = false } = {}) {
     if (fresh) unsaved.lan = false;
+    loadDataDir();
     $('curPath').textContent = current.sillytavernPath || T('Not set');
     $('setAppPreview').checked = !!current.appPreview;
     if (document.activeElement !== $('setPort')) $('setPort').value = current.port;
@@ -2620,6 +2655,7 @@
   async function loadSetup() {
     // The full state scans the drives and starts node/git/winget: only when the screen shows.
     const quick = await D.setupReady();
+    $('adminCard').hidden = !quick.elevated;
     const show = !quick.ready || setupForced;
     $('setup').classList.toggle('show', show);
     if (!show) return quick;
@@ -2636,11 +2672,10 @@
     $('reqNum').classList.toggle('done', reqOk);
     $('reqNum').innerHTML = reqOk ? icon('check') : '1';
     $('btnInstallReq').hidden = reqOk || !req.canAutoInstall;
-    // Without winget, the app's own copy is the easy way; with it, a second choice.
+    // The app's own copy comes first: no admin permission, nothing installed in Windows.
     $('btnSetupRt').hidden = reqOk;
-    $('btnSetupRt').classList.toggle('primary', !req.canAutoInstall);
     $('reqHint').innerHTML = reqOk ? (st.runtime.active ? T('All set (this app\'s own copies).') : T('All set.'))
-      : req.canAutoInstall ? T('<b>Install for me</b> installs them in Windows (it may ask for permission once). <b>Get them for this app only</b> keeps a private copy instead, no permission needed.')
+      : req.canAutoInstall ? T('<b>Get them for this app only</b> keeps a private copy with this app, no admin permission needed. <b>Install for me</b> installs them in Windows instead (it asks for admin permission).')
       : T('Click <b>Get them for this app only</b>: a private copy for this app, nothing to install. Or install them from {node} and {git}, then restart this app.', { node: '<button class="link" data-link="node">nodejs.org</button>', git: '<button class="link" data-link="git">git-scm.com</button>' });
     $('reqHint').querySelectorAll('[data-link]').forEach(b => b.onclick = () => D.openLink(b.dataset.link));
 
@@ -2937,7 +2972,7 @@
       tg = await D.downloadTarget(dl.parent, $('dlFolder').value);
     }
     $('dlTarget').innerHTML = tg.ok
-      ? `${T('Goes to {path}', { path: `<span class="mono" style="color:var(--title)">${esc(tg.path)}</span>` })}${tg.free != null ? ` · ${T('{free} free there', { free: GB(tg.free) })}` : ''} · ${T('needs about 600 MB')}`
+      ? `${T('Goes to {path}', { path: `<span class="mono" style="color:var(--title)">${esc(tg.path)}</span>` })}${tg.free != null ? ` · ${T('{free} free there', { free: GB(tg.free) })}` : ''} · ${T('needs about 600 MB')}${tg.systemDrive ? `<br><span class="warn-line">${T('This is the Windows drive. Another drive is safer: your chats stay if Windows is ever reinstalled.')}</span>` : ''}`
       : `<span class="err">${esc(tg.problem)}</span>`;
     $('btnDlStart').disabled = !tg.ok || !dl.reqOk || !!state.busy || dl.running || (dl.needsRisk && !$('dlRisk').checked);
     return tg;

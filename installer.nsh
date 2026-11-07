@@ -33,10 +33,88 @@ Var pid
   !insertmacro _CHECK_APP_RUNNING
 !macroend
 
+; ---------- where it goes ----------
+; Always for this user only: never the "all users" page, never an admin
+; prompt (SillyTavern asks not to run as administrator). People choose the
+; folder; a fresh install suggests the fixed drive with the most free space
+; that isn't the Windows drive. The app keeps its data in "SillyTavern Desktop
+; Data" next to the install folder (updates wipe the install folder itself).
+!define MUI_DIRECTORYPAGE_TEXT_TOP "Choose where SillyTavern Desktop goes. Its data is kept next to this folder. A drive other than the Windows drive keeps both safe if Windows is ever reinstalled. Windows' own folders (Program Files, Windows, ProgramData) can't be used."
+
+!include "FileFunc.nsh"
+!include "LogicLib.nsh"
+
+!ifndef BUILD_UNINSTALLER
+  Var stBestDrive
+  Var stBestFree
+  Function stDriveFound
+    ; $9 = "D:\"; skip the Windows drive.
+    StrCpy $R5 $WINDIR 3
+    ${if} $9 != $R5
+      ${DriveSpace} "$9" "/D=F /S=M" $R4
+      ${if} $R4 > $stBestFree
+      ${andIf} $R4 >= 5120
+        StrCpy $stBestFree $R4
+        StrCpy $stBestDrive $9
+      ${endIf}
+    ${endIf}
+    Push $0
+  FunctionEnd
+
+  ; Is $INSTDIR in (or equal to) a folder Windows controls? Leaves 1 or 0 in $R0.
+  !macro stUnder ROOT
+    ${if} "${ROOT}" != ""
+      StrLen $R1 "${ROOT}"
+      StrCpy $R2 $INSTDIR $R1
+      StrCpy $R3 $INSTDIR 1 $R1
+      ${if} $R2 == "${ROOT}"
+      ${andIf} $R3 == ""
+        StrCpy $R0 1
+      ${elseIf} $R2 == "${ROOT}"
+      ${andIf} $R3 == "\"
+        StrCpy $R0 1
+      ${endIf}
+    ${endIf}
+  !macroend
+  Function .onVerifyInstDir
+    StrCpy $R0 0
+    !insertmacro stUnder $WINDIR
+    !insertmacro stUnder $PROGRAMFILES32
+    !insertmacro stUnder $PROGRAMFILES64
+    ReadEnvStr $R6 "ProgramData"
+    !insertmacro stUnder $R6
+    ${if} $R0 == 1
+      Abort
+    ${endIf}
+  FunctionEnd
+!endif
+
+!macro customInstallMode
+  StrCpy $hasPerMachineInstallation "0"
+  StrCpy $hasPerUserInstallation "1"
+  !insertmacro setInstallModePerUser
+  !ifndef BUILD_UNINSTALLER
+    ReadRegStr $R9 HKCU "${INSTALL_REGISTRY_KEY}" InstallLocation
+    !insertmacro GetDParameter $R8
+    ${if} $R9 == ""
+    ${andIf} $R8 == ""
+      StrCpy $stBestDrive ""
+      StrCpy $stBestFree 0
+      ${GetDrives} "HDD" "stDriveFound"
+      ${if} $stBestDrive != ""
+        StrCpy $R7 $stBestDrive
+        StrCpy $INSTDIR "$R7SillyTavern Desktop"
+      ${endIf}
+    ${endIf}
+  !endif
+  Abort
+!macroend
+
 ; "Open with → SillyTavern Desktop" for character cards, lorebooks and
 ; presets. Only an Open-with entry (OpenWithProgids): the app never becomes
 ; the default for .png or .json, and Windows' own choice stays as it was.
-!define ST_IMPORT_PROGID "SillyTavernDesktop.Import"
+; Named after the app id, so a test build with its own id leaves the real one alone.
+!define ST_IMPORT_PROGID "${APP_ID}.Import"
 !macro stOpenWith EXT
   WriteRegStr SHCTX "Software\Classes\${EXT}\OpenWithProgids" "${ST_IMPORT_PROGID}" ""
 !macroend
@@ -65,6 +143,7 @@ Var pid
   !insertmacro stNoOpenWith ".byaf"
   !insertmacro stNoOpenWith ".yaml"
   !insertmacro stNoOpenWith ".yml"
+  !insertmacro stNoOpenWith ".sttheme"
   DeleteRegKey SHCTX "Software\Classes\${ST_IMPORT_PROGID}"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 !macroend

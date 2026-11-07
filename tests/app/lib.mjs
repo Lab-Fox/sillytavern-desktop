@@ -31,19 +31,23 @@ async function socket(url) {
     return { send, ev, close: () => s.close() };
 }
 
-// { name, settings, exe, app, args } -> { launcher, main, page(endsWith), quit }
-// ST_EXE tests a built app instead of the source.
-export async function launch({ name, settings = {}, exe = process.env.ST_EXE, app = exe ? '-' : ROOT, args = [], keep = false }) {
-    const data = path.join(RUNS, name);
-    if (!keep) fs.rmSync(data, { recursive: true, force: true });
-    fs.mkdirSync(data, { recursive: true });
-    if (!keep) fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({
-        port: 8123, host: 'localhost', autoStart: false, checkUpdatesOnLaunch: false, checkAppUpdates: false,
-        confirmBeforeQuit: false, ...(CLONE ? { sillytavernPath: CLONE } : {}), ...settings,
-    }));
+export const TEST_SETTINGS = { port: 8123, host: 'localhost', autoStart: false, checkUpdatesOnLaunch: false, checkAppUpdates: false, confirmBeforeQuit: false };
+
+// { name, settings, exe, app, args, appData } -> { launcher, main, page(endsWith), quit, reconnect }
+// ST_EXE tests a built app instead of the source. appData: run without
+// --user-data-dir (the app picks its own data folder) and with this folder
+// standing in for %APPDATA%\SillyTavern Desktop; the caller seeds it.
+export async function launch({ name, settings = {}, exe = process.env.ST_EXE, app = exe ? '-' : ROOT, args = [], keep = false, appData = null }) {
+    const data = appData ? null : path.join(RUNS, name);
+    if (data) {
+        if (!keep) fs.rmSync(data, { recursive: true, force: true });
+        fs.mkdirSync(data, { recursive: true });
+        if (!keep) fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({ ...TEST_SETTINGS, ...(CLONE ? { sillytavernPath: CLONE } : {}), ...settings }));
+    }
     const cdp = 9800 + Math.floor(Math.random() * 90), ins = cdp + 100;
     const bin = exe || path.join(ROOT, 'node_modules/electron/dist/electron.exe');
-    const proc = spawn(bin, [...(app === '-' ? [] : [app]), `--user-data-dir=${data}`, `--remote-debugging-port=${cdp}`, `--inspect=${ins}`, ...args], { stdio: 'ignore' });
+    const env = appData ? { ...process.env, ST_DESKTOP_APPDATA: appData } : process.env;
+    const proc = spawn(bin, [...(app === '-' ? [] : [app]), ...(data ? [`--user-data-dir=${data}`] : []), `--remote-debugging-port=${cdp}`, `--inspect=${ins}`, ...args], { stdio: 'ignore', env });
     const list = async () => (await fetch(`http://127.0.0.1:${cdp}/json/list`)).json();
     const page = async (end, tries = 80) => {
         for (let i = 0; i < tries; i++) {
@@ -52,20 +56,26 @@ export async function launch({ name, settings = {}, exe = process.env.ST_EXE, ap
         }
         throw new Error(`no page ${end}`);
     };
-    const launcher = await page('launcher.html');
-    await sleep(3000);
-    const t = await (await fetch(`http://127.0.0.1:${ins}/json/list`)).json();
-    const main = await socket(t[0].webSocketDebuggerUrl);
-    const quit = async () => {
-        try { await launcher.ev(`await D.stopServer(); 'ok'`); } catch { /* not running */ }
+    const a = { page, list, data, proc };
+    // After the app restarted itself (same ports: a relaunch keeps the arguments).
+    a.reconnect = async () => {
+        a.launcher = await page('launcher.html', 120);
+        await sleep(3000);
+        const t = await (await fetch(`http://127.0.0.1:${ins}/json/list`)).json();
+        a.main = await socket(t[0].webSocketDebuggerUrl);
+        return a;
+    };
+    await a.reconnect();
+    a.quit = async () => {
+        try { await a.launcher.ev(`await D.stopServer(); 'ok'`); } catch { /* not running */ }
         await sleep(1500);
         // Send the quit on a timer and close every socket: an open debug
         // connection keeps the main process alive.
-        await main.ev(`const { app } = require('electron'); setTimeout(() => app.quit(), 300); 'ok'`).catch(() => {});
-        launcher.close(); main.close();
-        const gone = new Promise(r => proc.once('exit', r));
-        await Promise.race([gone, sleep(15000)]);
-        if (proc.exitCode === null) proc.kill();
+        await a.main.ev(`const { app } = require('electron'); setTimeout(() => app.quit(), 300); 'ok'`).catch(() => {});
+        a.launcher.close(); a.main.close();
+        // A relaunched copy is not our child: wait for its debug port to close.
+        for (let i = 0; i < 30; i++) { await sleep(500); try { await list(); } catch { break; } }
+        if (proc.exitCode === null) { await Promise.race([new Promise(r => proc.once('exit', r)), sleep(5000)]); if (proc.exitCode === null) proc.kill(); }
     };
-    return { launcher, main, page, list, quit, data };
+    return a;
 }

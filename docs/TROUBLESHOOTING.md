@@ -37,10 +37,10 @@ A new SillyTavern version might not work inside the app right away. You can alwa
 |---|---|
 | Your chats, characters and settings | Untouched, in your SillyTavern folder's `data` folder |
 | Backups | `<SillyTavern folder>\backups\desktop\` |
-| This app's settings and log | `%APPDATA%\SillyTavern Desktop\` (`settings.json`, `desktop-debug.log`) |
+| This app's settings and log | `SillyTavern Desktop Data` next to the app (or `%APPDATA%\SillyTavern Desktop\` for copies from before 1.9 and apps on the Windows drive): `settings.json`, `desktop-debug.log`. **Settings → About → App data** shows which and opens it. |
 | Themes, userscripts, desktop extensions | `themes\`, `userscripts\`, `extensions\` in the same folder |
-| The installed app | `%LOCALAPPDATA%\Programs\sillytavern-desktop\` |
+| The installed app | The folder you chose when installing (before 1.9: `%LOCALAPPDATA%\Programs\sillytavern-desktop\`) |
 
-Uninstalling keeps your settings. To reset the app completely, quit it and delete `%APPDATA%\SillyTavern Desktop\`.
+Uninstalling keeps your settings. To reset the app completely, quit it and delete its data folder.
 
 </details>

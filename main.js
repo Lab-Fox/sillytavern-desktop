@@ -42,13 +42,30 @@ import * as tunnel from './tunnel.js';
 import * as pc from './pccheck.js';
 import * as ai from './aiapps.js';
 import { TOOLS } from './aiapps-media.js';
+import * as folders from './folders.js';
+import * as datadir from './datadir.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Packaged builds run from inside a read-only asar — settings and logs must
 // live in userData, and the default SillyTavern path must be computed from
 // the real exe location (portable exe sits in <root>/ST-Desktop/dist).
+// Where the data lives is decided here, before Electron opens anything in it
+// (datadir.js). ST_DESKTOP_APPDATA stands in for %APPDATA%\SillyTavern Desktop in tests.
+const OLD_DATA = process.env.ST_DESKTOP_APPDATA || app.getPath('userData');
+const DATA_DIR = datadir.resolveDataDir({
+    argv: process.argv, exePath: process.execPath, portableDir: process.env.PORTABLE_EXECUTABLE_DIR,
+    appData: OLD_DATA, packaged: app.isPackaged,
+});
+if (DATA_DIR.kind === 'move') DATA_DIR.dir = datadir.runMove(OLD_DATA, DATA_DIR.beside);
+if (DATA_DIR.kind !== 'flag' && DATA_DIR.dir !== app.getPath('userData')) {
+    fs.mkdirSync(DATA_DIR.dir, { recursive: true });
+    app.setPath('userData', DATA_DIR.dir);
+    app.setPath('sessionData', DATA_DIR.dir);
+}
 const USER_DATA = app.getPath('userData');
 fs.mkdirSync(USER_DATA, { recursive: true });
+// npm's cache goes with the app's data (npm otherwise fills %LOCALAPPDATA%).
+process.env.npm_config_cache = path.join(USER_DATA, 'npm-cache');
 const SETTINGS_FILE = path.join(USER_DATA, 'settings.json');
 const DEBUG_LOG = path.join(USER_DATA, 'desktop-debug.log');
 
@@ -318,6 +335,7 @@ function stopCompanions({ wait = false } = {}) {
     }
 }
 
+let elevatedOk = false;
 async function startServer() {
     if (serverState.running) { logLine('Server is already running.'); return; }
     // An update, restore or branch switch is changing SillyTavern's files.
@@ -335,6 +353,14 @@ async function startServer() {
         logLine(stRoot ? `ERROR: SillyTavern not found at ${stRoot}. Choose your SillyTavern folder.` : 'Choose your SillyTavern folder first.');
         broadcast('refresh');
         return;
+    }
+    // SillyTavern asks never to run it as administrator. Asked once per run.
+    if (folders.isElevated() && !elevatedOk) {
+        if (!await confirm(t('This app is running as administrator'), t('SillyTavern asks not to run it as administrator: files it makes then belong to the admin account, and other programs (or SillyTavern started normally) can\'t change them. Close the app and start it normally.'), t('Start anyway'))) {
+            logLine('Not started: the app runs as administrator.');
+            return;
+        }
+        elevatedOk = true;
     }
     warnMisplacedUserscripts(stRoot);
     logLine(`Starting SillyTavern server from ${stRoot} ...`);
@@ -1489,6 +1515,10 @@ ipcMain.handle('health-check', async () => {
     const [checks, used, tr] = await Promise.all([mx.healthCheck(stRoot(), { running: serverState.running }), serverState.running ? null : pc.portUser(settings.port), mx.gitTrouble(stRoot())]);
     if (used) checks.push({ label: t('Port {port}', { port: String(settings.port) }), status: 'bad', detail: t('Used by {name} (PID {pid})', { name: used.name || '?', pid: String(used.pid) }), fix: t('SillyTavern can\'t start on it. Close that program, or pick another port under Troubleshooting.') });
     if (tr.stuck) checks.push({ label: t('Update stopped halfway'), status: 'bad', detail: tr.conflicts.length ? t('{n} file with conflicts|{n} files with conflicts', { n: tr.conflicts.length }) : t('A git merge or rebase is not finished'), fix: t('Troubleshooting → Repair SillyTavern\'s files.') });
+    const root = stRoot();
+    if (root && folders.protectedFolder(root)) checks.push({ label: t('SillyTavern\'s location'), status: 'bad', detail: root, fix: t('Windows controls this folder. Move SillyTavern somewhere of your own (Settings → Server → Folder → Move…), for example to another drive.') });
+    else if (root && folders.onSystemDrive(root)) checks.push({ label: t('SillyTavern\'s location'), status: 'warn', detail: root, fix: t('It is on the Windows drive. On another drive your chats stay if Windows is ever reinstalled.') });
+    if (folders.isElevated()) checks.push({ label: t('Administrator'), status: 'bad', detail: t('This app runs as administrator'), fix: t('Start it normally. As administrator, files SillyTavern makes belong to the admin account and other programs can\'t change them.') });
     const vpn = pc.vpns();
     if (vpn.length) checks.push({ label: 'VPN', status: 'warn', detail: t('On: {list}', { list: vpn.join(', ') }), fix: t('A VPN can block phone access, the remote link or some AI services. If something can\'t connect, try with the VPN off.') });
     return checks;
@@ -2130,7 +2160,61 @@ async function pickFolder(title, defaultPath) {
 }
 
 // The cheap part: is there a SillyTavern to run? (asked on every refresh)
-ipcMain.handle('setup-ready', () => ({ ready: setup.isStRoot(stRoot()), current: stRoot() }));
+// ---------- where the app keeps its data (datadir.js) ----------
+// A restart has to go through the portable exe: the unpacked copy this
+// process runs from is deleted by its wrapper as soon as we exit. Switches
+// (--safe-theme, …) come along; file paths ("Open with") would import again.
+function relaunchApp() {
+    const portable = process.env.PORTABLE_EXECUTABLE_FILE;
+    const args = process.argv.slice(app.isPackaged ? 1 : 2).filter(a => a.startsWith('--') && a !== '--updated');
+    app.relaunch(portable ? { execPath: portable, args } : { args: [...process.argv.slice(1, app.isPackaged ? 1 : 2), ...args] });
+    isQuitting = true;
+    app.quit();
+}
+const readJson = f => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+function dataInfo() {
+    const beside = DATA_DIR.beside;
+    const kind = DATA_DIR.kind === 'flag' ? 'flag' : USER_DATA === beside ? 'beside' : 'appdata';
+    const besideOnC = !!beside && folders.onSystemDrive(beside);
+    let movedFrom = readJson(path.join(USER_DATA, datadir.MOVED_FROM))?.from || null;
+    if (movedFrom && (!fs.existsSync(movedFrom) || movedFrom === USER_DATA)) movedFrom = null;
+    return {
+        dir: USER_DATA, kind, beside, besideOnC,
+        onC: folders.onSystemDrive(USER_DATA),
+        canMove: kind === 'appdata' && !!beside && !besideOnC,
+        movedFrom, oldBytes: movedFrom ? datadir.folderBytes(movedFrom) : 0,
+        moveFailed: kind === 'appdata' ? readJson(path.join(OLD_DATA, datadir.MOVE_FAILED))?.error || null : null,
+    };
+}
+ipcMain.handle('data-dir', () => dataInfo());
+ipcMain.handle('data-move', async () => {
+    const d = dataInfo();
+    if (!d.canMove) return { error: t('The data can\'t move beside the app here.') };
+    if (busyTask) return { error: t('Busy with "{task}" — wait for it to finish.', { task: busyTask }) };
+    let free = Infinity;
+    try { const s = fs.statfsSync(path.parse(d.beside).root); free = s.bavail * s.bsize; } catch { /* unknown */ }
+    if (datadir.folderBytes(USER_DATA) > free) return { error: t('Not enough free space on that drive.') };
+    if (!await confirm(t('Move the app\'s data next to the app?'),
+        t('It goes to {dir}. The app restarts and copies it there (caches are left out, so it is quick). SillyTavern stops for a moment. The old folder stays until you remove it.', { dir: d.beside }),
+        t('Move and restart'))) return { cancelled: true };
+    fs.writeFileSync(path.join(USER_DATA, datadir.MOVE_FILE), JSON.stringify({ to: d.beside, at: new Date().toISOString() }));
+    logLine(`Moving the app's data to ${d.beside} at the next start.`);
+    relaunchApp();
+    return { ok: true };
+});
+ipcMain.handle('data-old-remove', async () => {
+    const d = dataInfo();
+    if (!d.movedFrom) return { error: t('Nothing to remove.') };
+    if (!await confirm(t('Move the old app data to the Recycle Bin?'),
+        t('{dir} ({size}). This app uses {now} now. Empty the Recycle Bin afterwards to free the space.', { dir: d.movedFrom, size: `${(d.oldBytes / 1024 ** 2).toFixed(0)} MB`, now: USER_DATA }),
+        t('Move to Recycle Bin'))) return { cancelled: true };
+    try { await shell.trashItem(path.resolve(d.movedFrom)); } catch (e) { return { error: e.message }; }
+    fs.rmSync(path.join(USER_DATA, datadir.MOVED_FROM), { force: true });
+    logLine(`Moved the old app data (${d.movedFrom}) to the Recycle Bin.`);
+    return { ok: true };
+});
+
+ipcMain.handle('setup-ready', () => ({ ready: setup.isStRoot(stRoot()), current: stRoot(), elevated: folders.isElevated() }));
 // Everything the welcome screen shows (scans the drives, starts node/git/winget).
 ipcMain.handle('setup-state', async () => ({
     ready: setup.isStRoot(stRoot()),
@@ -2375,9 +2459,12 @@ ipcMain.handle('remote-open', (_e, id) => openRemote(id, null));
 // ---------- downloading SillyTavern ----------
 ipcMain.handle('st-versions', (_e, fresh) => dl.listVersions({ fresh: !!fresh }).catch(e => ({ error: e.message })));
 ipcMain.handle('download-target', (_e, parent, folder) => dl.targetInfo(String(parent || ''), String(folder || '')));
-// Where new installs go by default: next to the one in use.
-ipcMain.handle('download-defaults', () => ({ parent: setup.isStRoot(stRoot()) ? path.dirname(stRoot()) : os.homedir() }));
-ipcMain.handle('pick-parent', (_e, from) => pickFolder('Where should the new SillyTavern go? (its folder is created inside)', from && fs.existsSync(from) ? from : os.homedir()));
+// Where new installs go by default: next to the one in use, else the roomiest
+// drive that isn't Windows' own (folders.js).
+ipcMain.handle('download-defaults', () => ({
+    parent: setup.isStRoot(stRoot()) && !folders.protectedFolder(path.dirname(stRoot())) ? path.dirname(stRoot()) : folders.bestDrive(),
+}));
+ipcMain.handle('pick-parent', (_e, from) => pickFolder('Where should the new SillyTavern go? (its folder is created inside)', from && fs.existsSync(from) ? from : folders.bestDrive()));
 ipcMain.handle('st-download', async (_e, o = {}) => {
     if (busyTask) return { error: t('Busy with "{task}" — wait for it to finish.', { task: busyTask }) };
     const req = await setup.checkRequirements();

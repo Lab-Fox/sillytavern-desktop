@@ -38,17 +38,19 @@ From the **[latest release](https://github.com/Lab-Fox/sillytavern-desktop/relea
 
 | | |
 |---|---|
-| **`SillyTavern-Desktop-Setup.exe`** (recommended) | Installs in a few seconds, no admin rights needed. Adds Start menu and desktop shortcuts, and opens in under a second. |
+| **`SillyTavern-Desktop-Setup.exe`** (recommended) | Asks where to install (it suggests a drive other than the Windows drive), never needs admin rights. Adds Start menu and desktop shortcuts, and opens in under a second. |
 | **`SillyTavern-Desktop.exe`** (portable) | Nothing to install: run it from anywhere, even a USB stick. It unpacks itself on every launch, so it takes a few seconds to open. |
 
-Both use the same settings, so you can switch any time.
+The app keeps its own data (settings, logs, logins, add-ons) in a **SillyTavern Desktop Data** folder next to it: next to the install folder, or next to the portable exe. It stays when you update or uninstall, and after a Windows reinstall the app finds it again. Copies from before 1.9 keep theirs in `%APPDATA%\SillyTavern Desktop` until you click **Settings → About → App data → Move beside the app**. On the Windows drive the app keeps using `%APPDATA%` instead. Your chats and characters are never in it: they stay in SillyTavern's folder.
+
+SillyTavern's own advice applies here too: don't put SillyTavern in Program Files, Windows or ProgramData (the app refuses), and don't run it as administrator (the app warns).
 
 > Windows may show a SmartScreen warning because the app isn't code-signed. Click **More info → Run anyway**.
 
 ### 2. Run it
 
 - **Already have SillyTavern?** The app looks for it on your PC and uses it. If it finds more than one, it asks which.
-- **New to SillyTavern?** The welcome screen takes two clicks: **Install for me** (Node.js and Git) or **Get them for this app only** (a private copy, no installing), then **Install SillyTavern** (choose a version and a folder; the latest release is preselected).
+- **New to SillyTavern?** The welcome screen takes two clicks: **Get them for this app only** (Node.js and Git as a private copy, no installing, no admin permission) or **Install for me**, then **Install SillyTavern** (choose a version and a folder; the latest release and the roomiest drive other than the Windows drive are preselected).
 - **Not found?** Click **Find it myself…** and pick your SillyTavern folder.
 
 SillyTavern then opens in its own window. The very first start can take a minute.
@@ -57,8 +59,8 @@ SillyTavern then opens in its own window. The very first start can take a minute
 
 Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 or newer and [Git](https://git-scm.com/). The app gets them for you in one of two ways:
 
-- **Install for me** installs both in Windows with winget, Windows' built-in installer (Windows may ask for permission once).
-- **Get them for this app only** downloads the official Node.js (LTS, from nodejs.org) and Git (MinGit, from Git for Windows) into the app's own folder, checks them against their published SHA256 checksums, and uses them for everything it runs. Nothing is installed in Windows and no admin permission is needed; about 70 MB to download, 210 MB on disk. Also under **Tools → Node.js and Git**, where you can switch between them and your PC's own, check for newer versions, or remove them.
+- **Get them for this app only** (recommended) downloads the official Node.js (LTS, from nodejs.org) and Git (MinGit, from Git for Windows) into the app's own folder, checks them against their published SHA256 checksums, and uses them for everything it runs. Nothing is installed in Windows and no admin permission is needed; about 70 MB to download, 210 MB on disk. Also under **Tools → Node.js and Git**, where you can switch between them and your PC's own, check for newer versions, or remove them.
+- **Install for me** installs both in Windows with winget, Windows' built-in installer (Windows asks for admin permission).
 
 ## Everything it does
 

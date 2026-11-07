@@ -12,7 +12,7 @@
     "dist": "electron-builder --win portable",
     "dist:installer": "electron-builder --win nsis",
     "dist:all": "electron-builder --win portable nsis",
-    "test": "node tests/theme/tcss.mjs",
+    "test": "node tests/theme/tcss.mjs && node --test tests/unit/",
     "i18n": "electron tools/i18n-check.mjs"
   },
   "devDependencies": {
@@ -26,6 +26,8 @@
     "productName": "SillyTavern Desktop",
     "files": [
       "main.js",
+      "datadir.js",
+      "folders.js",
       "preload.js",
       "locales/*.json",
       "i18n-dom.js",
@@ -89,7 +91,7 @@
       "unpackDirName": true
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "artifactName": "SillyTavern-Desktop-Setup.exe",
       "include": "installer.nsh",
       "multiLanguageInstaller": true,
@@ -100,7 +102,11 @@
         "ko_KR",
         "zh_CN",
         "zh_TW"
-      ]
+      ],
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "packElevateHelper": false
     },
     "electronLanguages": [
       "en-US"

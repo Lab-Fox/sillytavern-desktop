@@ -13,6 +13,7 @@ import os from 'os';
 import path from 'path';
 import { git, npm, NPM_INSTALL } from './maintenance.js';
 import { isStRoot } from './setup.js';
+import { protectedFolder, onSystemDrive } from './folders.js';
 import { t } from './i18n.js';
 
 const REPO = 'SillyTavern/SillyTavern';
@@ -112,6 +113,8 @@ export function targetInfo(parent, folder) {
     if (!parent || !path.isAbsolute(parent)) { info.problem = t('Choose where to put it.'); return info; }
     if (!name) { info.problem = t('Give the folder a name.'); return info; }
     info.path = path.join(parent, name);
+    if (protectedFolder(info.path)) { info.problem = t('Windows controls this folder, so SillyTavern can\'t run from it. Pick another place.'); return info; }
+    info.systemDrive = onSystemDrive(info.path);
     // The nearest folder that exists decides the drive and free space.
     let probe = parent;
     while (!fs.existsSync(probe) && path.dirname(probe) !== probe) probe = path.dirname(probe);
