@@ -336,7 +336,17 @@ function stopCompanions({ wait = false } = {}) {
 }
 
 let elevatedOk = false;
-async function startServer() {
+// autoStart, the Open button and the tray can ask at the same moment. The
+// checks below wait (port, admin question, Tailscale) before `running` is set,
+// so a second call shares the start in progress instead of spawning another node.
+let serverStarting = null;
+let startCancelled = false; // Stop was clicked while a start was still waiting
+function startServer() {
+    serverStarting ||= startServerNow().finally(() => { serverStarting = null; });
+    return serverStarting;
+}
+async function startServerNow() {
+    startCancelled = false;
     if (serverState.running) { logLine('Server is already running.'); return; }
     // An update, restore or branch switch is changing SillyTavern's files.
     if (busyStopsServer) { logLine(`Busy with "${busyTask}" — the server starts again when it has finished.`); return; }
@@ -376,6 +386,10 @@ async function startServer() {
     const opts = Object.keys(so.clean(settings.serverOverrides));
     if (opts.length) logLine(`SillyTavern options set by this app: ${opts.join(', ')}.`);
     if (settings.https) logLine('HTTPS is on (this app\'s own certificate).');
+    // The checks above can wait a while (the admin question stays open until
+    // answered): Stop, or an update that began meanwhile, wins.
+    if (startCancelled) { logLine('Server start cancelled.'); return; }
+    if (busyStopsServer) { logLine(`Busy with "${busyTask}" — the server starts again when it has finished.`); return; }
     // Pass the port explicitly so the Settings value is what the server binds to.
     const child = spawn('node', ['server.js', '--port', String(settings.port)], {
         cwd: stRoot,
@@ -394,14 +408,20 @@ async function startServer() {
 
     // If node can't even be spawned (ENOENT etc.) we get 'error', not 'exit'.
     child.on('error', err => {
+        if (serverState.child !== child) return; // an older server, already replaced
         serverState.running = false;
         serverState.child = null;
         logLine(`ERROR: failed to launch node: ${err.message}`);
+        stopCompanions(); // started above; no 'exit' follows a failed spawn
         broadcast('server-stopped');
     });
     mx.onLines(child.stdout, l => { if (l.trim()) logLine(l.trim()); });
     mx.onLines(child.stderr, l => { if (l.trim()) logLine(`[stderr] ${l.trim()}`); });
     child.on('exit', (code) => {
+        if (serverState.child !== child) { // its 'error' already ran, or a newer server took over
+            if (serverState.child) logLine(`An older server exited with code ${code}.`);
+            return;
+        }
         serverState.running = false;
         serverState.child = null;
         logLine(`Server exited with code ${code}.`);
@@ -435,6 +455,7 @@ function stopServer() {
         return;
     }
     // Several quit paths call this; one taskkill is enough.
+    if (serverStarting && !serverState.child) { startCancelled = true; return; } // still checking: don't spawn
     if (!serverState.child || serverState.child.stopping) return;
     serverState.child.stopping = true;
     logLine('Stopping server...');
@@ -2166,8 +2187,9 @@ async function pickFolder(title, defaultPath) {
 // (--safe-theme, …) come along; file paths ("Open with") would import again.
 function relaunchApp() {
     const portable = process.env.PORTABLE_EXECUTABLE_FILE;
-    const args = process.argv.slice(app.isPackaged ? 1 : 2).filter(a => a.startsWith('--') && a !== '--updated');
-    app.relaunch(portable ? { execPath: portable, args } : { args: [...process.argv.slice(1, app.isPackaged ? 1 : 2), ...args] });
+    const args = process.argv.slice(1).filter(a => a.startsWith('--') && a !== '--updated');
+    // From source, the app folder can sit anywhere among the switches (`electron --inspect=9229 . …`).
+    app.relaunch(portable ? { execPath: portable, args } : { args: app.isPackaged ? args : [app.getAppPath(), ...args] });
     isQuitting = true;
     app.quit();
 }
@@ -2863,7 +2885,7 @@ if (gotLock) {
             appVersion: app.getVersion(),
             logLine,
             isEnabled: id => !!settings.desktopExtensions[id],
-            relaunch: () => { app.relaunch(); isQuitting = true; app.quit(); },
+            relaunch: () => relaunchApp(), // a portable restarts through its own exe
             sillytavern: {
                 folder: () => stRoot(),
                 url: () => mainInstance().url,

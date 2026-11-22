@@ -37,7 +37,7 @@ export const TEST_SETTINGS = { port: 8123, host: 'localhost', autoStart: false, 
 // ST_EXE tests a built app instead of the source. appData: run without
 // --user-data-dir (the app picks its own data folder) and with this folder
 // standing in for %APPDATA%\SillyTavern Desktop; the caller seeds it.
-export async function launch({ name, settings = {}, exe = process.env.ST_EXE, app = exe ? '-' : ROOT, args = [], keep = false, appData = null }) {
+export async function launch({ name, settings = {}, exe = process.env.ST_EXE, app = exe ? '-' : ROOT, args = [], before = [], keep = false, appData = null }) {
     const data = appData ? null : path.join(RUNS, name);
     if (data) {
         if (!keep) fs.rmSync(data, { recursive: true, force: true });
@@ -47,7 +47,8 @@ export async function launch({ name, settings = {}, exe = process.env.ST_EXE, ap
     const cdp = 9800 + Math.floor(Math.random() * 90), ins = cdp + 100;
     const bin = exe || path.join(ROOT, 'node_modules/electron/dist/electron.exe');
     const env = appData ? { ...process.env, ST_DESKTOP_APPDATA: appData } : process.env;
-    const proc = spawn(bin, [...(app === '-' ? [] : [app]), ...(data ? [`--user-data-dir=${data}`] : []), `--remote-debugging-port=${cdp}`, `--inspect=${ins}`, ...args], { stdio: 'ignore', env });
+    // `before`: switches in front of the app folder (`electron --x . …`).
+    const proc = spawn(bin, [...before, ...(app === '-' ? [] : [app]), ...(data ? [`--user-data-dir=${data}`] : []), `--remote-debugging-port=${cdp}`, `--inspect=${ins}`, ...args], { stdio: 'ignore', env });
     const list = async () => (await fetch(`http://127.0.0.1:${cdp}/json/list`)).json();
     const page = async (end, tries = 80) => {
         for (let i = 0; i < tries; i++) {
