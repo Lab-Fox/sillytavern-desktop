@@ -39,7 +39,13 @@ export const FUNCTIONS = {
         const cmOff = c.extensionSettings.disabledExtensions.includes('connection-manager');
         let res, fallback = false;
         if (profileId && !cmOff) {
-            res = await c.ConnectionManagerRequestService.sendRequest(String(profileId), msgs, max, { stream: !!stream, signal, includePreset: true, includeInstruct: true });
+            try {
+                res = await c.ConnectionManagerRequestService.sendRequest(String(profileId), msgs, max, { stream: !!stream, signal, includePreset: true, includeInstruct: true });
+            } catch (e) {
+                // SillyTavern says only "API request failed": the provider's own reason is in cause.
+                const why = e?.cause?.message;
+                throw new Error(why && !String(e.message).includes(why) ? e.message + ': ' + why : e.message, { cause: e });
+            }
         } else {
             if (c.mainApi !== 'openai') throw new Error('Pick a Connection Profile: without one, only a Chat Completion connection can be used.');
             fallback = true;

@@ -1,0 +1,33 @@
+:root {
+  --bg: #17171b; --panel: #202026; --border: #34343d; --text: #dcdce2; --muted: #9a9aa6;
+  --accent: #d8a24a; --user: #262b36; --bad: #e0766b; --warn: #d8b24a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+[hidden] { display: none !important; }
+header { padding: 8px 8px 6px 12px; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; gap: 6px; }
+.row { display: flex; gap: 6px; align-items: center; }
+.row > select, .row > input { flex: 1; min-width: 0; }
+select, input, textarea, button { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+select, input { padding: 4px 6px; }
+button { padding: 4px 10px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.icon { padding: 4px 8px; min-width: 30px; }
+.where { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.warn { color: var(--warn); font-size: 13px; }
+.warn span { flex: 1; }
+#state { margin: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); background: var(--panel); }
+main { flex: 1; overflow-y: auto; padding: 10px 10px 10px 14px; display: flex; flex-direction: column; gap: 10px; }
+.msg { padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg[data-role="user"] { background: var(--user); align-self: flex-end; max-width: 92%; }
+.msg[data-role="assistant"] { background: var(--panel); border: 1px solid var(--border); }
+.msg .note { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.msg .err { display: block; margin-top: 6px; font-size: 12px; color: var(--bad); }
+.msg.pending .text:empty::after { content: "…"; color: var(--muted); }
+.empty { color: var(--muted); text-align: center; margin-top: 30px; }
+footer { padding: 8px 8px 8px 12px; border-top: 1px solid var(--border); background: var(--panel); display: flex; gap: 6px; align-items: flex-end; }
+textarea { flex: 1; resize: none; padding: 6px 8px; min-height: 44px; max-height: 40vh; }
+#btnSend { min-width: 64px; }
+#btnSend[data-mode="stop"] { border-color: var(--bad); color: var(--bad); }
