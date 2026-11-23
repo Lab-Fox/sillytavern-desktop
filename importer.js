@@ -4,11 +4,10 @@
 // use — so SillyTavern converts and names them itself. The app only sorts
 // the files and talks to the running server with a session and CSRF token.
 import fs from 'fs';
-import http from 'http';
-import https from 'https';
 import path from 'path';
 import crypto from 'crypto';
 import { t } from './i18n.js';
+import { request, openSession } from './stclient.js';
 
 const MAX_BYTES = 60 * 1024 * 1024;
 const CHAR_EXT = new Set(['.png', '.charx', '.byaf', '.yaml', '.yml']);
@@ -81,26 +80,6 @@ function freeName(dir, name, ext = '.json') {
 }
 
 // ---------- talking to the server ----------
-function request(base, method, urlPath, { headers = {}, body, auth, cookie } = {}) {
-    return new Promise((resolve, reject) => {
-        const u = new URL(urlPath, base);
-        const h = { ...headers };
-        if (auth) h.Authorization = `Basic ${Buffer.from(`${auth.user}:${auth.password}`).toString('base64')}`;
-        if (cookie) h.Cookie = cookie;
-        if (body) h['Content-Length'] = body.length;
-        // This PC's own SillyTavern: with HTTPS on, its certificate is the app's own.
-        const req = (u.protocol === 'https:' ? https : http).request(u, { method, headers: h, timeout: 60000, rejectUnauthorized: false }, res => {
-            const chunks = [];
-            res.on('data', c => chunks.push(c));
-            res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text: Buffer.concat(chunks).toString('utf8') }));
-        });
-        req.on('timeout', () => req.destroy(new Error('the server did not answer')));
-        req.on('error', reject);
-        if (body) req.write(body);
-        req.end();
-    });
-}
-
 function multipart(fields, file) {
     const boundary = `----stdesktop${crypto.randomBytes(12).toString('hex')}`;
     const parts = [];
@@ -109,15 +88,6 @@ function multipart(fields, file) {
     parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="avatar"; filename="${safeName}"\r\nContent-Type: application/octet-stream\r\n\r\n`));
     parts.push(file.data, Buffer.from(`\r\n--${boundary}--\r\n`));
     return { body: Buffer.concat(parts), type: `multipart/form-data; boundary=${boundary}` };
-}
-
-// A session of our own: SillyTavern hands out a CSRF token tied to its cookie.
-async function openSession(base, auth) {
-    const r = await request(base, 'GET', '/csrf-token', { auth });
-    if (r.status === 401) throw new Error(t('SillyTavern asked for a password this app doesn\'t have.'));
-    if (r.status !== 200) throw new Error(`SillyTavern answered ${r.status}.`);
-    const cookie = (r.headers['set-cookie'] || []).map(c => c.split(';')[0]).join('; ');
-    return { auth, cookie, token: JSON.parse(r.text).token };
 }
 
 const LOGIN_HINT = 'SillyTavern wants a login (user accounts are on). Import this file from SillyTavern itself, or drop it onto the SillyTavern window.';

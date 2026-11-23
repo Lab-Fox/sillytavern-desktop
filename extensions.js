@@ -169,6 +169,12 @@ function makeApi(id, entry) {
             url: () => host.sillytavern.url(),
             info: () => host.sillytavern.info(),
             openTab: (p = '/') => host.sillytavern.openTab(String(p)),
+            // A request to SillyTavern's own API (this PC's server of the active
+            // profile), with a session of the app's own. JSON in, JSON (or text) out.
+            request: (method, p, body) => host.sillytavern.request(checkMethod(method), checkApiPath(p), body),
+            // One of the app's named functions (stpage.js) in the SillyTavern
+            // page: version, profiles, tokenCount, generate. opts: { onChunk, signal }.
+            page: (name, args, opts = {}) => host.sillytavern.page(String(name), args, { onChunk: typeof opts.onChunk === 'function' ? opts.onChunk : null, signal: opts.signal || null }),
         }),
         // SillyTavern pages: styles and scripts apply to every open page and
         // every page loaded later, until removed or the extension is off.
@@ -242,6 +248,20 @@ function makeApi(id, entry) {
         // Called from the extension's launcher panel with ext.invoke(channel, ...args).
         handle(channel, fn) { reg.handlers.set(String(channel), fn); },
     });
+}
+
+// What api.sillytavern.request may reach: SillyTavern's API and its version.
+function checkMethod(m) {
+    const method = String(m || '').toUpperCase();
+    if (method !== 'GET' && method !== 'POST') throw new Error('Only GET and POST requests are allowed.');
+    return method;
+}
+function checkApiPath(p) {
+    const s = String(p || '');
+    if (!s.startsWith('/') || s.startsWith('//') || s.includes('..') || /[\\\s#]/.test(s)) throw new Error(`Not a SillyTavern API path: ${s.slice(0, 80)}`);
+    const { pathname } = new URL(s, 'http://localhost');
+    if (!pathname.startsWith('/api/') && pathname !== '/version') throw new Error(`Only SillyTavern's /api/ routes and /version can be requested (${pathname.slice(0, 80)}).`);
+    return s;
 }
 
 // ---------- hooks for main.js ----------

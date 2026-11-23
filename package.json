@@ -68,6 +68,8 @@
       "bar-preload.cjs",
       "sidepanel.js",
       "sidepanel-preload.cjs",
+      "stclient.js",
+      "stpage.js",
       "examples/**",
       "fonts/**",
       "launcher.html",

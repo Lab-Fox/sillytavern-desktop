@@ -21,6 +21,8 @@ import { initThemeRoute, guardFileRequests } from './themeroute.js';
 import * as instances from './instances.js';
 import * as ext from './extensions.js';
 import * as side from './sidepanel.js';
+import { client as stClient } from './stclient.js';
+import * as stpage from './stpage.js';
 import * as appUpdate from './appupdate.js';
 import * as lan from './lan.js';
 import * as prof from './profiles.js';
@@ -1122,6 +1124,19 @@ function createStWindow(instance, extra = {}) {
     w.win.on('closed', () => { side.windowClosed(w); stWins.delete(w); pushWindowState(); });
     pushWindowState();
     return w;
+}
+
+// Add-ons' requests to SillyTavern (api.sillytavern.request): one session of the app's own.
+const addonSt = stClient(() => mainUrl(), () => serverLogin());
+
+// The page add-ons' named functions run in: this PC's main SillyTavern, the
+// active tab of the focused window first.
+function mainStPage() {
+    const origin = new URL(mainUrl()).origin;
+    const ok = tab => tab?.instance.kind === 'main' && !tab.view.webContents.isDestroyed() && tab.view.webContents.getURL().startsWith(origin);
+    const wins = [...stWins].filter(w => !w.isDestroyed()).sort((a, b) => b.win.isFocused() - a.win.isFocused());
+    const tab = wins.map(w => w.active).find(ok) || wins.flatMap(w => w.tabs).find(ok);
+    return tab?.view.webContents || null;
 }
 
 // What a side panel's add-on is told about its window's active tab.
@@ -2911,6 +2926,16 @@ if (gotLock) {
                 info: () => ({ ...instances.describe(stRoot()), port: settings.port, running: serverState.running }),
                 // Only paths on the main server: an extension can't point a tab elsewhere.
                 openTab: p => openInstance({ ...mainInstance(), url: new URL(p.replace(/^\/*/, '/'), mainInstance().url).href }),
+                request: async (method, p, body) => {
+                    // A server that is still starting is waited for (up to a minute).
+                    if (!serverState.running || !(await serverUp(60000))) throw new Error(t('SillyTavern isn\'t running. Start it first.'));
+                    return addonSt.request(method, p, body);
+                },
+                page: (name, args, opts) => {
+                    const wc = mainStPage();
+                    if (!wc) throw new Error(t('Open SillyTavern first.'));
+                    return stpage.run(wc, name, args, opts);
+                },
             },
         });
         addons.initAddons({ logLine, userData: USER_DATA, extensionsDir: ext.extensionsDir() });

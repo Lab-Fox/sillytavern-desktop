@@ -95,6 +95,8 @@ export function deactivate() {}
 | `api.on(event, fn)` | `'server-started'` or `'server-stopped'` (the main SillyTavern server), `'profile-switched'` (`fn({ folder })`: the app now uses another SillyTavern), `'quit'` (the app is quitting; servers still run; `fn` may return a promise, and all quit handlers get 2 seconds together). Returns an unsubscribe function |
 | `api.sillytavern.folder()` / `.url()` / `.info()` | The SillyTavern folder, its address, and `{ version, branch, port, running }` |
 | `api.sillytavern.openTab(path)` | Opens a page of the running SillyTavern, like `'/'`, in a tab or window |
+| `api.sillytavern.request(method, path, body)` | A `GET` or `POST` to SillyTavern's own API (`/api/…` or `/version`) on this PC's server of the active profile, with a session of the app's own (its CSRF token, and the phone-access login when that is on). JSON in; returns a promise of the parsed JSON (or text). Waits up to a minute for a server that is still starting. Refuses with a clear message when SillyTavern's user accounts are on (needs app 1.9.0) |
+| `api.sillytavern.page(name, args, { onChunk, signal })` | Runs one of the app's named functions in this PC's open SillyTavern page (see below). Returns a promise of its answer; `onChunk(data)` gets streamed pieces; an `AbortSignal` stops it. Rejects with `SillyTavern reloaded during the request.` if the page reloads first, and `Open SillyTavern first.` when no SillyTavern page is open (needs app 1.9.0) |
 | `api.pages.addStyle(css)` | Adds CSS to every SillyTavern page, open now or opened later. Returns `{ remove() }` |
 | `api.pages.addScript(code)` | Runs JavaScript in every SillyTavern page when it loads (and once in pages already open). Returns `{ remove() }` |
 | `api.pages.run(code)` | Runs JavaScript once in every open SillyTavern page |
@@ -149,6 +151,19 @@ const n = await SillyTavernDesktop.invoke('my-extension', 'word-count', 'some te
 Only channels you registered with `api.pages.handle` answer, and only SillyTavern pages shown by this app can call them. Arguments and answers are copied (plain data, no functions). Treat what a page sends like any input from the web: SillyTavern's own extensions run in the same page.
 
 "SillyTavern pages" means every SillyTavern tab and window the app shows: the main one, read-only copies, second servers and other installs. Page code runs in the page itself, like a userscript, so it can use SillyTavern's globals such as `SillyTavern.getContext()`. **It never changes SillyTavern's files.** Use SillyTavern's own CSS variables, for example `var(--SmartThemeBodyColor)`, so your additions follow the user's SillyTavern theme.
+
+### Named page functions
+
+`api.sillytavern.page` only runs these, shipped with the app; an add-on passes plain data, never code:
+
+| Name | Arguments | Answer |
+|---|---|---|
+| `version` | none | `{ version, branch }` of the SillyTavern in the page |
+| `profiles` | none | `{ available, profiles: [{ id, name, api, model, preset }], selected }`: the Connection Manager's profiles SillyTavern can send requests through (`available: false` when Connection Manager is off) |
+| `tokenCount` | `{ text }` | `{ count }` with SillyTavern's current tokenizer |
+| `generate` | `{ profileId, messages: [{ role, content }], maxTokens, stream }` | `{ text, reasoning, fallback }`. Sends exactly `messages` through the profile's connection, with its preset's sampler settings but **not** the preset's prompts (a text completion profile's instruct template is used: it only marks the roles and gives the stop strings). `onChunk({ text })` gets the text so far while it streams. Without a profile (or with Connection Manager off) it uses SillyTavern's current Chat Completion connection and says `fallback: true` |
+
+The request goes out from the user's SillyTavern, to the provider they set up there: tell your users what you send.
 
 ## The launcher panel
 
