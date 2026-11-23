@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { launch, check, finish, sleep, RUNS, CLONE, TEST_SETTINGS } from './lib.mjs';
 import { start as fakeModel } from '../copilot/fake-model.mjs';
+import { addLorebook, openTestChat, LORE, MESSAGES as CHAT_LEN } from '../copilot/clone-setup.mjs';
 
 if (!CLONE) { console.log('Set ST_CLONE to a throwaway SillyTavern.'); process.exit(1); }
 const NAME = 'st-access';
@@ -128,6 +129,43 @@ if (ONLY !== 'requests') {
     check('token count', r.ok?.count > 0, JSON.stringify(r));
     r = await call('page', 'nothing');
     check('unknown function', /no page function/i.test(r.err || ''), JSON.stringify(r));
+
+    // ---- Task 5.1: what the co-pilot can read ----
+    await addLorebook(P);
+    const msgCount = await openTestChat(P);
+    await sleep(1500);
+    r = await call('page', 'context');
+    check('context of the open chat', r.ok?.characterName === 'Seraphina' && r.ok.messageCount === CHAT_LEN && !!r.ok.chatId && msgCount === CHAT_LEN, 'setup ' + JSON.stringify(msgCount) + ' ' + JSON.stringify(r).slice(0, 200));
+    r = await call('page', 'chatMessages', { from: CHAT_LEN - 20, to: CHAT_LEN - 1 });
+    const cm = r.ok?.messages || [];
+    check('chat messages by range', cm.length === 20 && cm[0].index === 5 && cm[19].index === 24 && /Test message 24/.test(cm[19].text) && r.ok.total === CHAT_LEN && typeof cm[0].isUser === 'boolean', JSON.stringify(r).slice(0, 200));
+    const lists = (await call('page', 'lists')).ok;
+    const sera = lists?.characters.find(x => x.name === 'Seraphina');
+    check('lists', !!sera && lists.presets.includes('Default') && lists.lorebooks.includes(LORE) && Array.isArray(lists.personas), JSON.stringify(lists).slice(0, 200));
+    r = await call('page', 'character', { avatar: sera?.avatar });
+    check('character fields raw', r.ok?.name === 'Seraphina' && r.ok.description.length > 100 && /\{\{char\}\}|\{\{user\}\}/.test(r.ok.description + r.ok.first_mes + r.ok.mes_example), JSON.stringify(r).slice(0, 160));
+    r = await call('page', 'persona', { avatar: null });
+    check('persona', typeof r.ok?.name === 'string' && r.ok.name.length > 0 && typeof r.ok.description === 'string', JSON.stringify(r).slice(0, 160));
+    r = await call('page', 'preset', { name: 'Default' });
+    check('preset has prompts', r.ok?.name === 'Default' && Array.isArray(r.ok.preset?.prompts) && r.ok.preset.prompts.some(p => p.identifier === 'main') && typeof r.ok.preset.temperature === 'number', JSON.stringify(r).slice(0, 160));
+    r = await call('page', 'lorebook', { name: LORE });
+    const ents = r.ok?.entries || [];
+    check('lorebook entries', ents.length === 2 && ents.some(e => e.uid === 1 && e.constant === true && e.keys.includes('cellar') && e.secondaryKeys.includes('door')), JSON.stringify(r).slice(0, 200));
+    r = await call('page', 'tokenCounts', { texts: ['one', 'one two three four five six', ''] });
+    check('token counts in order', r.ok?.counts?.length === 3 && r.ok.counts[1] > r.ok.counts[0] && r.ok.counts[2] === 0, JSON.stringify(r));
+    r = await call('page', 'profiles');
+    await P.ev(`(() => { const cm = SillyTavern.getContext().extensionSettings.connectionManager;
+        cm.profiles = cm.profiles.filter(p => !['desktop-tc-size', 'desktop-cc-nopreset'].includes(p.id));
+        cm.profiles.push({ id: 'desktop-tc-size', name: 'Desktop test (TC size)', mode: 'tc', api: 'koboldcpp', 'api-url': 'http://127.0.0.1:20131', preset: 'Default' });
+        cm.profiles.push({ id: 'desktop-cc-nopreset', name: 'Desktop test (no preset)', mode: 'cc', api: 'custom', model: 'x', 'api-url': 'http://127.0.0.1:20130/v1', preset: '' });
+        return 'ok'; })()`);
+    const sizes = await call('page', 'profiles');
+    const tcMax = await P.ev(`SillyTavern.getContext().maxContext`);
+    const tcSize = sizes.ok?.profiles?.find(x => x.id === 'desktop-tc-size')?.maxContext;
+    const noPreset = sizes.ok?.profiles?.find(x => x.id === 'desktop-cc-nopreset')?.maxContext;
+    check('text completion profiles use their own context size', tcSize === tcMax && noPreset === sizes.ok.currentMaxContext, JSON.stringify({ tcSize, tcMax, noPreset, current: sizes.ok?.currentMaxContext }));
+    await P.ev(`(() => { const cm = SillyTavern.getContext().extensionSettings.connectionManager; cm.profiles = cm.profiles.filter(p => !['desktop-tc-size', 'desktop-cc-nopreset'].includes(p.id)); return 'ok'; })()`);
+    check('profiles have a context size', r.ok?.profiles?.find(p => p.id === 'desktop-test')?.maxContext > 0, JSON.stringify(r).slice(0, 200));
 
     const TEXT = 'The quick brown fox jumps over the lazy dog near the old tavern.';
     fake.reply({ text: TEXT, chunks: 5, delayMs: 80 });

@@ -164,8 +164,16 @@ Only channels you registered with `api.pages.handle` answer, and only SillyTaver
 | Name | Arguments | Answer |
 |---|---|---|
 | `version` | none | `{ version, branch }` of the SillyTavern in the page |
-| `profiles` | none | `{ available, profiles: [{ id, name, api, model, preset }], selected }`: the Connection Manager's profiles SillyTavern can send requests through (`available: false` when Connection Manager is off) |
+| `profiles` | none | `{ available, profiles: [{ id, name, api, model, preset, maxContext }], selected, currentMaxContext }`: the Connection Manager's profiles SillyTavern can send requests through (`available: false` when Connection Manager is off) |
 | `tokenCount` | `{ text }` | `{ count }` with SillyTavern's current tokenizer |
+| `tokenCounts` | `{ texts }` | `{ counts }`, in the same order (up to 200 texts) |
+| `context` | none | What is open: `{ chatId, characterAvatar, characterName, groupId, messageCount, userName }` |
+| `chatMessages` | `{ from, to }` | Messages of the open chat by index (up to 500 per call): `{ chatId, total, messages: [{ index, name, isUser, isSystem, text }] }` |
+| `character` | `{ avatar }` | A character's card fields as stored, without macros replaced: `name`, `description`, `personality`, `scenario`, `first_mes`, `mes_example`, `alternate_greetings`, `creator_notes`, `system_prompt`, `post_history_instructions`, `tags` |
+| `persona` | `{ avatar }` | `{ avatar, name, description }`; `avatar: null` is the persona in use |
+| `preset` | `{ name }` | A chat completion preset (`null`: the selected one): `{ name, preset }` with its settings, `prompts` and `prompt_order` |
+| `lorebook` | `{ name }` | `{ name, entries: [{ uid, keys, secondaryKeys, comment, content, constant, disabled, order, position }] }` |
+| `lists` | none | `{ characters: [{ avatar, name }], personas: [{ avatar, name }], presets, lorebooks }` |
 | `generate` | `{ profileId, messages: [{ role, content }], maxTokens, stream }` | `{ text, reasoning, fallback }`. Sends exactly `messages` through the profile's connection, with its preset's sampler settings but **not** the preset's prompts (a text completion profile's instruct template is used: it only marks the roles and gives the stop strings). `onChunk({ text })` gets the text so far while it streams. Without a profile (or with Connection Manager off) it uses SillyTavern's current Chat Completion connection and says `fallback: true` |
 
 The request goes out from the user's SillyTavern, to the provider they set up there: tell your users what you send.

@@ -19,6 +19,7 @@ async function refresh() {
     st = await P.invoke('state', tab);
     render();
     if (st.available && (!profiles || profiles.error)) loadProfiles();
+    loadTray();
 }
 
 // Asked again whenever it failed (SillyTavern's page still loading after a
@@ -172,3 +173,109 @@ P.onMessage(m => {
 });
 P.onTab(() => refresh());
 refresh();
+
+// ---- the context tray: what the co-pilot sees ----
+const fmt = n => Number(n || 0).toLocaleString('en-US');
+// One look at a time; asks that come in meanwhile become one more look after it.
+let trayBusy = false, trayAgain = false;
+async function loadTray() {
+    const tray = $('#tray');
+    tray.hidden = !st?.available;
+    if (tray.hidden) return;
+    if (trayBusy) { trayAgain = true; return; }
+    trayBusy = true;
+    try {
+        do {
+            trayAgain = false;
+            try { renderTray(await P.invoke('context')); } catch (e) { $('#trayTotal').textContent = String(e.message || e); }
+        } while (trayAgain);
+    } finally { trayBusy = false; }
+}
+function renderTray(v) {
+    const total = $('#trayTotal');
+    total.dataset.total = String(v.total);
+    total.classList.toggle('over', !!v.over);
+    total.textContent = `${fmt(v.total)} tokens${v.maxContext ? ` of ${fmt(v.maxContext)}` : ''}${v.over ? ': too much for this profile, untick something' : ''}`;
+    $('#trayList').replaceChildren(...v.items.map(it => {
+        const row = el('div', `ctx${it.on ? '' : ' off'}`);
+        row.dataset.id = it.id;
+        const box = el('input');
+        box.type = 'checkbox';
+        box.checked = !!it.on;
+        box.addEventListener('change', () => P.invoke('contextToggle', it.id, box.checked).then(loadTray, showError));
+        const tokens = el('span', 'tokens', it.error ? '' : fmt(it.tokens));
+        tokens.dataset.tokens = String(it.tokens || 0);
+        const rm = el('button', 'rm', '×');
+        rm.title = 'Remove';
+        rm.addEventListener('click', () => P.invoke('contextRemove', it.id).then(loadTray, showError));
+        row.append(box, el('span', 'label', it.label), tokens);
+        if (it.error) row.append(el('span', 'err', it.error));
+        row.append(rm);
+        return row;
+    }));
+}
+
+// Adding: a kind, then "last N" / a range for messages, or a pick from a list.
+let addItems = [];
+const ACTIVE = '__in-use__';
+$('#btnAdd').addEventListener('click', () => {
+    $('#addBox').hidden = false;
+    $('#addKind').value = '';
+    $('#addRange').hidden = $('#addPick').hidden = true;
+    $('#btnAddOk').disabled = true;
+});
+$('#btnAddCancel').addEventListener('click', () => { $('#addBox').hidden = true; });
+$('#addKind').addEventListener('change', async () => {
+    const kind = $('#addKind').value;
+    $('#addRange').hidden = kind !== 'messages';
+    $('#addPick').hidden = !kind || kind === 'messages';
+    $('#btnAddOk').disabled = true;
+    if (!kind) return;
+    try {
+        const c = await P.invoke('contextChoices', kind);
+        if (kind === 'messages') {
+            $('#addTotal').textContent = c.chatId ? `This chat has ${fmt(c.total)} messages (0 is the first).` : 'Open a chat first.';
+            $('#addTo').value = String(Math.max(0, (c.total || 1) - 1));
+            $('#btnAddOk').disabled = !c.chatId;
+            return;
+        }
+        addItems = c.items;
+        $('#addSearch').value = '';
+        fillList();
+    } catch (e) { showError(e); }
+});
+function fillList() {
+    const q = $('#addSearch').value.trim().toLowerCase();
+    $('#addList').replaceChildren(...addItems.filter(x => !q || x.label.toLowerCase().includes(q)).slice(0, 500).map(x => {
+        const o = el('option', null, x.label);
+        o.value = x.value ?? ACTIVE;
+        return o;
+    }));
+    $('#btnAddOk').disabled = !$('#addList').value;
+}
+$('#addSearch').addEventListener('input', fillList);
+$('#addList').addEventListener('change', () => { $('#btnAddOk').disabled = !$('#addList').value; });
+$('#btnAddOk').addEventListener('click', async () => {
+    const kind = $('#addKind').value;
+    const v = $('#addList').value;
+    const spec = kind === 'messages'
+        ? ($('#addModeRange').checked ? { kind, from: $('#addFrom').value, to: $('#addTo').value } : { kind, last: $('#addLast').value })
+        : kind === 'card' ? { kind, avatar: v }
+        : kind === 'persona' ? { kind, avatar: v === ACTIVE ? null : v }
+        : { kind, name: v };
+    try {
+        await P.invoke('contextAdd', spec);
+        $('#addBox').hidden = true;
+        loadTray();
+    } catch (e) { showError(e); }
+});
+
+// The exact request the next message would send, as text.
+$('#btnPreview').addEventListener('click', async () => {
+    try {
+        const msgs = await P.invoke('preview', $('#input').value);
+        $('#previewText').textContent = msgs.map(m => `[${m.role}]\n${m.content}`).join('\n\n');
+        $('#previewBox').hidden = false;
+    } catch (e) { showError(e); }
+});
+$('#btnPreviewClose').addEventListener('click', () => { $('#previewBox').hidden = true; });

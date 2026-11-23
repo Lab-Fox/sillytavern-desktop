@@ -23,6 +23,41 @@
   </header>
   <div id="state" data-state="loading" hidden></div>
   <main id="log"></main>
+  <section id="tray">
+    <div class="row tray-head">
+      <span id="trayTotal" data-total="0"></span>
+      <button id="btnAdd" title="Add something for the co-pilot to see">+ Add</button>
+      <button id="btnPreview" title="The exact request the next message sends">Show request</button>
+    </div>
+    <div id="trayList"></div>
+    <div id="addBox" hidden>
+      <div class="row">
+        <select id="addKind">
+          <option value="">Add…</option>
+          <option value="messages">Messages of this chat</option>
+          <option value="card">A character card</option>
+          <option value="persona">A persona</option>
+          <option value="preset">A chat completion preset</option>
+          <option value="lorebook">A lorebook</option>
+        </select>
+        <button id="btnAddCancel">Cancel</button>
+      </div>
+      <div id="addRange" hidden>
+        <div class="row"><label><input type="radio" name="addMode" id="addModeLast" checked> Last</label><input id="addLast" type="number" min="1" value="20"><span>messages</span></div>
+        <div class="row"><label><input type="radio" name="addMode" id="addModeRange"> From</label><input id="addFrom" type="number" min="0" value="0"><span>to</span><input id="addTo" type="number" min="0" value="0"></div>
+        <div class="where" id="addTotal"></div>
+      </div>
+      <div id="addPick" hidden>
+        <input id="addSearch" placeholder="Search">
+        <select id="addList" size="6"></select>
+      </div>
+      <div class="row"><button id="btnAddOk" disabled>Add</button></div>
+    </div>
+  </section>
+  <div id="previewBox" hidden>
+    <div class="row"><strong>The next request</strong><button id="btnPreviewClose">Close</button></div>
+    <pre id="previewText"></pre>
+  </div>
   <footer>
     <textarea id="input" rows="3" placeholder="Ask the co-pilot…"></textarea>
     <button id="btnSend" data-mode="send">Send</button>

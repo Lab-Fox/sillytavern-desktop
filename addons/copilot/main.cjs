@@ -6,16 +6,18 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const ctx = require('./context.cjs');
 
 const SYSTEM_PROMPT = [
     'You are the co-pilot inside SillyTavern Desktop, an app around SillyTavern.',
     'You help the user with SillyTavern: chat completion presets, character cards, personas, lorebooks and chats.',
-    'For now you can only talk with the user: you can\'t read or change anything in SillyTavern yet. Say so if asked to.',
+    'You see only the material the user ticked for you, in <data> blocks. For now you can\'t change anything in SillyTavern: say so if asked to, and show the user what to change instead.',
     'Answer briefly and plainly.',
 ].join('\n');
 const MAX_TOKENS = 2048;
 
 let api = null;
+const page = (name, args) => api.sillytavern.page(name, args);
 let busy = null; // { sessionId, text, ctl }
 
 const hashOf = folder => crypto.createHash('sha1').update(path.resolve(folder).toLowerCase()).digest('hex').slice(0, 12);
@@ -47,8 +49,11 @@ function listSessions() {
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .map(s => ({ id: s.id, name: s.name, updatedAt: s.updatedAt, count: s.messages.length }));
 }
-function newSession() {
-    const s = { id: `${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`, name: 'New session', createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
+// A new session starts with the open chat's items ticked (when SillyTavern's page can tell).
+async function newSession() {
+    let context = [];
+    try { context = await ctx.defaults(page); } catch { /* no page yet: start empty */ }
+    const s = { id: `${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`, name: 'New session', createdAt: Date.now(), updatedAt: Date.now(), messages: [], context };
     saveSession(s);
     setOpen(s.id);
     return s;
@@ -74,8 +79,12 @@ function availability(tab) {
     return null;
 }
 
-function state(tab) {
+// Two state calls at once (the panel loading and a tab change) make one session.
+let creating = null;
+async function state(tab) {
     const reason = availability(tab);
+    // Where it can work, there is always a session (with the open chat's items).
+    if (!reason && !currentSession()) await (creating ??= newSession().finally(() => { creating = null; }));
     return {
         available: !reason, reason, folder: folder(),
         sessions: listSessions(), current: currentSession(),
@@ -86,17 +95,66 @@ function state(tab) {
 
 const push = message => api.sidepanel.send(message);
 
-// What the model is sent: the system prompt and the conversation. Replies
-// that failed aren't part of it.
-const conversation = s => [{ role: 'system', content: SYSTEM_PROMPT },
-    ...s.messages.filter(m => !m.error && m.content).map(m => ({ role: m.role, content: m.content }))];
+// What the model is sent: the system prompt, the material the user ticked
+// (read fresh), and the conversation. Replies that failed aren't part of it.
+const talk = s => s.messages.filter(m => !m.error && m.content).map(m => ({ role: m.role, content: m.content }));
+async function requestFor(s, extra = null) {
+    const c = await page('context').catch(() => null);
+    const blocks = [];
+    for (const item of (s.context || []).filter(i => i.on)) {
+        try { blocks.push(await ctx.resolve(page, item, c)); } catch { /* shown in the tray; left out */ }
+    }
+    const material = ctx.material(blocks);
+    return [{ role: 'system', content: SYSTEM_PROMPT }, ...(material ? [{ role: 'system', content: material }] : []), ...talk(s), ...(extra ? [{ role: 'user', content: extra }] : [])];
+}
+
+// Token counts through SillyTavern's tokenizer, cached piece by piece (a
+// growing chat only costs its new messages).
+let count = null;
+
+// The tray: every item with its size, and the total of the next request.
+// Kept while nothing it depends on changed (the items, the open chat and its
+// length, the profile, the conversation), for at most 30 s.
+let view = { key: '', at: 0, value: null };
+async function contextView() {
+    const s = currentSession();
+    if (!s) return { items: [], system: 0, conversation: 0, total: 0, maxContext: 0, over: false };
+    const c = await page('context').catch(() => null);
+    const key = JSON.stringify([s.id, s.context, c?.chatId, c?.messageCount, perFolder('profile'), s.messages.length]);
+    if (view.key === key && Date.now() - view.at < 30000) return view.value;
+    const items = [];
+    for (const item of s.context || []) {
+        try { items.push({ ...item, tokens: (await ctx.measure(page, item, count, c)).tokens, error: '' }); } catch (e) { items.push({ ...item, tokens: 0, error: e.message || String(e) }); }
+    }
+    const [system, rule, ...turns] = await count([SYSTEM_PROMPT, ctx.MATERIAL_RULE, ...talk(s).map(m => m.content)]);
+    const conversation = turns.reduce((n, x) => n + x, 0);
+    const ticked = items.filter(it => it.on && !it.error);
+    const total = system + conversation + (ticked.length ? rule + ticked.reduce((n, it) => n + it.tokens, 0) : 0);
+    let maxContext = 0;
+    try {
+        const p = await page('profiles');
+        const chosen = p.profiles?.find(x => x.id === perFolder('profile'));
+        maxContext = chosen?.maxContext || p.currentMaxContext || 0;
+    } catch { /* unknown */ }
+    // Room is kept for the reply.
+    const value = { items, system, conversation, total, maxContext, over: !!maxContext && total + MAX_TOKENS > maxContext };
+    view = { key, at: Date.now(), value };
+    return value;
+}
+function changeContext(fn) {
+    const s = currentSession();
+    if (!s) throw new Error('No session.');
+    s.context = fn(s.context || []);
+    saveSession(s);
+    return true;
+}
 
 async function send(text) {
     text = String(text || '').trim();
     if (!text) throw new Error('Write a message first.');
     if (busy) throw new Error('The co-pilot is still answering.');
     if (!api.sillytavern.info().running) throw new Error('SillyTavern isn\'t running.');
-    const s = currentSession() || newSession();
+    const s = currentSession() || await newSession();
     if (!s.messages.length && s.name === 'New session') s.name = text.replace(/\s+/g, ' ').slice(0, 40);
     s.messages.push({ role: 'user', content: text, at: Date.now() });
     saveSession(s);
@@ -108,7 +166,7 @@ async function send(text) {
         const reply = { role: 'assistant', content: '', at: Date.now() };
         let saveError = '';
         try {
-            const r = await api.sillytavern.page('generate', { profileId: perFolder('profile'), messages: conversation(s), maxTokens: MAX_TOKENS, stream: true }, {
+            const r = await api.sillytavern.page('generate', { profileId: perFolder('profile'), messages: await requestFor(s), maxTokens: MAX_TOKENS, stream: true }, {
                 signal: ctl.signal,
                 onChunk: c => { busy.text = c.text; push({ type: 'turn', sessionId: s.id, text: c.text, done: false }); },
             });
@@ -139,6 +197,7 @@ async function send(text) {
 module.exports = {
     activate(a) {
         api = a;
+        count = ctx.counter(page);
         const h = (name, fn) => api.sidepanel.handle(name, fn);
         h('state', tab => state(tab));
         h('profiles', async () => {
@@ -150,7 +209,14 @@ module.exports = {
             return { ...r, error: '', profileId: perFolder('profile') };
         });
         h('setProfile', id => { setPerFolder('profile', id ? String(id) : null); return true; });
-        h('sessionNew', tab => { newSession(); return state(tab); });
+        h('sessionNew', async tab => { await newSession(); return state(tab); });
+        h('context', () => contextView());
+        h('contextToggle', (id, on) => changeContext(list => list.map(i => (i.id === id ? { ...i, on: !!on } : i))));
+        h('contextRemove', id => changeContext(list => list.filter(i => i.id !== id)));
+        h('contextAdd', async spec => { const item = await ctx.itemFrom(page, spec); changeContext(list => [...list, item]); return item; });
+        h('contextChoices', kind => ctx.choices(page, String(kind)));
+        // The exact messages the next request would send (with the text being written).
+        h('preview', async text => { const s = currentSession(); return s ? requestFor(s, String(text || '').trim() || null) : []; });
         h('sessionOpen', (id, tab) => { if (readSession(id)) setOpen(id); return state(tab); });
         h('sessionRename', (id, name, tab) => {
             const s = readSession(id);

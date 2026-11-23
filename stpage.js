@@ -16,16 +16,111 @@ export const FUNCTIONS = {
     profiles: `async () => {
         const c = SillyTavern.getContext();
         const cm = c.extensionSettings.connectionManager;
-        if (c.extensionSettings.disabledExtensions.includes('connection-manager') || !cm) return { available: false, profiles: [], selected: null };
+        const currentMaxContext = Number(c.chatCompletionSettings?.openai_max_context) || 0;
+        if (c.extensionSettings.disabledExtensions.includes('connection-manager') || !cm) return { available: false, profiles: [], selected: null, currentMaxContext };
         let list = [];
         try { list = c.ConnectionManagerRequestService.getSupportedProfiles(); } catch { list = []; }
+        // A profile's context size: text completion uses SillyTavern's text
+        // context size; chat completion its preset's, else the current one.
+        const sizeOf = p => {
+            if (c.CONNECT_API_MAP?.[p.api]?.selected === 'textgenerationwebui') return Number(c.maxContext) || 0;
+            const preset = p.preset ? c.getPresetManager('openai')?.getCompletionPresetByName(p.preset) : null;
+            return Number(preset?.openai_max_context) || currentMaxContext;
+        };
         return {
             available: true,
-            profiles: list.map(p => ({ id: String(p.id), name: String(p.name || ''), api: String(p.api || ''), model: String(p.model || ''), preset: String(p.preset || '') })),
+            profiles: list.map(p => ({ id: String(p.id), name: String(p.name || ''), api: String(p.api || ''), model: String(p.model || ''), preset: String(p.preset || ''), maxContext: sizeOf(p) })),
             selected: cm.selectedProfile || null,
+            currentMaxContext,
         };
     }`,
     tokenCount: `async ({ text } = {}) => ({ count: await SillyTavern.getContext().getTokenCountAsync(String(text ?? '')) })`,
+    tokenCounts: `async ({ texts = [] } = {}) => {
+        const c = SillyTavern.getContext();
+        const counts = [];
+        for (const t of Array.isArray(texts) ? texts.slice(0, 200) : []) counts.push(t ? await c.getTokenCountAsync(String(t)) : 0);
+        return { counts };
+    }`,
+    // What is open: the chat, its character, the user's name.
+    context: `async () => {
+        const c = SillyTavern.getContext();
+        const ch = c.characterId !== undefined ? c.characters[c.characterId] : null;
+        return {
+            chatId: c.getCurrentChatId?.() || null,
+            characterAvatar: ch?.avatar || null, characterName: ch?.name || null,
+            groupId: c.groupId || null, messageCount: Array.isArray(c.chat) ? c.chat.length : 0,
+            userName: String(c.name1 || ''),
+        };
+    }`,
+    // Messages of the open chat by index, at most 500 per call.
+    chatMessages: `async ({ from = 0, to } = {}) => {
+        const c = SillyTavern.getContext();
+        const chat = Array.isArray(c.chat) ? c.chat : [];
+        const a = Math.max(0, Math.floor(Number(from)) || 0);
+        const b = Math.min(chat.length - 1, to == null ? chat.length - 1 : Math.floor(Number(to)), a + 499);
+        const messages = [];
+        for (let i = a; i <= b; i++) {
+            const m = chat[i] || {};
+            messages.push({ index: i, name: String(m.name || ''), isUser: !!m.is_user, isSystem: !!m.is_system, text: String(m.mes ?? '') });
+        }
+        return { chatId: c.getCurrentChatId?.() || null, total: chat.length, messages };
+    }`,
+    // A character's card fields as stored (no macros replaced).
+    character: `async ({ avatar } = {}) => {
+        const c = SillyTavern.getContext();
+        const i = c.characters.findIndex(x => x.avatar === avatar);
+        if (i < 0) throw new Error('No such character.');
+        await c.unshallowCharacter?.(i);
+        const ch = c.characters[i], d = ch.data || {};
+        const s = v => String(v ?? '');
+        return {
+            avatar: ch.avatar, name: s(ch.name),
+            description: s(d.description ?? ch.description), personality: s(d.personality ?? ch.personality),
+            scenario: s(d.scenario ?? ch.scenario), first_mes: s(d.first_mes ?? ch.first_mes), mes_example: s(d.mes_example ?? ch.mes_example),
+            alternate_greetings: Array.isArray(d.alternate_greetings) ? d.alternate_greetings.map(s) : [],
+            creator_notes: s(d.creator_notes ?? ch.creatorcomment), system_prompt: s(d.system_prompt), post_history_instructions: s(d.post_history_instructions),
+            tags: Array.isArray(d.tags) ? d.tags.map(s) : [],
+        };
+    }`,
+    // A persona: avatar null = the one in use now.
+    persona: `async ({ avatar = null } = {}) => {
+        const c = SillyTavern.getContext();
+        const pu = c.powerUserSettings;
+        if (avatar == null) return { avatar: null, name: String(c.name1 || ''), description: String(pu.persona_description || '') };
+        if (!Object.hasOwn(pu.personas || {}, avatar)) throw new Error('No such persona.');
+        return { avatar, name: String(pu.personas[avatar] || ''), description: String(pu.persona_descriptions?.[avatar]?.description || '') };
+    }`,
+    // A chat completion preset: its settings, prompts and their order. name null = the selected one.
+    preset: `async ({ name = null } = {}) => {
+        const c = SillyTavern.getContext();
+        const pm = c.getPresetManager('openai');
+        const n = name ?? pm?.getSelectedPresetName?.();
+        const p = n ? pm?.getCompletionPresetByName(n) : null;
+        if (!p) throw new Error('No such preset.');
+        return { name: n, preset: JSON.parse(JSON.stringify(p)) };
+    }`,
+    lorebook: `async ({ name } = {}) => {
+        const c = SillyTavern.getContext();
+        if (!c.getWorldInfoNames().includes(name)) throw new Error('No such lorebook.');
+        const data = await c.loadWorldInfo(name);
+        const entries = Object.values(data?.entries || {}).map(e => ({
+            uid: e.uid, keys: Array.isArray(e.key) ? e.key.map(String) : [], secondaryKeys: Array.isArray(e.keysecondary) ? e.keysecondary.map(String) : [],
+            comment: String(e.comment || ''), content: String(e.content || ''), constant: !!e.constant, disabled: !!e.disable,
+            order: Number(e.order) || 0, position: Number(e.position) || 0,
+        }));
+        return { name, entries };
+    }`,
+    // What there is to pick from.
+    lists: `async () => {
+        const c = SillyTavern.getContext();
+        const pu = c.powerUserSettings;
+        return {
+            characters: c.characters.map(x => ({ avatar: x.avatar, name: String(x.name || '') })),
+            personas: Object.entries(pu.personas || {}).map(([avatar, name]) => ({ avatar, name: String(name || '') })),
+            presets: c.getPresetManager('openai')?.getAllPresets?.() || [],
+            lorebooks: c.getWorldInfoNames(),
+        };
+    }`,
     // A Connection Profile's connection with its preset's sampler settings;
     // the preset's prompts are not added (SillyTavern builds the request from
     // our messages only). A text completion profile's instruct template only

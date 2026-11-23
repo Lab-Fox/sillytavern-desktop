@@ -31,3 +31,22 @@ footer { padding: 8px 8px 8px 12px; border-top: 1px solid var(--border); backgro
 textarea { flex: 1; resize: none; padding: 6px 8px; min-height: 44px; max-height: 40vh; }
 #btnSend { min-width: 64px; }
 #btnSend[data-mode="stop"] { border-color: var(--bad); color: var(--bad); }
+
+#tray { border-top: 1px solid var(--border); background: var(--panel); padding: 6px 8px 6px 12px; display: flex; flex-direction: column; gap: 4px; max-height: 45vh; overflow-y: auto; }
+.tray-head { font-size: 12px; color: var(--muted); }
+#trayTotal { flex: 1; }
+#trayTotal.over { color: var(--warn); }
+.tray-head button { font-size: 12px; padding: 2px 8px; }
+.ctx { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.ctx .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx.off .label { color: var(--muted); text-decoration: line-through; }
+.ctx .tokens { color: var(--muted); font-size: 12px; }
+.ctx .err { color: var(--bad); font-size: 12px; }
+.ctx button.rm { padding: 0 6px; font-size: 12px; }
+#addBox { border: 1px solid var(--border); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+#addRange input[type=number] { width: 70px; }
+#addPick { display: flex; flex-direction: column; gap: 4px; }
+#addList { width: 100%; }
+#previewBox { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; padding: 8px 8px 8px 14px; z-index: 5; }
+#previewBox .row strong { flex: 1; }
+#previewText { flex: 1; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.4 Consolas, monospace; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin: 6px 0 0; }
