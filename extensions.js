@@ -40,7 +40,7 @@ export const extensionsDir = () => dir;
 function readManifest(id) {
     const m = JSON.parse(fs.readFileSync(path.join(dir, id, MANIFEST), 'utf8'));
     if (!m || typeof m !== 'object') throw new Error('manifest.json is not an object.');
-    for (const k of ['main', 'panel']) {
+    for (const k of ['main', 'panel', 'sidepanel']) {
         if (m[k] == null) continue;
         const file = path.resolve(dir, id, String(m[k]));
         if (!file.startsWith(path.resolve(dir, id) + path.sep)) throw new Error(`"${k}" must point inside the extension folder.`);
@@ -53,13 +53,14 @@ export function list() {
     // (.old: left over from an update that was interrupted)
     try { ids = fs.readdirSync(dir, { withFileTypes: true }).filter(d => d.isDirectory() && ID.test(d.name) && !d.name.endsWith('.old')).map(d => d.name); } catch { /* no folder yet */ }
     return ids.map(id => {
-        const e = { id, name: id, version: '', author: '', description: '', uses: [], enabled: host.isEnabled(id), active: loaded.has(id) && !loaded.get(id).error, hasPanel: false, fromCatalog: fs.existsSync(path.join(dir, id, '.desktop-addon.json')), error: loaded.get(id)?.error || '' };
+        const e = { id, name: id, version: '', author: '', description: '', uses: [], enabled: host.isEnabled(id), active: loaded.has(id) && !loaded.get(id).error, hasPanel: false, sidepanel: null, fromCatalog: fs.existsSync(path.join(dir, id, '.desktop-addon.json')), error: loaded.get(id)?.error || '' };
         try {
             const m = readManifest(id);
             Object.assign(e, {
                 name: String(m.name || id).slice(0, 60), version: String(m.version || '').slice(0, 20),
                 author: String(m.author || '').slice(0, 60), description: String(m.description || '').slice(0, 300),
                 hasPanel: !!m.panel,
+                sidepanel: m.sidepanel ? String(m.sidepanel) : null,
                 uses: (Array.isArray(m.uses) ? m.uses : []).map(String).slice(0, 12),
             });
             if (m.minAppVersion && newer(m.minAppVersion, host.appVersion)) e.error = `Needs SillyTavern Desktop ${m.minAppVersion} or newer.`;
@@ -81,7 +82,7 @@ export async function activateEnabled() {
 
 export async function activate(id) {
     if (loaded.has(id)) await deactivate(id);
-    const reg = { menu: [], context: [], styles: [], scripts: [], handlers: new Map(), pageHandlers: new Map(), events: [] };
+    const reg = { menu: [], context: [], styles: [], scripts: [], handlers: new Map(), pageHandlers: new Map(), panelHandlers: new Map(), panelOpen: new Set(), events: [] };
     const entry = { manifest: null, module: null, reg, error: '' };
     loaded.set(id, entry);
     try {
@@ -103,6 +104,7 @@ export async function activate(id) {
         say(id, `ERROR: could not start: ${err.message}`);
         undo(entry);
     }
+    host.changed?.();
 }
 
 export async function deactivate(id) {
@@ -112,6 +114,7 @@ export async function deactivate(id) {
     undo(entry);
     say(id, 'turned off.');
     loaded.delete(id);
+    host.changed?.();
 }
 
 export async function reloadAll() {
@@ -124,6 +127,8 @@ function undo(entry) {
     reg.menu.length = 0;
     reg.context.length = 0;
     reg.pageHandlers.clear();
+    reg.panelHandlers.clear();
+    reg.panelOpen.clear();
     for (const s of reg.styles) removeStyle(s);
     reg.styles.length = 0;
     reg.scripts.length = 0;
@@ -149,7 +154,9 @@ function makeApi(id, entry) {
             set: (key, value) => { const d = readData(); d[key] = value; fs.writeFileSync(dataFile, JSON.stringify(d, null, 2)); },
             all: () => readData(),
         }),
-        // Events: 'server-started', 'server-stopped'. Returns an unsubscribe function.
+        // Events: 'server-started', 'server-stopped', 'profile-switched' ({ folder }),
+        // 'quit' (may return a promise; all quit handlers get 2 s together).
+        // Returns an unsubscribe function.
         on(event, fn) {
             const ev = { id, event, fn };
             if (!listeners.has(event)) listeners.set(event, new Set());
@@ -222,6 +229,15 @@ function makeApi(id, entry) {
                 reg.menu.push(it);
                 return { remove: () => { reg.menu.splice(reg.menu.indexOf(it), 1); } };
             },
+        }),
+        // The add-on's side panel in the SillyTavern window (manifest "sidepanel").
+        sidepanel: Object.freeze({
+            // The panel page calls it with desktopPanel.invoke(channel, ...args).
+            handle(channel, fn) { reg.panelHandlers.set(String(channel), fn); },
+            // To every open panel of this add-on (JSON-serialisable).
+            send: message => host.sidepanelSend?.(id, message),
+            // A panel of this add-on has loaded (opened, or its page reloaded).
+            onOpen(fn) { reg.panelOpen.add(fn); return () => { reg.panelOpen.delete(fn); }; },
         }),
         // Called from the extension's launcher panel with ext.invoke(channel, ...args).
         handle(channel, fn) { reg.handlers.set(String(channel), fn); },
@@ -371,6 +387,37 @@ async function downloadFor(id, url, { file, sha256, maxBytes = MAX_DOWNLOAD } = 
     say(id, `downloaded ${name} (${bytes} bytes).`);
     return { path: out, bytes, sha256: digest };
 }
+
+// Side panels (sidepanel.js): the panel page of every add-on that is on.
+export function sidepanels() {
+    const out = [];
+    for (const [id, entry] of loaded) {
+        const m = entry.manifest;
+        if (entry.error || !m?.sidepanel) continue;
+        out.push({ id, name: String(m.name || id).slice(0, 60), dir: path.join(dir, id), file: path.join(dir, id, String(m.sidepanel)) });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+export async function panelInvoke(id, channel, args) {
+    const fn = loaded.get(id)?.reg.panelHandlers.get(String(channel));
+    if (!fn) throw new Error(`No handler for ${channel}`);
+    return fn(...args);
+}
+export function panelOpened(id) {
+    for (const fn of loaded.get(id)?.reg.panelOpen || []) {
+        try { fn(); } catch (err) { say(id, `ERROR in a side panel's onOpen: ${err.message}`); }
+    }
+}
+// Like emit, but waits for handlers that return a promise, up to ms in total ('quit').
+export async function emitAndWait(event, ms, ...args) {
+    const runs = [...(listeners.get(event) || [])].map(ev => Promise.resolve().then(() => ev.fn(...args))
+        .catch(err => say(ev.id, `ERROR in "${event}" handler: ${err.message}`)));
+    if (!runs.length) return;
+    let timer;
+    await Promise.race([Promise.all(runs), new Promise(r => { timer = setTimeout(r, ms); })]);
+    clearTimeout(timer);
+}
+export const hasListeners = event => (listeners.get(event)?.size || 0) > 0;
 
 export async function invoke(id, channel, args) {
     const fn = loaded.get(id)?.reg.handlers.get(channel);

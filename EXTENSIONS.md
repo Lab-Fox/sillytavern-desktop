@@ -48,6 +48,7 @@ An extension's main module runs inside the app with **full access to your PC**, 
     "minAppVersion": "1.1.0",
     "main": "main.cjs",
     "panel": "panel.js",
+    "sidepanel": "sidepanel.html",
     "uses": ["contextMenu", "pages"]
 }
 ```
@@ -59,6 +60,7 @@ An extension's main module runs inside the app with **full access to your PC**, 
 | `minAppVersion` | no | The extension won't start on older versions of the app |
 | `main` | no | Main module, a path inside the extension folder |
 | `panel` | no | Launcher panel script, a path inside the extension folder |
+| `sidepanel` | no | An HTML page docked on the right of the SillyTavern window, a path inside the extension folder (needs app 1.9.0; see below) |
 | `uses` | no | What it does, shown to users before they install it: `pages`, `contextMenu`, `menu`, `panel`, `download`, `spellcheck`, `files` (reads SillyTavern's files). Only a description: the main module can do anything either way |
 
 ## The main module
@@ -90,7 +92,7 @@ export function deactivate() {}
 | `api.id`, `api.dir`, `api.appVersion` | The extension's id, its folder, and the app's version |
 | `api.log(text)` | A line in the launcher's Console, prefixed with your extension's name |
 | `api.storage.get(key, fallback)` / `.set(key, value)` / `.all()` | Your own settings, saved as JSON in `data.json` |
-| `api.on(event, fn)` | `'server-started'` or `'server-stopped'` (the main SillyTavern server). Returns an unsubscribe function |
+| `api.on(event, fn)` | `'server-started'` or `'server-stopped'` (the main SillyTavern server), `'profile-switched'` (`fn({ folder })`: the app now uses another SillyTavern), `'quit'` (the app is quitting; servers still run; `fn` may return a promise, and all quit handlers get 2 seconds together). Returns an unsubscribe function |
 | `api.sillytavern.folder()` / `.url()` / `.info()` | The SillyTavern folder, its address, and `{ version, branch, port, running }` |
 | `api.sillytavern.openTab(path)` | Opens a page of the running SillyTavern, like `'/'`, in a tab or window |
 | `api.pages.addStyle(css)` | Adds CSS to every SillyTavern page, open now or opened later. Returns `{ remove() }` |
@@ -104,6 +106,9 @@ export function deactivate() {}
 | `api.spellcheck.add(words)` / `.remove(words)` / `.list()` | Words the spellchecker (the red underline) accepts, in every SillyTavern page. They stay after your extension turns off: remove them yourself if needed |
 | `api.spellcheck.engine()` / `.setEngine()` | Deprecated: the app always uses Windows' spellchecker now. `engine()` returns `{ engine: 'windows', chosen: 'windows' }`, and `setEngine()` changes nothing and returns `{ engine: 'windows', restart: false }` |
 | `api.app.relaunch()` | Restarts the app (ask the user first) |
+| `api.sidepanel.handle(channel, fn)` | Lets your side panel call `fn` with `desktopPanel.invoke(channel, ...args)`. Return a value (or a promise) to answer; a thrown error's message reaches the panel |
+| `api.sidepanel.send(message)` | Sends plain data to every open side panel of your extension, in order |
+| `api.sidepanel.onOpen(fn)` | `fn()` runs when a side panel of yours has loaded (opened, or its page reloaded): send it what it should show. Returns an unsubscribe function |
 | `api.handle(channel, fn)` | Lets your launcher panel call `fn` with `ext.invoke(channel, ...args)`. Return a value (or a promise) to answer |
 
 ### Right-click menu entries
@@ -161,6 +166,36 @@ panel.querySelector('button').onclick = () => ext.invoke('hello');
 The launcher's classes make a panel look native: `btn` (`sm`, `primary`, `ghost`), `row`, `stack`, `field` with a `label` and `input`, `muted`, `small`. Colors come from the launcher theme through CSS variables like `var(--accent)` and `var(--text)`.
 
 The panel only appears while the extension is on.
+
+## The side panel
+
+If the manifest has `sidepanel`, the SillyTavern window's top bar gets a panel button while your extension is on (with several extensions, the button shows a menu). The page opens docked on the right of the window, beside every tab: it stays when tabs switch or SillyTavern reloads, and its width (300 px up to half the window, dragged at its left edge) is remembered. One panel shows per window at a time.
+
+The page is your own HTML, loaded from your folder, without Node access and with its own memory-only browser session. It reaches your main module through `window.desktopPanel`:
+
+- `desktopPanel.invoke(channel, ...args)`: calls a handler registered with `api.sidepanel.handle`, returns a promise of its answer. Only your own extension's handlers answer (`No handler for <channel>` otherwise).
+- `desktopPanel.onMessage(fn)`: `fn(message)` for every `api.sidepanel.send`. Messages sent before the page listens wait for its first listener.
+- `desktopPanel.tab()`: the SillyTavern tab beside the panel, `{ kind, url, folder }`. `kind` is `'main'`, `'readonly'`, `'port'` (a second server, same folder), `'other'` (another install), `'remote'` or `'web'`; `folder` is null for the last two.
+- `desktopPanel.onTab(fn)`: `fn()` when the window shows another tab; call `tab()` again.
+
+```html
+<!-- sidepanel.html -->
+<button id="hi">Ask</button> <span id="out"></span>
+<script>
+  hi.onclick = async () => { out.textContent = await desktopPanel.invoke('answer', 21); };
+  desktopPanel.onMessage(m => console.log('from main:', m));
+</script>
+```
+
+```js
+// main.cjs
+module.exports = { activate(api) {
+    api.sidepanel.handle('answer', n => n * 2);
+    api.sidepanel.onOpen(() => api.sidepanel.send({ hello: 'panel' }));
+} };
+```
+
+Links to `http`/`https` pages open in the browser; the page itself can't navigate away. Use SillyTavern-like colours of your own: the panel doesn't see SillyTavern's theme.
 
 ## Tips
 

@@ -110,6 +110,7 @@
     <div class="tabs" id="tabs" data-part="tab-strip"><button id="btnNewTab" title="New tab (Ctrl+T)" hidden><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><button id="btnNewMenu" title="New SillyTavern: another tab, a read-only copy, another port or another install"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></button></div>
     <div class="info" id="info" data-part="tab-info"></div>
     <div id="crx"></div>
+    <button id="btnPanel" title="Side panel" hidden><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM15 5v14"/></svg></button>
     <button id="btnReload" title="Reload (F5)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></button>
     <button id="btnLayer" title="Window layer"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5zM3 13l9 5 9-5"/></svg><span id="layerText" hidden></span></button>
     <button id="btnFull" title="Full screen (F11)"><svg viewBox="0 0 24 24" id="icoFull"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><span id="fullText" hidden>Exit full screen</span></button>
@@ -124,6 +125,7 @@
   const VARS = { bg: '--bg', panel: '--panel', border: '--border', accent: '--accent', text: '--text', title: '--title', muted: '--muted', warn: '--warn' };
   const LAYER_TEXT = { top: t('On top'), bottom: t('In background') };
   $('btnReload').onclick = () => bar.action('reload');
+  $('btnPanel').onclick = () => bar.action('side-panel', { at: below($('btnPanel')) });
   // Menus drop down from the button that opened them.
   const below = el => { const r = el.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.bottom) }; };
   $('btnLayer').onclick = () => bar.action('layer-menu', { at: below($('btnLayer')) });
@@ -268,6 +270,10 @@
     $('layerText').hidden = s.layer === 'normal';
     $('layerText').textContent = LAYER_TEXT[s.layer] || '';
     $('btnFull').classList.toggle('on', s.fullScreen);
+    const panels = s.panels || [];
+    $('btnPanel').hidden = !panels.length;
+    $('btnPanel').classList.toggle('on', !!s.panelOpen);
+    $('btnPanel').title = panels.length === 1 ? panels[0].name : t('Side panel');
     $('fullText').hidden = !s.fullScreen;
     renderCrx(s);
   });

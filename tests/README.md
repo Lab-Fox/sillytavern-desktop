@@ -42,9 +42,10 @@ These start the app on throwaway data. Set `ST_RUNS` (a folder for test data) an
     node tests/app/server-start.mjs
     node tests/app/motion-startup.mjs
     node tests/app/addon-relaunch.mjs
+    node tests/app/sidepanel.mjs
     pwsh -File tests/app/portable-second.ps1 -Exe <portable exe> -Run <empty test folder>
 
-`datadir` (built app only, see below) covers where the app keeps its data and moving it; `favicon` covers the tab icon (http, HTTPS, another site, too big, not a picture), `header` the page titles in every language, `underlines` the spellchecker on a new profile, `portable-second` a second launch of the portable, `server-start` two starts at once (one server, Stop reaches it) and quitting with the server running (it only counts and cleans up servers started with `--port 8123`), `motion-startup` the Theme animations setting from the first moment, `addon-relaunch` an add-on restarting the app (same data, switches kept; with `ST_EXE` + `ST_PORTABLE=1` also through the portable exe).
+`datadir` (built app only, see below) covers where the app keeps its data and moving it; `favicon` covers the tab icon (http, HTTPS, another site, too big, not a picture), `header` the page titles in every language, `underlines` the spellchecker on a new profile, `portable-second` a second launch of the portable, `server-start` two starts at once (one server, Stop reaches it) and quitting with the server running (it only counts and cleans up servers started with `--port 8123`), `motion-startup` the Theme animations setting from the first moment, `addon-relaunch` an add-on restarting the app (same data, switches kept; with `ST_EXE` + `ST_PORTABLE=1` also through the portable exe), `sidepanel` add-on side panels (bar button, docking, the bridge both ways, resize and its limits, tab switches, reloads, full screen, the profile and quit events).
 
 `datadir.mjs` needs a built app (`ST_EXE`; add `ST_PORTABLE=1` for the portable exe): it runs without `--user-data-dir` and with fake "%APPDATA%" folders in `ST_RUNS` (`ST_DESKTOP_APPDATA`), so a real install's data is never read.
 

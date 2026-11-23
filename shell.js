@@ -76,6 +76,7 @@ export class StWindow {
         this.fullScreen = false;
         this.tabs = [];     // { view, id, instance, title, favicon, loading }
         this.active = null; // the shown tab
+        this.side = null;   // an add-on's side panel: { view, width, id } (sidepanel.js)
 
         const win = this.win = new BaseWindow({
             width: opts.width, height: opts.height, minWidth: 640, minHeight: 420,
@@ -310,11 +311,28 @@ export class StWindow {
         this.activate(this.tabs[(i + step + this.tabs.length) % this.tabs.length]);
     }
 
+    // An add-on's panel docked on the right, beside every tab (null: none).
+    setSidePanel(view, width, id = null) {
+        const old = this.side?.view;
+        if (old && old !== view) this.win.contentView.removeChildView(old);
+        this.side = view ? { view, width, id } : null;
+        if (view && view !== old) {
+            this.win.contentView.addChildView(view);
+            this.win.contentView.addChildView(this.bar); // keep the bar on top
+        }
+        this.layout();
+        this.push();
+    }
+
     // ---------- layout ----------
     layout() {
         const [width, height] = this.win.getContentSize();
         const full = this.fullScreen;
-        this.active?.view.setBounds(full ? { x: 0, y: 0, width, height } : { x: 0, y: BAR_H, width, height: height - BAR_H });
+        // The page keeps at least half the window (it may have shrunk since).
+        const side = this.side ? Math.min(this.side.width, Math.round(width / 2)) : 0;
+        const top = full ? 0 : BAR_H;
+        this.active?.view.setBounds({ x: 0, y: top, width: width - side, height: height - top });
+        this.side?.view.setBounds({ x: width - side, y: top, width: side, height: height - top });
         // Hidden by moving it above the window, so it keeps painting.
         const shown = !full || this.revealed;
         this.bar.setBounds({ x: 0, y: shown ? 0 : -BAR_H, width, height: BAR_H });
@@ -381,6 +399,9 @@ export class StWindow {
             font: this.opts.font?.(),
             motion: this.opts.motion?.() ?? true,
             controlsWidth: this.fullScreen ? 0 : CONTROLS_W,
+            // Add-on side panels: the button shows when there is one.
+            panels: this.opts.panels?.() ?? [],
+            panelOpen: this.side?.id || null,
             // Chrome extension buttons: the active tab's session ('' = main), null = none
             chromePartition: this.active ? this.opts.chromePartition?.(this.active.view.webContents) ?? null : null,
         });
@@ -453,6 +474,7 @@ ipcMain.on('bar:action', (e, action, data = {}) => {
     else if (action === 'layer-menu') w.popupMenu(w.opts.menu(w).filter(i => i.layerItem), data.at);
     else if (action === 'reload') w.reload();
     else if (action === 'fullscreen') w.toggleFullScreen();
+    else if (action === 'side-panel') w.opts.sidePanel?.(w, data.at, typeof data.id === 'string' ? data.id : null);
     else if (action === 'tab-new') w.newTab();
     else if (action === 'new-menu') w.popupMenu(w.opts.newMenu(w), data.at);
     else if (action === 'tab-select') w.activate(tab);

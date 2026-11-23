@@ -20,6 +20,7 @@ import { MODES as LAYERS, shiftDown } from './winlayer.js';
 import { initThemeRoute, guardFileRequests } from './themeroute.js';
 import * as instances from './instances.js';
 import * as ext from './extensions.js';
+import * as side from './sidepanel.js';
 import * as appUpdate from './appupdate.js';
 import * as lan from './lan.js';
 import * as prof from './profiles.js';
@@ -93,6 +94,7 @@ const DEFAULT_SETTINGS = {
     windowWidth: 1280,
     windowHeight: 800,
     windowFullScreen: false,
+    sidePanelWidth: side.DEFAULT_WIDTH, // an add-on's side panel in the SillyTavern window (px)
     windowLayer: 'normal',      // SillyTavern window: 'normal' | 'top' (always on top) | 'bottom' (stays in background)
     tabs: true,                 // pages SillyTavern/extensions open become tabs instead of windows
     warnSecondServer: true,     // explain the shared-data risk before a second server on the same folder
@@ -943,7 +945,7 @@ async function extraInstance(dir, kind) {
     const name = second ? '' : settings.profiles.find(p => prof.sameDir(p.path, dir))?.name || '';
     const srv = instances.startServer(dir, port, second ? 'second server' : name || `SillyTavern ${d.version}`);
     const inst = {
-        kind, server: srv,
+        kind, server: srv, dir,
         url: `http://${settings.host}:${port}/`,
         webPreferences: { ...stWebPreferences(), partition: instances.partitionFor(dir) },
         chip: second ? `:${port} · ${t('2nd')}` : `${d.version} :${port}`,
@@ -1100,10 +1102,12 @@ function createStWindow(instance, extra = {}) {
         tabHook: (event, tab, w) => {
             const wc = tab.view.webContents;
             if (event === 'bound') crx.tabAdded(wc, w.win);
-            else if (event === 'activated') crx.tabSelected(wc);
+            else if (event === 'activated') { crx.tabSelected(wc); side.tabChanged(w); }
             else if (event === 'releasing') crx.tabMoving(wc);
         },
         chromePartition: wc => crx.partitionForBar(wc),
+        panels: () => side.available(),
+        sidePanel: (w, at, id) => side.toggle(w, id, at),
         // Remember size and full screen — saved once on close, not on every resize
         // (not from windows made for a dragged-out tab)
         onClose: ({ width, height, fullScreen }) => {
@@ -1115,9 +1119,21 @@ function createStWindow(instance, extra = {}) {
     stWins.add(w);
     w.win.on('minimize', pushWindowState);
     w.win.on('restore', pushWindowState);
-    w.win.on('closed', () => { stWins.delete(w); pushWindowState(); });
+    w.win.on('closed', () => { side.windowClosed(w); stWins.delete(w); pushWindowState(); });
     pushWindowState();
     return w;
+}
+
+// What a side panel's add-on is told about its window's active tab.
+function panelTabInfo(stWin) {
+    const tab = stWin.active;
+    if (!tab) return { kind: null, url: null, folder: null };
+    const inst = tab.instance;
+    const wc = tab.view.webContents;
+    // A second server keeps its folder when the profile switches (only the
+    // new folder's extra servers stop), so it says which folder it serves.
+    const folder = inst.kind === 'main' || inst.kind === 'readonly' ? stRoot() : inst.dir || null;
+    return { kind: inst.kind || null, url: wc.isDestroyed() ? null : wc.getURL(), folder };
 }
 
 // A tab dragged out of a window's tab strip (at = screen point, or null from
@@ -2158,6 +2174,7 @@ function useInstall(dir) {
 async function switchTo(dir) {
     await instances.stopAll(dir);
     useInstall(dir);
+    ext.emit('profile-switched', { folder: dir });
     await checkOutsideChanges(dir);
     return true;
 }
@@ -2886,6 +2903,8 @@ if (gotLock) {
             logLine,
             isEnabled: id => !!settings.desktopExtensions[id],
             relaunch: () => relaunchApp(), // a portable restarts through its own exe
+            changed: () => side.refresh(stWins), // add-ons on/off: side panel buttons
+            sidepanelSend: (id, message) => side.send(id, message),
             sillytavern: {
                 folder: () => stRoot(),
                 url: () => mainInstance().url,
@@ -2895,6 +2914,16 @@ if (gotLock) {
             },
         });
         addons.initAddons({ logLine, userData: USER_DATA, extensionsDir: ext.extensionsDir() });
+        side.initSidePanels({
+            panels: () => ext.sidepanels(),
+            width: () => settings.sidePanelWidth,
+            saveWidth: n => { settings.sidePanelWidth = n; saveSettings(settings); },
+            openExternal: openExternalSafe,
+            log: logLine,
+            tabInfo: stWin => panelTabInfo(stWin),
+            invoke: (id, channel, args) => ext.panelInvoke(id, channel, args),
+            opened: id => ext.panelOpened(id),
+        });
         // Before any SillyTavern window: tabs register with it as they open.
         initChrome();
         themes.initThemes(USER_DATA);
@@ -2958,17 +2987,33 @@ if (gotLock) {
         await runTask('Updating SillyTavern', () => tracked('update', () => mx.update(stRoot(), { backupFirst: settings.backupBeforeUpdate, keep: keep() })));
     }
 
+    // Add-ons' 'quit' handlers run once, before any server stops (2 s for all).
+    let addonsQuit = false;
+    const quitAddons = async () => {
+        if (addonsQuit) return;
+        addonsQuit = true;
+        await ext.emitAndWait('quit', 2000);
+    };
     app.on('window-all-closed', () => {
         // User already closed every window — treat that as intent to quit;
         // don't hit them with the confirmation dialog a second time.
         isQuitting = true;
-        stopServer();
-        instances.stopAll();
-        app.quit();
+        quitAddons().finally(() => {
+            stopServer();
+            instances.stopAll();
+            app.quit();
+        });
     });
     // No server outlives the app, however it quits (also Windows shutting
     // down, or quitting without the confirmation).
-    app.on('will-quit', () => {
+    app.on('will-quit', e => {
+        // Quit from elsewhere (tray, --quit, the app updating): add-ons first.
+        if (!addonsQuit && ext.hasListeners('quit')) {
+            e.preventDefault();
+            quitAddons().finally(() => app.quit());
+            return;
+        }
+        addonsQuit = true;
         tunnel.stop({ wait: true });
         stopCompanions({ wait: true });
         ai.stopAll({ wait: true });
@@ -2990,8 +3035,10 @@ if (gotLock) {
             });
             if (choice === 0) {
                 isQuitting = true;
-                stopServer();
-                setTimeout(() => app.quit(), 800);
+                quitAddons().finally(() => {
+                    stopServer();
+                    setTimeout(() => app.quit(), 800);
+                });
             }
             return;
         }

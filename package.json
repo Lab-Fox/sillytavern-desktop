@@ -66,6 +66,8 @@
       "addons.js",
       "chromeext.js",
       "bar-preload.cjs",
+      "sidepanel.js",
+      "sidepanel-preload.cjs",
       "examples/**",
       "fonts/**",
       "launcher.html",
