@@ -13,6 +13,7 @@ import { createRequire } from 'module';
 import crypto from 'crypto';
 import { net, session } from 'electron';
 import { contextsOf } from './contextmenu.js';
+import { openJournal } from './changes.js';
 
 const require = createRequire(import.meta.url);
 
@@ -212,6 +213,9 @@ function makeApi(id, entry) {
                 return { remove: () => { const i = reg.context.indexOf(it); if (i >= 0) reg.context.splice(i, 1); } };
             },
         }),
+        // Before changing SillyTavern's files: record the change (copies of the
+        // files it will touch, in <extension>/user/changes). See changes.js.
+        changes: openJournal(path.join(dir, id)),
         // A file from the web into <extension>/downloads/ (kept on updates).
         download: (url, o = {}) => downloadFor(id, url, o),
         // Words SillyTavern's red underline accepts (Chromium's own dictionary,

@@ -70,6 +70,7 @@
       "sidepanel-preload.cjs",
       "stclient.js",
       "stpage.js",
+      "changes.js",
       "examples/**",
       "fonts/**",
       "launcher.html",

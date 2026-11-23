@@ -25,6 +25,20 @@ let last = null;
 module.exports = { activate(api) {
     api.handle('req', wrap((m, p, b) => api.sillytavern.request(m, p, b)));
     api.handle('page', wrap((n, a) => api.sillytavern.page(n, a)));
+    // The change journal: record a file, change it, put it back.
+    api.handle('chg', wrap(async file => {
+        const fs = require('fs'), crypto = require('crypto');
+        const h = () => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+        const before = h();
+        const id = await api.changes.record({ folder: api.sillytavern.folder(), kind: 'test', target: 'desktop-test', files: [file] });
+        fs.writeFileSync(file, '{"changed":true}');
+        await api.changes.finish(id);
+        const listed = api.changes.list({ folder: api.sillytavern.folder() }).some(e => e.id === id);
+        await api.changes.restoreFile(id, file);
+        let refused = '';
+        try { await api.changes.record({ folder: api.sillytavern.folder(), kind: 'test', target: 'x', files: ['config.yaml'] }); } catch (e) { refused = e.message; }
+        return { same: h() === before, listed, refused };
+    }));
     api.handle('genStopIn', wrap(async (args, ms) => {
         const ctl = new AbortController(); const t0 = Date.now();
         setTimeout(() => ctl.abort(), ms);
@@ -66,6 +80,11 @@ if (ONLY !== 'page') {
     r = await call('req', 'GET', '/api/../csrf-token/../x');
     const r2 = await call('req', 'GET', 'http://example.com/api/x');
     const r3 = await call('req', 'DELETE', '/api/characters/all');
+    const testFile = path.join(CLONE, 'data', 'default-user', 'worlds', 'desktop-test-journal.json');
+    fs.writeFileSync(testFile, '{"entries":{}}');
+    const rc = await call('chg', testFile);
+    fs.rmSync(testFile, { force: true });
+    check('api.changes through an add-on', rc.ok?.same === true && rc.ok.listed === true && /outside/i.test(rc.ok.refused), JSON.stringify(rc).slice(0, 200));
     const r4 = await call('req', 'POST', '/api/secrets/view', {});
     check('a refusal of its own is not "user accounts"', !!r4.err && !/user accounts/i.test(r4.err), JSON.stringify(r4).slice(0, 160));
     check('only SillyTavern\'s API', !!(r.err && r2.err && r3.err), JSON.stringify([r, r2, r3]).slice(0, 200));
