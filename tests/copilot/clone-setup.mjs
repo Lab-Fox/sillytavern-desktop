@@ -40,3 +40,18 @@ export const openTestChat = P => P.ev(`await (async () => {
     await ctx.printMessages();
     return SillyTavern.getContext().chat.length;
 })()`);
+
+// A fresh SillyTavern waits on its welcome screen before its settings count
+// as ready (saving a card does nothing until then): mark the throwaway clone
+// as past its first run, as Tools → "Show the welcome tour" off does.
+import fs from 'fs';
+import path from 'path';
+export function skipWelcome(clone) {
+    const file = path.join(clone, 'data', 'default-user', 'settings.json');
+    try {
+        const s = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (s.firstRun === false) return;
+        s.firstRun = false;
+        fs.writeFileSync(file, JSON.stringify(s, null, 4));
+    } catch { /* no settings yet: SillyTavern makes them */ }
+}

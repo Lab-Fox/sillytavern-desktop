@@ -189,3 +189,33 @@ test('older lookup results go back only as their summary', () => {
     // a stopped reply without raw goes back in the format, not as prose
     assert.ok(h.some(m => m.role === 'assistant' && m.content === JSON.stringify({ say: 'Partial' })));
 });
+
+test('what happened to the proposals goes back to the model', () => {
+    const msgs = [
+        { role: 'user', content: 'fix it' },
+        { role: 'assistant', content: 'Two changes.', raw: '{"say":"Two changes."}', proposals: [
+            { id: 'a1', op: 'edit_card', avatar: 'kit.png', field: 'scenario', set: 'x', why: 'w', state: 'applied' },
+            { id: 'b2', op: 'delete_lorebook_entry', book: 'B', uid: 3, why: 'w', state: 'rejected' },
+            { id: 'c3', op: 'edit_card', avatar: 'kit.png', field: 'tags', set: [], why: 'w', state: 'failed', error: 'Can\'t apply: gone.' },
+            { id: 'd4', op: 'create_lorebook', name: 'N', why: 'w', state: 'pending' },
+        ] },
+    ];
+    const h = p.history(msgs);
+    const note = h.find(m => m.role === 'user' && /What happened to your proposals/.test(m.content))?.content || '';
+    assert.match(note, /edit_card.*applied/);
+    assert.match(note, /delete_lorebook_entry.*rejected/);
+    assert.match(note, /failed.*Can't apply: gone/);
+    assert.match(note, /create_lorebook.*not decided yet/);
+    // no note when nothing was decided
+    assert.equal(p.history([{ role: 'assistant', content: 'x', raw: '{"say":"x"}', proposals: [{ id: 'z', op: 'create_lorebook', name: 'N', why: 'w', state: 'pending' }] }]).length, 1);
+});
+
+test('a proposal carries only its own fields', () => {
+    const extra = p.parse(JSON.stringify({ say: '', proposals: [{ op: 'edit_card', avatar: 'kit.png', field: 'description', set: 'x', why: 'x', change: { journal: 'abc' } }] }));
+    assert.equal(extra.ok, false, 'a field only the co-pilot sets');
+    assert.match(extra.error, /"change"/);
+    const findOnCreate = p.parse(JSON.stringify({ say: '', proposals: [{ op: 'create_lorebook', name: 'Lore', find: 'a', replace: 'b', why: 'x' }] }));
+    assert.equal(findOnCreate.ok, false, 'find/replace only for edits');
+    const shown = p.parse(JSON.stringify({ say: '', proposals: [{ op: 'delete_lorebook_entry', book: 'Lore', uid: 1, why: 'x', shown: { current: 'x' } }] }));
+    assert.equal(shown.ok, false);
+});

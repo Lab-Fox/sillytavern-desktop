@@ -121,6 +121,167 @@ export const FUNCTIONS = {
             lorebooks: c.getWorldInfoNames(),
         };
     }`,
+    // ---- Writing safely: the page keeps its own copies and saves whole
+    // objects from them, so a change made through the server has to be
+    // shown to the page, and the user's pending typing saved first. These
+    // reach SillyTavern's own modules; a version without them is refused.
+    // When the character form shows this card: cancel its pending save and,
+    // if the form differs from the stored card, save the user's typing now.
+    characterFlush: `async ({ avatar } = {}) => {
+        const st = await import('/script.js'), ut = await import('/scripts/utils.js');
+        if (typeof st.createOrEditCharacter !== 'function' || typeof ut.cancelDebounce !== 'function') throw new Error('Reload SillyTavern and try again (this version is not supported).');
+        const ch = st.this_chid !== undefined ? st.characters[st.this_chid] : null;
+        if (!ch || ch.avatar !== avatar || st.menu_type === 'create') return { flushed: false };
+        // Before its settings are ready (welcome screen open) SillyTavern's save does nothing.
+        if (!st.settingsReady) throw new Error('SillyTavern is still starting (is its welcome screen open?). Try again in a moment.');
+        ut.cancelDebounce(st.saveCharacterDebounced);
+        const d = ch.data || {};
+        const form = { description_textarea: d.description ?? ch.description, personality_textarea: d.personality ?? ch.personality, scenario_pole: d.scenario ?? ch.scenario,
+            firstmessage_textarea: d.first_mes ?? ch.first_mes, mes_example_textarea: d.mes_example ?? ch.mes_example, creator_notes_textarea: d.creator_notes ?? ch.creatorcomment,
+            system_prompt_textarea: d.system_prompt, post_history_instructions_textarea: d.post_history_instructions };
+        // (a text box turns CR LF into LF: compare without that difference)
+        const norm = v => String(v ?? '').replace(/\\r\\n?/g, '\\n');
+        const changed = Object.entries(form).some(([id, v]) => { const el = document.getElementById(id); return el && norm(el.value) !== norm(v); });
+        if (!changed) return { flushed: false };
+        await st.createOrEditCharacter();
+        return { flushed: true };
+    }`,
+    // After a change through the server: the page's copy of the card, and
+    // the form when it shows this card. With a field that has its own text
+    // box, only that box is set, so typing in the rest of the form stays (and
+    // a save SillyTavern has pending carries the new value with it).
+    characterRefresh: `async ({ avatar, field } = {}) => {
+        const st = await import('/script.js');
+        if (typeof st.getOneCharacter !== 'function' || typeof st.selectCharacterById !== 'function') throw new Error('Reload SillyTavern and try again (this version is not supported).');
+        await st.getOneCharacter(avatar);
+        const i = st.characters.findIndex(c => c.avatar === avatar);
+        if (i < 0 || String(st.this_chid) !== String(i) || st.menu_type === 'create') return { ok: i >= 0 };
+        const BOX = { description: 'description_textarea', personality: 'personality_textarea', scenario: 'scenario_pole', first_mes: 'firstmessage_textarea',
+            mes_example: 'mes_example_textarea', creator_notes: 'creator_notes_textarea', system_prompt: 'system_prompt_textarea', post_history_instructions: 'post_history_instructions_textarea' };
+        const el = field && Object.hasOwn(BOX, field) ? document.getElementById(BOX[field]) : null;
+        if (el) {
+            const ch = st.characters[i], d = ch.data || {};
+            el.value = String(d[field] ?? (field === 'creator_notes' ? ch.creatorcomment : ch[field]) ?? '');
+            return { ok: true, box: true };
+        }
+        await st.selectCharacterById(i, { switchMenu: false });
+        return { ok: true };
+    }`,
+    // After a card was made or deleted through the server.
+    characterListRefresh: `async () => { await SillyTavern.getContext().getCharacters(); return { ok: true }; }`,
+    // Deletes a card, and its chats unless keepChats. SillyTavern's own
+    // delete closes whatever chat is open, so it's used only when this card
+    // is the open one; otherwise the server route, then the list.
+    characterDelete: `async ({ avatar, keepChats = false } = {}) => {
+        const st = await import('/script.js');
+        if (typeof st.deleteCharacter !== 'function' || typeof st.getCharacters !== 'function') throw new Error('Reload SillyTavern and try again (this version is not supported).');
+        const i = st.characters.findIndex(c => c.avatar === avatar);
+        if (i < 0) throw new Error('No such character.');
+        if (String(st.this_chid) === String(i)) {
+            if (await st.deleteCharacter(avatar, { deleteChats: !keepChats }) === false) throw new Error('SillyTavern did not delete the character.');
+            return { ok: true };
+        }
+        const r = await fetch('/api/characters/delete', { method: 'POST', headers: SillyTavern.getContext().getRequestHeaders(), body: JSON.stringify({ avatar_url: avatar, delete_chats: !keepChats }) });
+        if (!r.ok) throw new Error('SillyTavern did not delete the character.');
+        await st.getCharacters();
+        return { ok: true };
+    }`,
+    // Saves the book open in the World Info editor now (its save waits a second).
+    lorebookFlush: `async () => {
+        const wi = await import('/scripts/world-info.js');
+        if (typeof wi.saveWorldInfo !== 'function' || !wi.worldInfoCache) throw new Error('Reload SillyTavern and try again (this version is not supported).');
+        const sel = document.querySelector('#world_editor_select');
+        const name = sel && sel.value !== '' ? (wi.world_names || [])[Number(sel.value)] : null;
+        if (!name || !wi.worldInfoCache.has(name)) return { flushed: null };
+        await wi.saveWorldInfo(name, wi.worldInfoCache.get(name), true);
+        return { flushed: name };
+    }`,
+    // Saves a whole book through the page (its cache and the file together), then shows it.
+    lorebookSave: `async ({ name, data } = {}) => {
+        const wi = await import('/scripts/world-info.js');
+        if (typeof wi.saveWorldInfo !== 'function' || typeof wi.updateWorldInfoList !== 'function') throw new Error('Reload SillyTavern and try again (this version is not supported).');
+        if (!name || !data || typeof data !== 'object' || !data.entries || typeof data.entries !== 'object') throw new Error('Not a lorebook.');
+        const isNew = !(wi.world_names || []).includes(name);
+        // An immediate save cancels SillyTavern's pending one, whatever book it was for: save the editor's book first.
+        const shownBook = document.querySelector('#world_editor_select');
+        const shownName = shownBook && shownBook.value !== '' ? (wi.world_names || [])[Number(shownBook.value)] : null;
+        if (shownName && wi.worldInfoCache.has(shownName)) await wi.saveWorldInfo(shownName, wi.worldInfoCache.get(shownName), true);
+        await wi.saveWorldInfo(name, data, true);
+        if (isNew) await wi.updateWorldInfoList();
+        wi.reloadEditor(name);
+        return { ok: true };
+    }`,
+    // After a book changed outside the page: forget the page's copy and show the file.
+    lorebookReload: `async ({ name } = {}) => {
+        const wi = await import('/scripts/world-info.js');
+        if (!wi.worldInfoCache || typeof wi.updateWorldInfoList !== 'function') throw new Error('Reload SillyTavern and try again (this version is not supported).');
+        if (wi.worldInfoCache.has(name)) wi.worldInfoCache.delete(name);
+        await wi.updateWorldInfoList();
+        wi.reloadEditor(name);
+        return { ok: true };
+    }`,
+    // One lorebook entry changed inside the page, read fresh from the file,
+    // with SillyTavern's own helpers (a book imported from a card keeps its
+    // card copy in step). op: 'set' (values), 'add' (values → the new uid),
+    // 'delete', 'put' (an entry back under its old uid). expect: the entry as
+    // last read; anything else there now and nothing is written.
+    lorebookEntry: `async ({ name, op, uid, values = {}, entry = null, expect = null } = {}) => {
+        const wi = await import('/scripts/world-info.js');
+        for (const f of ['saveWorldInfo', 'loadWorldInfo', 'createWorldInfoEntry', 'setWIOriginalDataValue', 'deleteWIOriginalDataValue', 'reloadEditor']) {
+            if (typeof wi[f] !== 'function') throw new Error('Reload SillyTavern and try again (this version is not supported).');
+        }
+        if (!(wi.world_names || []).includes(name)) throw new Error('No such lorebook.');
+        // An immediate save cancels SillyTavern's pending one, whatever book it was for: save the editor's book first.
+        const shownBook = document.querySelector('#world_editor_select');
+        const shownName = shownBook && shownBook.value !== '' ? (wi.world_names || [])[Number(shownBook.value)] : null;
+        if (shownName && wi.worldInfoCache.has(shownName)) await wi.saveWorldInfo(shownName, wi.worldInfoCache.get(shownName), true);
+        if (wi.worldInfoCache.has(name)) wi.worldInfoCache.delete(name);
+        const data = structuredClone(await wi.loadWorldInfo(name));
+        if (!data || typeof data.entries !== 'object') throw new Error('Not a lorebook.');
+        const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        const keyOf = u => {
+            const ks = Object.keys(data.entries).filter(k => data.entries[k] && data.entries[k].uid === u);
+            if (ks.length !== 1) throw new Error(ks.length ? 'That lorebook has more than one entry ' + u + '.' : 'That lorebook has no entry ' + u + '.');
+            return ks[0];
+        };
+        const map = wi.originalWIDataKeyMap || {};
+        const put = (u, e, key, v) => {
+            e[key] = v;
+            if (key === 'disable') wi.setWIOriginalDataValue(data, u, 'enabled', !v);
+            else if (map[key]) wi.setWIOriginalDataValue(data, u, map[key], v);
+        };
+        const out = { ok: true };
+        if (op === 'set') {
+            const k = keyOf(uid);
+            if (expect && !same(data.entries[k], expect)) throw new Error('The entry changed meanwhile: nothing was written.');
+            for (const [key, v] of Object.entries(values)) put(uid, data.entries[k], key, v);
+        } else if (op === 'add') {
+            const e = wi.createWorldInfoEntry(name, data);
+            if (!e) throw new Error('SillyTavern could not make a new entry.');
+            for (const [key, v] of Object.entries(values)) e[key] = v;
+            out.uid = e.uid;
+        } else if (op === 'delete') {
+            const k = keyOf(uid);
+            if (expect && !same(data.entries[k], expect)) throw new Error('The entry changed meanwhile: nothing was written.');
+            delete data.entries[k];
+            wi.deleteWIOriginalDataValue(data, uid);
+        } else if (op === 'put') {
+            if (!entry || typeof entry !== 'object' || !Number.isInteger(uid) || uid < 0) throw new Error('Nothing to put back.');
+            if (String(uid) in data.entries || Object.values(data.entries).some(e => e && e.uid === uid)) throw new Error('The lorebook has an entry ' + uid + ' again: nothing was written.');
+            data.entries[String(uid)] = { ...entry, uid };
+        } else throw new Error('Unknown change.');
+        await wi.saveWorldInfo(name, data, true);
+        wi.reloadEditor(name);
+        return out;
+    }`,
+    // SillyTavern's own delete (links from characters and settings cleaned up).
+    lorebookDelete: `async ({ name } = {}) => {
+        const wi = await import('/scripts/world-info.js');
+        if (typeof wi.deleteWorldInfo !== 'function') throw new Error('Reload SillyTavern and try again (this version is not supported).');
+        const ok = await wi.deleteWorldInfo(name);
+        if (!ok) throw new Error('SillyTavern did not delete the lorebook.');
+        return { ok: true };
+    }`,
     // A Connection Profile's connection with its preset's sampler settings;
     // the preset's prompts are not added (SillyTavern builds the request from
     // our messages only). A text completion profile's instruct template only

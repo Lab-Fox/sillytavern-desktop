@@ -117,18 +117,59 @@ const TARGET = {
     remove_preset_prompt: p => `Preset ${p.name}: remove prompt ${p.identifier}`, reorder_preset_prompts: p => `Preset ${p.name}: prompt order`,
 };
 const show = v => (typeof v === 'string' ? v : JSON.stringify(v, null, 1));
+// The kinds of change this version can apply; the others are shown only.
+const APPLIES = new Set(['edit_card', 'create_card', 'create_lorebook', 'add_lorebook_entry', 'edit_lorebook_entry', 'delete_lorebook_entry']);
+const DELETES = new Set(['delete_lorebook_entry', 'delete_messages']);
+const STATE_TEXT = { applied: 'Applied.', rejected: 'Rejected.', undone: 'Undone.', failed: 'Not applied.' };
 function proposal(p) {
-    const c = el('div', 'proposal');
+    const c = el('div', `proposal ${p.state || 'pending'}${DELETES.has(p.op) ? ' delete' : ''}`);
+    c.dataset.id = p.id || '';
     c.append(el('div', 'target', (TARGET[p.op] || (() => p.op))(p)));
+    // What goes (as read when the reply came) and what comes.
+    const now = p.shown && 'current' in p.shown ? p.shown.current : undefined;
     if ('find' in p) { c.append(el('div', 'del', show(p.find)), el('div', 'add', show(p.replace))); }
-    else if ('set' in p) c.append(el('div', 'add', show(p.set)));
+    else if ('set' in p) { if (now !== undefined && now !== '') c.append(el('div', 'del', show(now))); c.append(el('div', 'add', show(p.set))); }
+    else if (p.op === 'delete_lorebook_entry' && now) c.append(el('div', 'del', [now.comment, now.content].filter(Boolean).join('\n')));
     else if ('value' in p) c.append(el('div', 'add', show(p.value)));
     else if (p.text != null) c.append(el('div', 'add', show(p.text)));
     else if (p.entry || p.fields || p.prompt) c.append(el('div', 'add', show(p.entry || p.fields || p.prompt)));
     else if (p.description != null) c.append(el('div', 'add', show(p.description)));
     else if (p.order) c.append(el('div', 'add', p.order.join(' → ')));
     c.append(el('div', 'why', p.why));
-    c.append(el('div', 'later', 'Applying comes in the next version.'));
+    if (!p.id) return c;
+    if (!APPLIES.has(p.op)) { c.append(el('div', 'later', 'Applying this kind of change comes in the next version.')); return c; }
+    const act = (label, cls, fn) => { const b = el('button', cls, label); b.addEventListener('click', async () => { b.disabled = true; try { const r = await fn(); if (r && r.ok === false && r.error) showError(r.error); } catch (e) { showError(e); } await refresh(); }); return b; };
+    const row = el('div', 'actions');
+    if (STATE_TEXT[p.state]) row.append(el('span', 'state', STATE_TEXT[p.state]));
+    // (a failure after writing has a change: that one is undone, not applied again)
+    if (p.state === 'pending' || (p.state === 'failed' && !p.change)) {
+        row.append(act(DELETES.has(p.op) ? 'Delete' : 'Apply', DELETES.has(p.op) ? 'danger' : 'primary', () => P.invoke('apply', p.id)));
+        row.append(act('Reject', '', () => P.invoke('reject', p.id)));
+    }
+    if (p.change && (p.state === 'applied' || p.state === 'failed') && !p.conflict) row.append(act('Undo', '', () => P.invoke('undo', p.id)));
+    c.append(row);
+    if (p.error && p.state === 'failed') c.append(el('div', 'err', p.error));
+    if (p.undoError) c.append(el('div', 'err', p.undoError));
+    if (p.undoNote && p.state === 'undone') c.append(el('div', 'note', p.undoNote));
+    // Undo found the item changed since: both versions, and the user picks.
+    if (p.conflict) {
+        const made = p.op === 'create_card' || p.op === 'create_lorebook';
+        const box = el('div', 'conflict');
+        box.append(el('div', 'q', 'This changed after the co-pilot\'s change. What should Undo do?'));
+        box.append(el('div', 'label', 'Now:'), el('div', 'now', show(p.conflict.current)));
+        if (!made) box.append(el('div', 'label', 'Before the co-pilot\'s change:'), el('div', 'before', show(p.conflict.before)));
+        const r = el('div', 'actions');
+        r.append(act('Keep it as it is now', '', () => P.invoke('undo', p.id, 'keep')));
+        if (made) r.append(act(p.op === 'create_card' ? 'Delete the card anyway' : 'Delete the lorebook anyway', 'danger', () => P.invoke('undo', p.id, 'mine')));
+        else {
+            if (!p.conflict.noMine) r.append(act('Put back what it was before', '', () => P.invoke('undo', p.id, 'mine')));
+            const w = act('Put the whole file back', '', () => P.invoke('undo', p.id, 'file'));
+            w.title = 'The file as it was before the co-pilot\'s change: later changes to it are lost too.';
+            r.append(w);
+        }
+        box.append(r);
+        c.append(box);
+    }
     return c;
 }
 

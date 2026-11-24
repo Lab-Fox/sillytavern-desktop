@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const ctx = require('./context.cjs');
 const protocol = require('./protocol.cjs');
 const lookups = require('./lookups.cjs');
+const applier = require('./apply.cjs');
 
 const SYSTEM_PROMPT = protocol.systemPrompt();
 const MAX_STEPS = 6;
@@ -212,7 +213,14 @@ async function send(text) {
                 last = { role: 'assistant', content: say, raw: r.text, at: Date.now() };
                 if (r.fallback) last.fallback = true;
                 if (wanted.length) last.lookups = wanted;
-                if (proposals.length) last.proposals = proposals;
+                // Each proposal gets an id, a state and the value it replaces as
+                // read now (Apply refuses if that changes before the click).
+                // Nothing is applied without a click.
+                if (proposals.length) last.proposals = await Promise.all(proposals.map(async x => {
+                    const fields = proposalFields(x);
+                    const shown = await applier.currentOf(api, fields);
+                    return { ...fields, ...(shown ? { shown } : {}), id: crypto.randomBytes(4).toString('hex'), state: 'pending' };
+                }));
                 if (ask) last.ask = ask;
                 append(last);
                 busy.text = ''; // saved: a stop from here on doesn't save it twice
@@ -245,6 +253,76 @@ async function send(text) {
         }
     })();
     return { ok: true, sessionId: s.id };
+}
+
+// ---- applying proposals (one at a time: they may touch the same file) ----
+let applying = null; // the id of the proposal being applied or undone
+// Where a proposal is: its session, in the folder it was found in. An apply
+// or undo writes its outcome there, even when the user opened another
+// session or switched profile meanwhile.
+function locate(id) {
+    const s = currentSession();
+    if (!s) throw new Error('No session.');
+    const p = s.messages.flatMap(m => m.proposals || []).find(x => x.id === id);
+    if (!p) throw new Error('That proposal isn\'t in this session.');
+    return { at: { sid: s.id, dir: sessionsDir() }, p: { ...p } };
+}
+// fn changes the proposal; saved right after.
+function withProposal(at, id, fn) {
+    const s = readSession(at.sid, at.dir);
+    const p = s && s.messages.flatMap(m => m.proposals || []).find(x => x.id === id);
+    if (!p) throw new Error('That proposal isn\'t there any more.');
+    const out = fn(p);
+    saveSession(s, at.dir);
+    return out;
+}
+async function oneAtATime(id, fn) {
+    if (applying) throw new Error('Another change is being applied: wait a moment.');
+    if (!api.sillytavern.info().running) throw new Error('SillyTavern isn\'t running.');
+    applying = id;
+    try { return await fn(); } finally { applying = null; }
+}
+// What the model proposed, without anything only the co-pilot sets.
+const proposalFields = p => { const { id, state, change, error, conflict, undoError, undoNote, shown, ...rest } = p; return rest; };
+// Still open: never decided, or failed before anything was written (a
+// failure after writing has a change, which is undone, not applied again).
+const open = p => p.state === 'pending' || (p.state === 'failed' && !p.change);
+
+async function applyOne(id) {
+    return oneAtATime(id, async () => {
+        const { at, p } = locate(id);
+        if (!open(p)) throw new Error('That proposal was already decided.');
+        const r = await applier.applyProposal(api, { ...proposalFields(p), ...(p.shown ? { shown: p.shown } : {}) });
+        withProposal(at, id, x => {
+            x.state = r.ok ? 'applied' : 'failed';
+            x.error = r.ok ? '' : r.error;
+            if (r.change) x.change = r.change;
+            delete x.conflict;
+        });
+        return r.ok ? { ok: true } : { ok: false, error: r.error };
+    });
+}
+function rejectOne(id) {
+    if (applying === id) throw new Error('That proposal is being applied: wait a moment.');
+    const { at } = locate(id);
+    return withProposal(at, id, x => {
+        if (!open(x)) throw new Error('That proposal was already decided.');
+        x.state = 'rejected';
+        return { ok: true };
+    });
+}
+async function undoOne(id, choice) {
+    return oneAtATime(id, async () => {
+        const { at, p } = locate(id);
+        if (!p.change || !['applied', 'failed'].includes(p.state)) throw new Error('There is nothing to undo for that proposal.');
+        const r = await applier.undoChange(api, p.change, { choice: ['mine', 'file', 'keep'].includes(choice) ? choice : undefined });
+        withProposal(at, id, x => {
+            if (r.conflict) { x.conflict = { ...r.conflict, noMine: !!r.noMine }; return; }
+            delete x.conflict;
+            if (r.ok && r.how !== 'kept') { x.state = 'undone'; x.undoError = ''; x.undoNote = r.note || ''; } else if (!r.ok) x.undoError = r.error;
+        });
+        return r;
+    });
 }
 
 module.exports = {
@@ -284,6 +362,9 @@ module.exports = {
             return state(tab);
         });
         h('send', text => send(text));
+        h('apply', id => applyOne(String(id)));
+        h('reject', id => rejectOne(String(id)));
+        h('undo', (id, choice) => undoOne(String(id), choice));
         // A click on one of the co-pilot's choices: sent as the user's answer to that question.
         h('answer', (question, choice) => send(protocol.answerText(question, choice)));
         h('stop', () => { busy?.ctl.abort(); return true; });

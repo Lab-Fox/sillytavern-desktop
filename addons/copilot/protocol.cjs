@@ -85,6 +85,10 @@ function checkProposal(x, i) {
     const op = own(OPS, x.op) ? OPS[x.op] : null;
     if (!op) return `${where}: unknown op "${String(x.op).slice(0, 40)}". Use one of: ${Object.keys(OPS).join(', ')}.`;
     if (typeof x.why !== 'string' || !x.why.trim()) return `${where}: say "why" in a short sentence.`;
+    // Only its own fields: anything else would travel with it unchecked.
+    const allowed = ['op', 'why', ...Object.keys(op.args), ...(op.edit ? ['find', 'replace', 'set'] : [])];
+    const extra = Object.keys(x).find(k => !allowed.includes(k));
+    if (extra !== undefined) return `${where} (${x.op}): "${extra.slice(0, 40)}" isn't part of a ${x.op} proposal (it takes ${allowed.slice(2).join(', ') || 'only "why"'}).`;
     const bad = checkArgs(`${where} (${x.op})`, op.args, x);
     if (bad) return bad;
     if (!op.edit) return null;
@@ -201,8 +205,15 @@ function history(messages) {
             return [{ role: 'user', content: `(Earlier lookups, results no longer shown: ${(m.summary || []).join('; ')}. Look again if you need them.)` }];
         }
         if (m.role !== 'assistant' || m.error || m.invalid) return [];
-        if (m.raw) return [{ role: 'assistant', content: m.raw }];
-        return m.content ? [{ role: 'assistant', content: JSON.stringify({ say: m.content }) }] : [];
+        const out = m.raw ? [{ role: 'assistant', content: m.raw }] : m.content ? [{ role: 'assistant', content: JSON.stringify({ say: m.content }) }] : [];
+        // What the user did with its proposals, so the model knows.
+        const decided = (m.proposals || []).filter(x => x.state && x.state !== 'pending');
+        if (out.length && decided.length) {
+            const word = x => ({ applied: 'applied', rejected: 'rejected by the user', undone: 'applied, then undone by the user', failed: `failed: ${x.error || 'unknown reason'}` })[x.state] || x.state;
+            const lines = (m.proposals || []).map((x, n) => `${n + 1}. ${x.op}: ${x.state && x.state !== 'pending' ? word(x) : 'not decided yet'}`);
+            out.push({ role: 'user', content: `(What happened to your proposals:\n${lines.join('\n')})` });
+        }
+        return out;
     });
 }
 

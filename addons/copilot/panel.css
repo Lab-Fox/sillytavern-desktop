@@ -56,8 +56,20 @@ textarea { flex: 1; resize: none; padding: 6px 8px; min-height: 44px; max-height
 .proposal .target { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .proposal .del { color: var(--bad); text-decoration: line-through; font-size: 13px; }
 .proposal .add { color: #8fcf8f; font-size: 13px; }
-.proposal .why, .proposal .later { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.proposal .why, .proposal .later, .proposal .note { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .ask { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .ask .q { width: 100%; font-weight: 600; }
 .msg.invalid .raw { margin-top: 6px; font-size: 12px; color: var(--muted); }
 .msg.invalid .raw pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 0; }
+
+.proposal .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.proposal .actions .state { color: var(--muted); font-size: 12px; margin-right: 4px; }
+.proposal button.primary { border-color: var(--accent); }
+.proposal button.danger { border-color: var(--bad); color: var(--bad); }
+.proposal.applied { border-color: #4f7a4f; }
+.proposal.rejected, .proposal.undone { opacity: .75; }
+.proposal .err { color: var(--bad); font-size: 12px; margin-top: 4px; }
+.proposal .conflict { margin-top: 8px; padding: 6px; border: 1px dashed var(--warn); border-radius: 6px; }
+.proposal .conflict .q { color: var(--warn); font-size: 13px; margin-bottom: 4px; }
+.proposal .conflict .label { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.proposal .conflict .now, .proposal .conflict .before { font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }

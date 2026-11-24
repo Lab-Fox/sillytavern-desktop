@@ -3,12 +3,14 @@
 // panel's states. Needs ST_CLONE (a throwaway SillyTavern; it gets a test
 // Connection Profile) and ST_RUNS. Nothing reaches a real AI provider.
 import fs from 'fs';
+import crypto from 'crypto';
 import path from 'path';
 import { launch, check, finish, sleep, RUNS, CLONE, ROOT, TEST_SETTINGS } from './lib.mjs';
 import { start as fakeModel } from '../copilot/fake-model.mjs';
-import { addProfile, addLorebook, openTestChat } from '../copilot/clone-setup.mjs';
+import { addProfile, addLorebook, openTestChat, skipWelcome } from '../copilot/clone-setup.mjs';
 
 if (!CLONE) { console.log('Set ST_CLONE to a throwaway SillyTavern.'); process.exit(1); }
+skipWelcome(CLONE);
 const NAME = 'copilot';
 const DATA = path.join(RUNS, NAME);
 const ID = 'copilot';
@@ -213,9 +215,109 @@ check('ask with choices sends the pick', JSON.stringify(choices) === '["Seraphin
 const descBefore = await P.ev(`await (async () => { const c = SillyTavern.getContext(); const i = c.characters.findIndex(x => x.name === 'Seraphina'); await c.unshallowCharacter?.(i); return c.characters[i].data.description; })()`);
 fake.reply({ text: J('I suggest one change.', { proposals: [{ op: 'edit_card', avatar: 'default_Seraphina.png', field: 'description', find: descBefore.slice(0, 30), replace: 'CHANGED TEXT', why: 'A test change.' }] }) });
 await sendAndWait('Suggest a change to the description');
-const prop = await Q.ev(`(() => { const p = [...document.querySelectorAll('#log .proposal')].at(-1); return p ? { target: p.querySelector('.target').textContent, add: p.querySelector('.add')?.textContent, later: !!p.querySelector('.later') } : null; })()`);
+const prop = await Q.ev(`(() => { const p = [...document.querySelectorAll('#log .proposal')].at(-1); return p ? { target: p.querySelector('.target').textContent, add: p.querySelector('.add')?.textContent, apply: [...p.querySelectorAll('button')].some(b => b.textContent === 'Apply') } : null; })()`);
 const descAfter = await P.ev(`SillyTavern.getContext().characters.find(x => x.name === 'Seraphina').data.description`);
-check('proposals shown, nothing changed', prop?.target === 'Card default_Seraphina.png: description' && prop.add === 'CHANGED TEXT' && prop.later && descAfter === descBefore, JSON.stringify(prop));
+check('proposals shown, nothing changed', prop?.target === 'Card default_Seraphina.png: description' && prop.add === 'CHANGED TEXT' && prop.apply && descAfter === descBefore, JSON.stringify(prop));
+
+// ---- Applying and undoing (Batch 7) ----
+const sha = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+const cardPath = path.join(CLONE, 'data', 'default-user', 'characters', 'default_Seraphina.png');
+const lorePath = path.join(CLONE, 'data', 'default-user', 'worlds', 'Desktop test lore.json');
+const lastProp = () => Q.ev(`(() => { const c = [...document.querySelectorAll('#log .proposal')].at(-1); return c ? { cls: c.className, state: c.querySelector('.state')?.textContent || '', err: [...c.querySelectorAll('.err')].map(e => e.textContent).join(' '), buttons: [...c.querySelectorAll('button')].map(b => b.textContent), conflict: !!c.querySelector('.conflict'), del: c.querySelector('.del')?.textContent ?? null } : null; })()`);
+const press = text => Q.ev(`(() => { const c = [...document.querySelectorAll('#log .proposal')].at(-1); const b = [...c.querySelectorAll('button')].find(b => b.textContent === ` + JSON.stringify(text) + `); if (!b) return 'no button'; b.click(); return 'ok'; })()`);
+const waitProp = test => until(async () => { const p = await lastProp(); return p && test(p) && p; }, 25000);
+const propose = async (proposal, say = 'Here is a change.') => { fake.reply({ text: J(say, { proposals: [proposal] }) }); await sendAndWait('Please do it'); };
+const stCard = () => P.ev(`await (async () => { const c = SillyTavern.getContext(); const r = await fetch('/api/characters/get', { method: 'POST', headers: c.getRequestHeaders(), body: JSON.stringify({ avatar_url: 'default_Seraphina.png' }) }); return r.json(); })()`);
+const stBook = () => P.ev(`await (async () => { const c = SillyTavern.getContext(); const r = await fetch('/api/worldinfo/get', { method: 'POST', headers: c.getRequestHeaders(), body: JSON.stringify({ name: 'Desktop test lore' }) }); return r.json(); })()`);
+
+// The edit_card proposal shown above: apply it.
+const h0 = sha(cardPath);
+let res7 = await press('Apply');
+let pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+let card7 = await stCard();
+const formNow = await P.ev(`document.querySelector('#description_textarea').value`);
+check('apply edit_card', res7 === 'ok' && pr?.state === 'Applied.' && card7.data.description.startsWith('CHANGED TEXT') && card7.description.startsWith('CHANGED TEXT') && formNow.startsWith('CHANGED TEXT') && sha(cardPath) !== h0, JSON.stringify(pr));
+await press('Undo');
+pr = await waitProp(x => /Undone/.test(x.state));
+check('undo edit_card byte-identical', pr?.state === 'Undone.' && sha(cardPath) === h0, JSON.stringify(pr));
+
+await propose({ op: 'edit_card', avatar: 'default_Seraphina.png', field: 'scenario', find: 'This text is not in the card', replace: 'x', why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Not applied/.test(x.state));
+check('find no longer matches → failed, nothing written', /isn't there/.test(pr?.err || '') && sha(cardPath) === h0, JSON.stringify(pr));
+
+const desc0 = (await stCard()).data.description;
+await propose({ op: 'edit_card', avatar: 'default_Seraphina.png', field: 'description', set: 'Replaced description.', why: 'Test.' });
+const shownDel = (await lastProp())?.del;
+await press('Reject');
+const rejected = await waitProp(x => /Rejected/.test(x.state));
+check('the card shows the value it replaces; Reject writes nothing', !!desc0 && shownDel === desc0 && !!rejected && (await stCard()).data.description === desc0, JSON.stringify(shownDel).slice(0, 80));
+const scen0 = (await stCard()).data.scenario;
+await propose({ op: 'edit_card', avatar: 'default_Seraphina.png', field: 'scenario', set: 'Scenario from the co-pilot.', why: 'Test.' });
+await press('Apply');
+await waitProp(x => /Applied/.test(x.state));
+await P.ev(`await (async () => { const c = SillyTavern.getContext(); await fetch('/api/characters/merge-attributes', { method: 'POST', headers: c.getRequestHeaders(), body: JSON.stringify({ avatar: 'default_Seraphina.png', scenario: 'Edited by hand.', data: { scenario: 'Edited by hand.' } }) }); return 'ok'; })()`);
+await press('Undo');
+pr = await waitProp(x => x.conflict);
+const conflictSeen = !!pr?.conflict;
+await press('Put back what it was before');
+pr = await waitProp(x => /Undone/.test(x.state));
+check('conflict after the user changed the item', conflictSeen && pr?.state === 'Undone.' && (await stCard()).data.scenario === scen0, JSON.stringify(pr));
+
+// Lorebook, with the World Info editor showing it.
+await P.ev(`await (async () => { const wi = await import('/scripts/world-info.js'); wi.reloadEditor('Desktop test lore', true); await new Promise(r => setTimeout(r, 1500)); return 'ok'; })()`);
+const l0 = sha(lorePath);
+await propose({ op: 'edit_lorebook_entry', book: 'Desktop test lore', uid: 0, field: 'content', set: 'Lantern text from the co-pilot.', why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const cached = await P.ev(`await (async () => { const wi = await import('/scripts/world-info.js'); return (await wi.loadWorldInfo('Desktop test lore')).entries['0'].content; })()`);
+const editEntryOk = pr?.state === 'Applied.' && (await stBook()).entries['0'].content === 'Lantern text from the co-pilot.' && cached === 'Lantern text from the co-pilot.';
+await press('Undo');
+pr = await waitProp(x => /Undone/.test(x.state));
+check('lorebook entry edit and undo with the editor open', editEntryOk && pr?.state === 'Undone.' && sha(lorePath) === l0, JSON.stringify(pr));
+
+await propose({ op: 'add_lorebook_entry', book: 'Desktop test lore', entry: { keys: ['harbour'], content: 'Harbour entry from the co-pilot.', comment: 'Harbour' }, why: 'Test.' });
+await press('Apply');
+await waitProp(x => /Applied|Not applied/.test(x.state));
+const addedOk = Object.values((await stBook()).entries).some(e => e.content === 'Harbour entry from the co-pilot.' && e.key[0] === 'harbour');
+await press('Undo');
+await waitProp(x => /Undone/.test(x.state));
+const addUndone = !Object.values((await stBook()).entries).some(e => e.content === 'Harbour entry from the co-pilot.');
+await propose({ op: 'delete_lorebook_entry', book: 'Desktop test lore', uid: 1, why: 'Test.' });
+const delButtons = (await lastProp())?.buttons || [];
+await press('Delete');
+await waitProp(x => /Applied|Not applied/.test(x.state));
+const deletedOk = !('1' in (await stBook()).entries);
+await press('Undo');
+await waitProp(x => /Undone/.test(x.state));
+// (the editor's pending save goes out before each change, so "as it was" means the journal's copy from just before the delete)
+const journalDir = path.join(DATA, 'extensions', ID, 'user', 'changes');
+const delEntry = fs.readdirSync(journalDir).filter(d => d !== 'blobs').map(d => { try { return JSON.parse(fs.readFileSync(path.join(journalDir, d, 'entry.json'), 'utf8')); } catch { return null; } }).filter(e => e && e.kind === 'lorebook-entry-delete').sort((a, b) => b.at - a.at)[0];
+check('lorebook entry add and delete, and their undo', addedOk && addUndone && delButtons.includes('Delete') && deletedOk && (await stBook()).entries['1']?.content === 'The cellar door is always locked.' && sha(lorePath) === delEntry?.files[0].sha256, JSON.stringify({ addedOk, addUndone, delButtons, deletedOk, sameAsBefore: sha(lorePath) === delEntry?.files[0].sha256 }));
+
+await propose({ op: 'create_card', name: 'Desktop co-pilot card', fields: { description: 'Made by the co-pilot.', first_mes: 'Hello from a test.' }, why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const hasCard = async () => P.ev(`SillyTavern.getContext().characters.some(c => c.avatar === 'Desktop co-pilot card.png')`);
+const cardMade = pr?.state === 'Applied.' && await hasCard();
+await press('Undo');
+await waitProp(x => /Undone/.test(x.state));
+check('create_card and undo', cardMade && !(await hasCard()) && !fs.existsSync(path.join(CLONE, 'data', 'default-user', 'characters', 'Desktop co-pilot card.png')), JSON.stringify(pr));
+
+await propose({ op: 'create_lorebook', name: 'Desktop co-pilot lore', why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const hasBook = async () => P.ev(`SillyTavern.getContext().getWorldInfoNames().includes('Desktop co-pilot lore')`);
+const bookMade = pr?.state === 'Applied.' && await hasBook();
+await press('Undo');
+await waitProp(x => /Undone/.test(x.state));
+check('create_lorebook and undo', bookMade && !(await hasBook()), JSON.stringify(pr));
+
+fake.reply({ text: J('Noted.') });
+await sendAndWait('What did I do with your changes?');
+const note7 = lastReq().map(m => m.content).join('\n');
+check('outcome sent to the model next turn', /What happened to your proposals/.test(note7) && /applied, then undone/.test(note7) && /failed: Can't apply/.test(note7), note7.slice(-300));
+
 
 const before6 = fake.requests.length;
 for (let i = 0; i < 6; i++) fake.reply({ text: J(`Step ${i}.`, { lookups: [{ tool: 'list_presets' }] }) });

@@ -174,6 +174,15 @@ Only channels you registered with `api.pages.handle` answer, and only SillyTaver
 | `preset` | `{ name }` | A chat completion preset (`null`: the selected one): `{ name, preset }` with its settings, `prompts` and `prompt_order` |
 | `lorebook` | `{ name }` | `{ name, entries: [{ uid, keys, secondaryKeys, comment, content, constant, disabled, order, position }] }` |
 | `lists` | none | `{ characters: [{ avatar, name }], personas: [{ avatar, name }], presets, lorebooks }` |
+| `characterFlush` | `{ avatar }` | When SillyTavern's character form shows that card and its text boxes differ from the card: saves the user's typing now (`{ flushed }`). Call it before changing a card through the server |
+| `characterRefresh` | `{ avatar, field? }` | After changing a card through the server: the page's copy, and the form when it shows that card (otherwise SillyTavern's next save would bring the old text back). With a `field` that has its own text box (`description`, `scenario`, …) only that box is set, so typing in the rest of the form stays |
+| `characterListRefresh` | none | After a card was made or deleted through the server |
+| `characterDelete` | `{ avatar, keepChats? }` | Deletes a card, and its chats unless `keepChats` (SillyTavern's own delete, which closes the open chat, only when that card is open) |
+| `lorebookFlush` | none | Saves the book open in the World Info editor now (its own save waits a second) |
+| `lorebookSave` | `{ name, data }` | Saves a whole book through the page, so its in-memory copy and the file agree, and shows it (the book open in the World Info editor is saved first: SillyTavern's immediate save cancels its pending one) |
+| `lorebookReload` | `{ name }` | After a book changed outside the page: forgets the page's copy and shows the file |
+| `lorebookEntry` | `{ name, op, uid, values, entry, expect }` | One entry changed inside the page with SillyTavern's own helpers (a book from a card keeps its card copy in step): `op` `set` / `add` (answers the new `uid`) / `delete` / `put` (back under its old uid). With `expect`, nothing is written if the entry changed since |
+| `lorebookDelete` | `{ name }` | SillyTavern's own delete (links from characters and settings cleaned up) |
 | `generate` | `{ profileId, messages: [{ role, content }], maxTokens, stream }` | `{ text, reasoning, fallback }`. Sends exactly `messages` through the profile's connection, with its preset's sampler settings but **not** the preset's prompts (a text completion profile's instruct template is used: it only marks the roles and gives the stop strings). `onChunk({ text })` gets the text so far while it streams. Without a profile (or with Connection Manager off) it uses SillyTavern's current Chat Completion connection and says `fallback: true` |
 
 The request goes out from the user's SillyTavern, to the provider they set up there: tell your users what you send.

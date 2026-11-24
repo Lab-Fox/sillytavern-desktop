@@ -6,9 +6,10 @@ import fs from 'fs';
 import path from 'path';
 import { launch, check, finish, sleep, RUNS, CLONE, TEST_SETTINGS } from './lib.mjs';
 import { start as fakeModel } from '../copilot/fake-model.mjs';
-import { addLorebook, openTestChat, LORE, MESSAGES as CHAT_LEN } from '../copilot/clone-setup.mjs';
+import { addLorebook, openTestChat, LORE, MESSAGES as CHAT_LEN, skipWelcome } from '../copilot/clone-setup.mjs';
 
 if (!CLONE) { console.log('Set ST_CLONE to a throwaway SillyTavern.'); process.exit(1); }
+skipWelcome(CLONE);
 const NAME = 'st-access';
 const DATA = path.join(RUNS, NAME);
 const ID = 'st-test';
@@ -166,6 +167,95 @@ if (ONLY !== 'requests') {
     check('text completion profiles use their own context size', tcSize === tcMax && noPreset === sizes.ok.currentMaxContext, JSON.stringify({ tcSize, tcMax, noPreset, current: sizes.ok?.currentMaxContext }));
     await P.ev(`(() => { const cm = SillyTavern.getContext().extensionSettings.connectionManager; cm.profiles = cm.profiles.filter(p => !['desktop-tc-size', 'desktop-cc-nopreset'].includes(p.id)); return 'ok'; })()`);
     check('profiles have a context size', r.ok?.profiles?.find(p => p.id === 'desktop-test')?.maxContext > 0, JSON.stringify(r).slice(0, 200));
+
+    // ---- Task 7.1: writing safely (page functions) ----
+    const SERA = 'default_Seraphina.png';
+    const getCard = async () => (await call('req', 'POST', '/api/characters/get', { avatar_url: SERA })).ok;
+    const card0 = await getCard();
+    await call('req', 'POST', '/api/characters/merge-attributes', { avatar: SERA, scenario: 'DESKTOP TEST SCENARIO', data: { scenario: 'DESKTOP TEST SCENARIO' } });
+    r = await call('page', 'characterRefresh', { avatar: SERA });
+    const formScenario = await P.ev(`document.querySelector('#scenario_pole').value`);
+    check('merge write + characterRefresh refills the open form', !r.err && formScenario === 'DESKTOP TEST SCENARIO', JSON.stringify(r) + ' | ' + formScenario);
+
+    await P.ev(`(() => { const d = document.querySelector('#description_textarea'); d.value = d.value + ' TYPED BY TEST'; return 'ok'; })()`);
+    r = await call('page', 'characterFlush', { avatar: SERA });
+    const afterFlush = await getCard();
+    check('characterFlush saves pending typing first', r.ok?.flushed === true && (afterFlush?.data?.description || afterFlush?.description || '').endsWith(' TYPED BY TEST'), JSON.stringify(r) + ' | ' + JSON.stringify(String(afterFlush?.data?.description || '').slice(-40)));
+    r = await call('page', 'characterFlush', { avatar: SERA });
+    check('characterFlush with nothing typed saves nothing', r.ok?.flushed === false, JSON.stringify(r));
+    // With a field: only that box changes; typing in another box stays.
+    await P.ev(`(() => { const d = document.querySelector('#personality_textarea'); d.value = 'TYPED IN ANOTHER BOX'; return 'ok'; })()`);
+    await call('req', 'POST', '/api/characters/merge-attributes', { avatar: SERA, scenario: 'SECOND TEST SCENARIO', data: { scenario: 'SECOND TEST SCENARIO' } });
+    r = await call('page', 'characterRefresh', { avatar: SERA, field: 'scenario' });
+    const boxes = await P.ev(`({ scenario: document.querySelector('#scenario_pole').value, personality: document.querySelector('#personality_textarea').value })`);
+    check('characterRefresh with a field keeps typing in the other boxes', r.ok?.box === true && boxes.scenario === 'SECOND TEST SCENARIO' && boxes.personality === 'TYPED IN ANOTHER BOX', JSON.stringify(r) + ' | ' + JSON.stringify(boxes));
+    await P.ev(`(() => { document.querySelector('#personality_textarea').value = ${JSON.stringify(card0.data?.personality ?? card0.personality ?? '')}; return 'ok'; })()`);
+    // back as it was
+    await call('req', 'POST', '/api/characters/merge-attributes', { avatar: SERA, scenario: card0.scenario, description: card0.description, data: { scenario: card0.data.scenario, description: card0.data.description } });
+    await call('page', 'characterRefresh', { avatar: SERA });
+
+    // Lorebook: open it in the World Info editor first.
+    await P.ev(`await (async () => { const wi = await import('/scripts/world-info.js'); wi.reloadEditor(${JSON.stringify(LORE)}, true); await new Promise(r => setTimeout(r, 1500)); return 'ok'; })()`);
+    const book0 = (await call('req', 'POST', '/api/worldinfo/get', { name: LORE })).ok;
+    const book1 = structuredClone(book0);
+    book1.entries['0'].content = 'Saved through the page by the test.';
+    r = await call('page', 'lorebookSave', { name: LORE, data: book1 });
+    const disk1 = (await call('req', 'POST', '/api/worldinfo/get', { name: LORE })).ok;
+    const cache1 = await P.ev(`await (async () => { const wi = await import('/scripts/world-info.js'); return (await wi.loadWorldInfo(${JSON.stringify(LORE)})).entries['0'].content; })()`);
+    check('lorebookSave updates file, cache and editor', !r.err && disk1.entries['0'].content === 'Saved through the page by the test.' && cache1 === 'Saved through the page by the test.', JSON.stringify(r) + ' | ' + cache1);
+
+    const book2 = structuredClone(book0);
+    book2.entries['0'].content = 'Written from outside the page.';
+    await call('req', 'POST', '/api/worldinfo/edit', { name: LORE, data: book2 });
+    r = await call('page', 'lorebookReload', { name: LORE });
+    const cache2 = await P.ev(`await (async () => { const wi = await import('/scripts/world-info.js'); return (await wi.loadWorldInfo(${JSON.stringify(LORE)})).entries['0'].content; })()`);
+    check('lorebookReload after an outside write', !r.err && cache2 === 'Written from outside the page.', JSON.stringify(r) + ' | ' + cache2);
+
+    r = await call('page', 'lorebookFlush');
+    check('lorebookFlush runs', !r.err, JSON.stringify(r));
+    await call('page', 'lorebookSave', { name: LORE, data: book0 });
+
+
+    // lorebookEntry: one entry changed inside the page with SillyTavern's own helpers.
+    const bookNow = async () => (await call('req', 'POST', '/api/worldinfo/get', { name: LORE })).ok;
+    const e0 = (await bookNow()).entries['1'];
+    r = await call('page', 'lorebookEntry', { name: LORE, op: 'set', uid: 1, values: { content: 'Changed by lorebookEntry.', disable: true }, expect: e0 });
+    let bk = await bookNow();
+    check('lorebookEntry set', !r.err && bk.entries['1'].content === 'Changed by lorebookEntry.' && bk.entries['1'].disable === true && bk.entries['0'].content === book0.entries['0'].content, JSON.stringify(r));
+    r = await call('page', 'lorebookEntry', { name: LORE, op: 'set', uid: 1, values: { content: 'x' }, expect: e0 });
+    check('lorebookEntry refuses when the entry changed meanwhile', /changed/i.test(r.err || ''), JSON.stringify(r));
+    r = await call('page', 'lorebookEntry', { name: LORE, op: 'add', values: { key: ['harbour'], content: 'A new entry.', comment: 'Added' } });
+    bk = await bookNow();
+    const newUid = r.ok?.uid;
+    check('lorebookEntry add', Number.isInteger(newUid) && bk.entries[String(newUid)]?.content === 'A new entry.' && bk.entries[String(newUid)].key[0] === 'harbour', JSON.stringify(r));
+    const added = bk.entries[String(newUid)];
+    r = await call('page', 'lorebookEntry', { name: LORE, op: 'delete', uid: newUid, expect: added });
+    bk = await bookNow();
+    check('lorebookEntry delete', !r.err && !(String(newUid) in bk.entries), JSON.stringify(r));
+    r = await call('page', 'lorebookEntry', { name: LORE, op: 'put', uid: newUid, entry: added });
+    bk = await bookNow();
+    check('lorebookEntry put back with its uid', !r.err && bk.entries[String(newUid)]?.content === 'A new entry.', JSON.stringify(r));
+    // Typing in the editor that SillyTavern hasn't saved yet (its save waits) is kept.
+    await P.ev(`await (async () => { const wi = await import('/scripts/world-info.js'); const d = await wi.loadWorldInfo(${JSON.stringify(LORE)}); d.entries['0'].comment = 'PENDING EDITOR TYPING'; wi.saveWorldInfo(${JSON.stringify(LORE)}, d); return 'ok'; })()`);
+    r = await call('page', 'lorebookEntry', { name: LORE, op: 'set', uid: 1, values: { content: 'Set while the editor waited.' }, expect: (await bookNow()).entries['1'] });
+    await sleep(2500);
+    bk = await bookNow();
+    check('lorebookEntry keeps the editor\'s pending typing', !r.err && bk.entries['0'].comment === 'PENDING EDITOR TYPING' && bk.entries['1'].content === 'Set while the editor waited.', JSON.stringify(r) + ' | ' + JSON.stringify([bk.entries['0'].comment, bk.entries['1'].content]));
+    await call('page', 'lorebookSave', { name: LORE, data: book0 });
+
+    await call('req', 'POST', '/api/worldinfo/edit', { name: 'Desktop delete me', data: { entries: {} } });
+    await call('page', 'lorebookReload', { name: 'Desktop delete me' });
+    const listed = (await call('page', 'lists')).ok.lorebooks.includes('Desktop delete me');
+    r = await call('page', 'lorebookDelete', { name: 'Desktop delete me' });
+    const gone = !(await call('page', 'lists')).ok.lorebooks.includes('Desktop delete me');
+    check('lorebookDelete', listed && gone && !r.err, JSON.stringify({ listed, gone, r }));
+
+    const made = await call('req', 'POST', '/api/characters/create', { ch_name: 'Desktop new card', description: 'Made by the test.', first_mes: 'Hi.', file_name: 'Desktop new card test' });
+    r = await call('page', 'characterListRefresh');
+    const has = (await call('page', 'lists')).ok.characters.some(c => c.avatar === 'Desktop new card test.png');
+    const del = await call('page', 'characterDelete', { avatar: 'Desktop new card test.png' });
+    const hasAfter = (await call('page', 'lists')).ok.characters.some(c => c.avatar === 'Desktop new card test.png');
+    check('characterListRefresh lists a new card; characterDelete removes it', !made.err && has && !hasAfter && !del.err, JSON.stringify({ made: made.ok ?? made.err, has, hasAfter, del }));
 
     const TEXT = 'The quick brown fox jumps over the lazy dog near the old tavern.';
     fake.reply({ text: TEXT, chunks: 5, delayMs: 80 });
