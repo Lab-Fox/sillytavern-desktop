@@ -13,7 +13,6 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 // Our card field names → where SillyTavern keeps them: [top level, data.*].
 const CARD = {
@@ -28,49 +27,12 @@ const ENTRY = {
     content: ['content', 'text'], comment: ['comment', 'text'], keys: ['key', 'list'], secondaryKeys: ['keysecondary', 'list'],
     constant: ['constant', 'bool'], disabled: ['disable', 'bool'], order: ['order', 'int'], position: ['position', 'int'],
 };
-const MAX_TEXT = 100000, MAX_LIST = 200, MAX_ITEM = 2000, MAX_NAME = 100;
-// Windows device names, with or without an extension.
-const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
-// Characters a file name can't have, and invisible ones (control and format
-// characters: SillyTavern's file name cleaning drops some of them, and they
-// let a name look like another one).
-const BAD_NAME = /[\p{Cc}\p{Cf}\\/:*?"<>|]/u;
-// SillyTavern's merge route deletes a field given this value.
-const UNSET = '__@@UNSET@@__';
+const { MAX_TEXT, RESERVED, BAD_NAME, CHANGED, fail, same, hashNow, fold, checkValue, edited, handleOf, written } = require('./apply-util.cjs');
+const chat = require('./apply-chat.cjs');
+const persona = require('./apply-persona.cjs');
+const preset = require('./apply-preset.cjs');
+const MAX_NAME = 100;
 
-const fail = (error, extra = {}) => ({ ok: false, error, ...extra });
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const hashNow = file => (fs.existsSync(file) ? crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') : null);
-const fold = s => String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-
-function checkValue(kind, v) {
-    if (kind === 'text') return typeof v === 'string' && v.length <= MAX_TEXT && v !== UNSET ? null : `must be text (at most ${MAX_TEXT} characters)`;
-    if (kind === 'list') return Array.isArray(v) && v.length <= MAX_LIST && v.every(x => typeof x === 'string' && x.length <= MAX_ITEM && x !== UNSET) ? null : `must be a list of short texts (at most ${MAX_LIST})`;
-    if (kind === 'bool') return typeof v === 'boolean' ? null : 'must be true or false';
-    if (kind === 'int') return Number.isInteger(v) && v >= 0 && v <= 100000 ? null : 'must be a whole number, 0 or more';
-    return 'has an unknown kind';
-}
-
-// find/replace (find must appear exactly once, as typed) or set.
-function edited(current, p, kind) {
-    if ('set' in p) {
-        const bad = checkValue(kind, p.set);
-        return bad ? { error: `The new value ${bad}.` } : { value: p.set };
-    }
-    if (kind !== 'text') return { error: 'That field can only be changed with "set".' };
-    const hay = String(current ?? '');
-    const n = p.find ? hay.split(p.find).length - 1 : 0;
-    if (n === 0) return { error: 'Can\'t apply: the text to replace isn\'t there (it changed, or was quoted wrong).' };
-    if (n > 1) return { error: `Can't apply: the text to replace appears ${n} times, so it's not clear which one is meant.` };
-    const value = hay.replace(p.find, () => p.replace);
-    const bad = checkValue('text', value);
-    return bad ? { error: `The result ${bad}.` } : { value };
-}
-
-async function handleOf(api) {
-    try { const me = await api.sillytavern.request('GET', '/api/users/me'); if (me?.handle && /^[a-z0-9_-]+$/i.test(me.handle)) return me.handle; } catch { /* default */ }
-    return 'default-user';
-}
 const cardRel = (h, avatar) => `data/${h}/characters/${avatar}`;
 const bookRel = (h, name) => `data/${h}/worlds/${name}.json`;
 const cardValue = (card, field) => {
@@ -135,11 +97,13 @@ function entryValues(given) {
 
 const lists = api => api.sillytavern.page('lists');
 const changedSince = (p, now) => p.shown && Object.hasOwn(p.shown, 'current') && !same(p.shown.current, now);
-const CHANGED = 'It changed since the card was shown: nothing was written. Ask the co-pilot again.';
 
 // What a card shows before Apply: the value it replaces, or the entry it deletes.
-async function currentOf(api, p) {
+async function currentOf(api, p, turn = {}) {
     try {
+        if (chat.OPS.has(p.op)) return await chat.currentOf(api, p, turn);
+        if (persona.OPS.has(p.op)) return await persona.currentOf(api, p, turn);
+        if (preset.OPS.has(p.op)) return await preset.currentOf(api, p);
         if (p.op === 'edit_card' && Object.hasOwn(CARD, p.field)) return { current: cardValue(await api.sillytavern.request('POST', '/api/characters/get', { avatar_url: p.avatar }), p.field) };
         if (p.op === 'edit_lorebook_entry' && Object.hasOwn(ENTRY, p.field)) {
             const e = entryOf(await api.sillytavern.request('POST', '/api/worldinfo/get', { name: p.book }), p.uid);
@@ -157,6 +121,9 @@ async function currentOf(api, p) {
 async function applyProposal(api, p) {
     const folder = api.sillytavern.folder();
     try {
+        if (chat.OPS.has(p.op)) return await chat.applyChat(api, p);
+        if (persona.OPS.has(p.op)) return await persona.applyPersona(api, p);
+        if (preset.OPS.has(p.op)) return await preset.applyPreset(api, p);
         switch (p.op) {
             case 'edit_card': return await editCard(api, folder, p);
             case 'create_card': return await createCard(api, folder, p);
@@ -169,16 +136,6 @@ async function applyProposal(api, p) {
     } catch (e) {
         return fail(e.message || String(e));
     }
-}
-
-// From the journal copy on: write, then finish and check whatever happens,
-// so the change (and its Undo) is never lost. verify(): null or a problem.
-async function written(api, journal, change, write, verify) {
-    let problem = null;
-    try { await write(); } catch (e) { problem = e.message || String(e); }
-    try { await api.changes.finish(journal); } catch { /* the journal still has the copy */ }
-    if (!problem) { try { problem = await verify(); } catch (e) { problem = e.message || String(e); } }
-    return problem ? fail(problem, { change }) : { ok: true, change };
 }
 
 async function editCard(api, folder, p) {
@@ -312,6 +269,19 @@ async function undoChange(api, change, { choice } = {}) {
     const e = api.changes.get(change.journal);
     if (!e) return fail('The backup of this change is gone (backups are kept 30 days).');
     if (choice === 'keep') return { ok: true, how: 'kept' };
+    // Page-held kinds: per item only (the page saves those files whole).
+    if (chat.OPS.has(change.op)) {
+        if (choice === 'file') return fail('Put back just the messages: the whole chat file can\'t be put back while SillyTavern holds it.');
+        return chat.undoChat(api, change, e, { choice });
+    }
+    if (persona.OPS.has(change.op)) {
+        if (choice === 'file') return fail('Put back just the persona: settings.json holds every other setting too.');
+        return persona.undoPersona(api, change, e, { choice });
+    }
+    if (preset.OPS.has(change.op)) {
+        if (choice === 'file') return fail('Put back just the preset change: Undo puts the whole preset file back by itself when nothing else changed it.');
+        return preset.undoPreset(api, change, e, { choice });
+    }
     const f = e.files[0];
     // Op and target come from the journal, not from anything stored with the proposal.
     const op = change.op;

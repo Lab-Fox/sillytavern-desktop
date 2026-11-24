@@ -30,12 +30,21 @@ export const openTestChat = P => P.ev(`await (async () => {
     if (!SillyTavern.getContext().characters.length) await SillyTavern.getContext().getCharacters();
     if (!await wait(() => SillyTavern.getContext().characters.length > 0, 10000)) throw new Error('no characters loaded');
     const c = SillyTavern.getContext();
+    // As on a heavy user's install: SillyTavern writes token counts into messages in the background.
+    c.powerUserSettings.message_token_count_enabled = true;
     const i = c.characters.findIndex(x => x.name === 'Seraphina');
     await c.selectCharacterById(i >= 0 ? i : 0);
     if (!await wait(() => !!SillyTavern.getContext().getCurrentChatId() && SillyTavern.getContext().chat.length > 0, 10000)) throw new Error('the chat did not open');
     const ctx = SillyTavern.getContext();
     ctx.chat.splice(1);
-    for (let n = 1; n < ${MESSAGES}; n++) ctx.chat.push({ name: n % 2 ? ctx.name1 : ctx.name2, is_user: n % 2 === 1, is_system: false, send_date: Date.now(), mes: 'Test message ' + n + ' about the lantern.', extra: {} });
+    // As SillyTavern writes them: distinct dates, and a character message's text also as its first swipe.
+    const t0 = Date.now() - ${MESSAGES} * 60000;
+    for (let n = 1; n < ${MESSAGES}; n++) {
+        const send_date = new Date(t0 + n * 60000).toISOString(), mes = 'Test message ' + n + ' about the lantern.';
+        const m = { name: n % 2 ? ctx.name1 : ctx.name2, is_user: n % 2 === 1, is_system: false, send_date, mes, extra: {} };
+        if (!m.is_user) Object.assign(m, { swipes: [mes], swipe_id: 0, swipe_info: [{ send_date, extra: {} }] });
+        ctx.chat.push(m);
+    }
     await ctx.saveChat();
     await ctx.printMessages();
     return SillyTavern.getContext().chat.length;

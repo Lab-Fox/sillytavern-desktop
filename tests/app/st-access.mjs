@@ -3,6 +3,7 @@
 // a fake model (tests/copilot/fake-model.mjs: nothing reaches a real provider).
 // Needs ST_CLONE (a throwaway SillyTavern; its settings get a test profile) and ST_RUNS.
 import fs from 'fs';
+import crypto from 'crypto';
 import path from 'path';
 import { launch, check, finish, sleep, RUNS, CLONE, TEST_SETTINGS } from './lib.mjs';
 import { start as fakeModel } from '../copilot/fake-model.mjs';
@@ -256,6 +257,73 @@ if (ONLY !== 'requests') {
     const del = await call('page', 'characterDelete', { avatar: 'Desktop new card test.png' });
     const hasAfter = (await call('page', 'lists')).ok.characters.some(c => c.avatar === 'Desktop new card test.png');
     check('characterListRefresh lists a new card; characterDelete removes it', !made.err && has && !hasAfter && !del.err, JSON.stringify({ made: made.ok ?? made.err, has, hasAfter, del }));
+
+    // ---- Task 8.1: the open chat ----
+    let cs = (await call('page', 'chatState', { indexes: [3, 4] })).ok;
+    const chatFile = cs?.file ? path.join(CLONE, 'data', 'default-user', cs.file) : '';
+    check('chatState names the open chat, its file and messages', !!cs?.chatId && fs.existsSync(chatFile) && cs.busy === null && cs.messages.length === 2 && cs.messages[0].index === 3 && cs.length === CHAT_LEN, JSON.stringify(cs).slice(0, 240));
+    const fileSha = () => (chatFile ? crypto.createHash('sha256').update(fs.readFileSync(chatFile)).digest('hex') : '');
+    const fileLine = i => JSON.parse(fs.readFileSync(chatFile, 'utf8').split('\n').filter(Boolean)[i + 1]);
+    // (a first save: SillyTavern's own additions, like token counts, are in the file from here on)
+    await call('page', 'chatApply', { chatId: cs.chatId, ops: [] });
+    const chat0 = fileSha();
+    const m3 = cs.messages[0].message;
+    const m3b = { ...m3, mes: 'Changed through chatApply.' };
+    r = await call('page', 'chatApply', { chatId: cs.chatId, ops: [{ kind: 'set', index: 3, expect: m3, patch: { fields: { mes: m3b.mes } } }] });
+    const shownText = await P.ev(`document.querySelector('#chat .mes[mesid="3"] .mes_text')?.textContent || ''`);
+    check('chatApply changes a message, on screen and in the file', !r.err && !r.ok?.refused && fileLine(3).mes === 'Changed through chatApply.' && shownText.includes('Changed through chatApply.'), JSON.stringify(r) + ' | ' + shownText.slice(0, 60));
+    r = await call('page', 'chatApply', { chatId: cs.chatId, ops: [{ kind: 'set', index: 3, expect: m3, patch: { fields: { mes: m3.mes } } }] });
+    check('chatApply refuses a message that changed since it was read', r.ok?.refused && r.ok.changed === true && fileLine(3).mes === 'Changed through chatApply.', JSON.stringify(r));
+    r = await call('page', 'chatApply', { chatId: 'some other chat', ops: [{ kind: 'set', index: 3, expect: m3b, patch: { fields: { mes: m3.mes } } }] });
+    check('chatApply refuses when another chat is open', r.ok?.refused && r.ok.changed === false && /isn't open/.test(r.ok.refused), JSON.stringify(r));
+    await P.ev(`(() => { const t = document.createElement('textarea'); t.className = 'edit_textarea desktop-test'; document.querySelector('#chat').append(t); return 'ok'; })()`);
+    r = await call('page', 'chatApply', { chatId: cs.chatId, ops: [{ kind: 'set', index: 3, expect: m3b, patch: { fields: { mes: m3.mes } } }] });
+    await P.ev(`(document.querySelector('.desktop-test')?.remove(), 'ok')`);
+    check('chatApply refuses while a message is being edited', /being edited/.test(r.ok?.refused || ''), JSON.stringify(r));
+    await P.ev(`(SillyTavern.getContext().eventSource.emit('generation_started', 'normal', {}, true), 'ok')`);
+    const busyDry = (await call('page', 'chatState')).ok?.busy;
+    await P.ev(`(SillyTavern.getContext().eventSource.emit('generation_started'), 'ok')`);
+    const busyGen = (await call('page', 'chatState')).ok?.busy;
+    await P.ev(`(SillyTavern.getContext().eventSource.emit('generation_ended', 0), 'ok')`);
+    const busyAfter = (await call('page', 'chatState')).ok?.busy;
+    check('busy from the moment a generation starts until it ends (not for a dry run)', busyDry === null && /writing a reply/.test(busyGen || '') && busyAfter === null, JSON.stringify({ busyDry, busyGen, busyAfter }));
+    r = await call('page', 'chatApply', { chatId: cs.chatId, ops: [{ kind: 'set', index: 3, expect: m3b, patch: { fields: { mes: m3.mes } } }] });
+    check('putting the message back gives the same file, byte for byte', !r.ok?.refused && fileSha() === chat0, JSON.stringify(r));
+    const m4 = cs.messages[1].message;
+    // What the screen shows: one more message, the new one in its place, and every message numbered in order.
+    const screen = () => P.ev(`(() => { const els = [...document.querySelectorAll('#chat .mes')]; return { count: els.length, ids: els.map(e => Number(e.getAttribute('mesid'))), at5: els.find(e => e.getAttribute('mesid') === '5')?.querySelector('.mes_text')?.textContent || '' }; })()`);
+    const domBefore = await screen();
+    r = await call('page', 'chatApply', { chatId: cs.chatId, ops: [{ kind: 'insert', index: 5, prev: m4, make: { isUser: false, name: 'Seraphina', text: 'Inserted by the test.' } }] });
+    const madeMsg = r.ok?.made?.[0];
+    const domAfter = await screen();
+    const inOrder = s => s.ids.every((id, i) => i === 0 || id === s.ids[i - 1] + 1);
+    const inserted = !r.ok?.refused && madeMsg?.mes === 'Inserted by the test.' && fileLine(5).mes === 'Inserted by the test.' && (await call('page', 'chatState')).ok.length === CHAT_LEN + 1;
+    const shownRight = domAfter.count === domBefore.count + 1 && domAfter.at5.includes('Inserted by the test.') && inOrder(domAfter);
+    r = await call('page', 'chatApply', { chatId: cs.chatId, ops: [{ kind: 'remove', index: 5, expect: madeMsg }] });
+    const domGone = await screen();
+    check('insert in the middle, drawn in its place, and removed again byte for byte', inserted && shownRight && domGone.count === domBefore.count && inOrder(domGone) && !domGone.at5.includes('Inserted by the test.') && !r.ok?.refused && fileSha() === chat0, JSON.stringify({ inserted, domBefore: domBefore.count, domAfter: domAfter.count, at5: domAfter.at5.slice(0, 40), domGone: domGone.count, r }));
+
+    // ---- Task 8.2: personas ----
+    const settingsFile = path.join(CLONE, 'data', 'default-user', 'settings.json');
+    const pu = () => JSON.parse(fs.readFileSync(settingsFile, 'utf8')).power_user;
+    let ps = (await call('page', 'personaState')).ok;
+    check('personaState: the persona in use', ps?.ready === true && !!ps.current && ps.avatar === ps.current && ps.exists === true, JSON.stringify(ps).slice(0, 200));
+    const inUse = ps.current, inUseText = String(ps.descriptor?.description ?? '');
+    const pid = `${Date.now()}-Desktoptestpersona.png`;
+    r = await call('page', 'personaApply', { op: 'create', avatar: pid, name: 'Desktop test persona', description: 'Made by the test.' });
+    const picFile = path.join(CLONE, 'data', 'default-user', 'User Avatars', pid);
+    const listedP = await P.ev(`!!document.querySelector('#user_avatar_block [data-avatar-id="${pid}"], #user_avatar_block [imgfile="${pid}"]')`);
+    check('personaApply create: picture, settings, listed in SillyTavern, not switched to', !r.err && listedP && fs.existsSync(picFile) && pu().personas[pid] === 'Desktop test persona' && pu().persona_descriptions[pid].description === 'Made by the test.' && (await call('page', 'personaState')).ok.current === inUse, JSON.stringify({ r, listedP }));
+    r = await call('page', 'personaApply', { op: 'set', avatar: pid, description: 'Changed.', expect: 'Not what it says.' });
+    check('personaApply refuses a description that changed', r.ok?.refused && r.ok.changed === true && pu().persona_descriptions[pid].description === 'Made by the test.', JSON.stringify(r));
+    r = await call('page', 'personaApply', { op: 'set', avatar: inUse, description: 'Description set by the test.', expect: inUseText });
+    const box = await P.ev(`document.querySelector('#persona_description')?.value`);
+    check('personaApply set on the persona in use: settings and the description box', !r.err && pu().persona_descriptions[inUse].description === 'Description set by the test.' && pu().persona_description === 'Description set by the test.' && box === 'Description set by the test.', JSON.stringify({ r, box }));
+    await call('page', 'personaApply', { op: 'set', avatar: inUse, description: inUseText });
+    r = await call('page', 'personaApply', { op: 'remove', avatar: inUse });
+    check('personaApply never removes the persona in use', /in use/.test(r.ok?.refused || ''), JSON.stringify(r));
+    r = await call('page', 'personaApply', { op: 'remove', avatar: pid });
+    check('personaApply remove: picture and entries gone', !r.err && !fs.existsSync(picFile) && !(pid in pu().personas) && !(pid in pu().persona_descriptions) && pu().persona_descriptions[inUse].description === inUseText, JSON.stringify(r));
 
     const TEXT = 'The quick brown fox jumps over the lazy dog near the old tavern.';
     fake.reply({ text: TEXT, chunks: 5, delayMs: 80 });

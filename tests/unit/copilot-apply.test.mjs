@@ -234,7 +234,7 @@ test('a new lorebook needs a new, plain name', async () => {
 
 test('ops not handled yet are refused, not guessed', async () => {
     const s = fakeSt();
-    const r = await apply.applyProposal(s.api, { op: 'edit_preset_setting', name: 'Default', key: 'temperature', value: 1, why: 'x' });
+    const r = await apply.applyProposal(s.api, { op: 'rename_chat', name: 'x', why: 'x' });
     assert.equal(r.ok, false);
     assert.match(r.error, /not yet|next version/i);
 });

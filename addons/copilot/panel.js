@@ -111,15 +111,17 @@ const TARGET = {
     edit_lorebook_entry: p => `Lorebook ${p.book}, entry ${p.uid}: ${p.field}`, delete_lorebook_entry: p => `Lorebook ${p.book}: delete entry ${p.uid}`,
     edit_message: p => `Message #${p.index}`, add_message: p => `New message after #${p.after}`,
     delete_messages: p => `Delete messages ${p.indexes.join(', ')}`, hide_messages: p => `Hide messages ${p.indexes.join(', ')}`, unhide_messages: p => `Unhide messages ${p.indexes.join(', ')}`,
-    create_persona: p => `New persona "${p.name}"`, edit_persona: p => `Persona ${p.avatar ?? 'in use'}`,
+    create_persona: p => `New persona "${p.name}"`, edit_persona: p => `Persona ${p.avatar ?? (p.shown?.avatar ? p.shown.avatar + ' (in use)' : 'in use')}`,
     create_preset: p => `New preset "${p.name}"`, edit_preset_setting: p => `Preset ${p.name}: ${p.key}`,
     edit_preset_prompt: p => `Preset ${p.name}, prompt ${p.identifier}`, add_preset_prompt: p => `Preset ${p.name}: new prompt`,
     remove_preset_prompt: p => `Preset ${p.name}: remove prompt ${p.identifier}`, reorder_preset_prompts: p => `Preset ${p.name}: prompt order`,
 };
 const show = v => (typeof v === 'string' ? v : JSON.stringify(v, null, 1));
 // The kinds of change this version can apply; the others are shown only.
-const APPLIES = new Set(['edit_card', 'create_card', 'create_lorebook', 'add_lorebook_entry', 'edit_lorebook_entry', 'delete_lorebook_entry']);
-const DELETES = new Set(['delete_lorebook_entry', 'delete_messages']);
+const APPLIES = new Set(['edit_card', 'create_card', 'create_lorebook', 'add_lorebook_entry', 'edit_lorebook_entry', 'delete_lorebook_entry',
+    'edit_message', 'add_message', 'delete_messages', 'hide_messages', 'unhide_messages', 'create_persona', 'edit_persona',
+    'create_preset', 'edit_preset_setting', 'edit_preset_prompt', 'add_preset_prompt', 'remove_preset_prompt', 'reorder_preset_prompts']);
+const DELETES = new Set(['delete_lorebook_entry', 'delete_messages', 'remove_preset_prompt']);
 const STATE_TEXT = { applied: 'Applied.', rejected: 'Rejected.', undone: 'Undone.', failed: 'Not applied.' };
 function proposal(p) {
     const c = el('div', `proposal ${p.state || 'pending'}${DELETES.has(p.op) ? ' delete' : ''}`);
@@ -130,11 +132,18 @@ function proposal(p) {
     if ('find' in p) { c.append(el('div', 'del', show(p.find)), el('div', 'add', show(p.replace))); }
     else if ('set' in p) { if (now !== undefined && now !== '') c.append(el('div', 'del', show(now))); c.append(el('div', 'add', show(p.set))); }
     else if (p.op === 'delete_lorebook_entry' && now) c.append(el('div', 'del', [now.comment, now.content].filter(Boolean).join('\n')));
-    else if ('value' in p) c.append(el('div', 'add', show(p.value)));
-    else if (p.text != null) c.append(el('div', 'add', show(p.text)));
+    else if ('value' in p) { if (now !== undefined && now !== null) c.append(el('div', 'del', show(now))); c.append(el('div', 'add', show(p.value))); }
+    else if (p.op === 'remove_preset_prompt' && now) c.append(el('div', 'del', show(now)));
+    else if (['delete_messages', 'hide_messages', 'unhide_messages'].includes(p.op)) {
+        // The messages it touches, as they were when the reply came (cut short).
+        const cut = t => (t.length > 300 ? `${t.slice(0, 300)}…` : t);
+        for (const m of p.shown?.messages || []) c.append(el('div', p.op === 'delete_messages' ? 'del' : 'msgline', `#${m.index} ${m.message?.name ?? ''}: ${cut(String(m.message?.mes ?? ''))}`));
+        if (!(p.shown?.messages || []).length) c.append(el('div', 'later', 'The messages couldn\'t be read when the reply came.'));
+    }
+    else if (p.text != null) c.append(el('div', 'add', `${p.isUser ? 'You' : (p.name || 'Character')}: ${p.text}`));
     else if (p.entry || p.fields || p.prompt) c.append(el('div', 'add', show(p.entry || p.fields || p.prompt)));
     else if (p.description != null) c.append(el('div', 'add', show(p.description)));
-    else if (p.order) c.append(el('div', 'add', p.order.join(' → ')));
+    else if (p.order) { if (Array.isArray(now)) c.append(el('div', 'del', now.join(' → '))); c.append(el('div', 'add', p.order.join(' → '))); }
     c.append(el('div', 'why', p.why));
     if (!p.id) return c;
     if (!APPLIES.has(p.op)) { c.append(el('div', 'later', 'Applying this kind of change comes in the next version.')); return c; }
@@ -153,19 +162,24 @@ function proposal(p) {
     if (p.undoNote && p.state === 'undone') c.append(el('div', 'note', p.undoNote));
     // Undo found the item changed since: both versions, and the user picks.
     if (p.conflict) {
-        const made = p.op === 'create_card' || p.op === 'create_lorebook';
+        const MADE = { create_card: 'Delete the card anyway', create_lorebook: 'Delete the lorebook anyway', create_persona: 'Delete the persona anyway', create_preset: 'Delete the preset anyway' };
+        const made = Object.hasOwn(MADE, p.op);
+        // SillyTavern holds these and saves them whole: only the item can go back.
+        const pageHeld = /_message|_messages|persona|preset/.test(p.op);
         const box = el('div', 'conflict');
         box.append(el('div', 'q', 'This changed after the co-pilot\'s change. What should Undo do?'));
         box.append(el('div', 'label', 'Now:'), el('div', 'now', show(p.conflict.current)));
         if (!made) box.append(el('div', 'label', 'Before the co-pilot\'s change:'), el('div', 'before', show(p.conflict.before)));
         const r = el('div', 'actions');
         r.append(act('Keep it as it is now', '', () => P.invoke('undo', p.id, 'keep')));
-        if (made) r.append(act(p.op === 'create_card' ? 'Delete the card anyway' : 'Delete the lorebook anyway', 'danger', () => P.invoke('undo', p.id, 'mine')));
+        if (made) r.append(act(MADE[p.op], 'danger', () => P.invoke('undo', p.id, 'mine')));
         else {
             if (!p.conflict.noMine) r.append(act('Put back what it was before', '', () => P.invoke('undo', p.id, 'mine')));
-            const w = act('Put the whole file back', '', () => P.invoke('undo', p.id, 'file'));
-            w.title = 'The file as it was before the co-pilot\'s change: later changes to it are lost too.';
-            r.append(w);
+            if (!pageHeld) {
+                const w = act('Put the whole file back', '', () => P.invoke('undo', p.id, 'file'));
+                w.title = 'The file as it was before the co-pilot\'s change: later changes to it are lost too.';
+                r.append(w);
+            }
         }
         box.append(r);
         c.append(box);

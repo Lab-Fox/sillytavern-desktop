@@ -64,7 +64,7 @@ const typeOk = (v, t) => {
         case 'bool': return typeof v === 'boolean';
         case 'string|null': return v === null || (typeof v === 'string' && v.length <= MAX_TEXT);
         case 'string[]': return Array.isArray(v) && v.length <= 1000 && v.every(x => typeof x === 'string');
-        case 'int[]': return Array.isArray(v) && v.length <= 5000 && v.every(Number.isInteger);
+        case 'int[]': return Array.isArray(v) && v.length <= 200 && v.every(x => Number.isInteger(x) && x >= 0);
         case 'object': return !!v && typeof v === 'object' && !Array.isArray(v);
         case 'any': return v !== undefined;
         default: return false;
@@ -236,6 +236,9 @@ function systemPrompt() {
         '- For a change inside a long text, use "find" (an exact passage that appears once) and "replace". Use "set" for short fields and lists.',
         '- Before you propose a change to something that isn\'t in the material, look it up first: never propose changes to text you haven\'t seen.',
         '- When the request is unclear, or two things have the same name, ask which one.',
+        '- Message changes (edit_message, add_message, delete_messages, hide_messages, unhide_messages) act on the chat open in SillyTavern; take message indexes from read_messages or search_messages. In a group chat a character message needs "name" (who speaks); a user message is always written as the persona in use. add_message with "after": -1 puts the message first.',
+        '- edit_persona with "avatar": null means the persona in use. create_persona makes a new persona with SillyTavern\'s default picture; the user switches to it themselves.',
+        `- edit_preset_setting can change only these settings: ${Object.keys(require('./apply-preset.cjs').SETTINGS).join(', ')}. Never the connection, model, address, proxy, tools or the preset's regex scripts. create_preset copies a preset ("from"; the selected one when left out) under a new name. add_preset_prompt's "prompt" takes identifier (optional), name, role (system, user or assistant), content, enabled, injection_position (0 in the prompt, 1 in the chat at injection_depth). SillyTavern's own prompts can't be removed.`,
         '',
         'Always reply with exactly one JSON object and nothing else:',
         '{"say": "what you tell the user (plain text)", "lookups": [{"tool": "name", "args": {}}], "proposals": [{"op": "name", ...arguments, "why": "short reason"}], "ask": {"question": "...", "choices": ["..."]}}',

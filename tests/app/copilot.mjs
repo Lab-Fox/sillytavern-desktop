@@ -318,6 +318,165 @@ await sendAndWait('What did I do with your changes?');
 const note7 = lastReq().map(m => m.content).join('\n');
 check('outcome sent to the model next turn', /What happened to your proposals/.test(note7) && /applied, then undone/.test(note7) && /failed: Can't apply/.test(note7), note7.slice(-300));
 
+// ---- The open chat (Batch 8) ----
+const chatId8 = await P.ev(`SillyTavern.getContext().getCurrentChatId()`);
+const chatPath = path.join(CLONE, 'data', 'default-user', 'chats', 'default_Seraphina', `${chatId8}.jsonl`);
+const chatLines = () => fs.readFileSync(chatPath, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+const c0 = sha(chatPath);
+const text4 = chatLines()[5].mes;
+await propose({ op: 'edit_message', index: 4, set: 'Edited by the co-pilot test.', why: 'Test.' });
+const shown8 = (await lastProp())?.del;
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const onScreen = await P.ev(`document.querySelector('#chat .mes[mesid="4"] .mes_text')?.textContent || ''`);
+const edited8 = pr?.state === 'Applied.' && chatLines()[5].mes === 'Edited by the co-pilot test.' && onScreen.includes('Edited by the co-pilot test.');
+await press('Undo');
+pr = await waitProp(x => /Undone|Not/.test(x.state) || x.err);
+check('edit a message of the open chat; Undo byte for byte', shown8 === text4 && edited8 && pr?.state === 'Undone.' && sha(chatPath) === c0, JSON.stringify({ shown8, edited8, pr }));
+
+// The user keeps chatting between Apply and Undo (messages added the way SillyTavern adds them; Enter is never pressed).
+const userChats = text => P.ev(`await (async () => { const c = SillyTavern.getContext(); const m = { name: c.name1, is_user: true, is_system: false, send_date: new Date().toISOString(), mes: ${JSON.stringify('__T__')}.replace('__T__', ${JSON.stringify(text)}), extra: {} }; c.chat.push(m); c.addOneMessage(m); await c.saveChat(); return c.chat.length; })()`);
+await propose({ op: 'edit_message', index: 6, set: 'Second co-pilot edit.', why: 'Test.' });
+await press('Apply');
+await waitProp(x => /Applied|Not applied/.test(x.state));
+const text6 = chatLines()[7].mes;
+await userChats('A message typed after the co-pilot edit.');
+await userChats('And another one.');
+await press('Undo');
+pr = await waitProp(x => /Undone|Not/.test(x.state) || x.err || x.conflict);
+const l8 = chatLines();
+check('the user chats in between: Undo restores only that message', text6 === 'Second co-pilot edit.' && pr?.state === 'Undone.' && l8[7].mes !== 'Second co-pilot edit.' && l8.at(-1).mes === 'And another one.' && l8.at(-2).mes === 'A message typed after the co-pilot edit.', JSON.stringify({ text6, pr, last: l8.at(-1).mes }));
+
+// A message editor open in SillyTavern: nothing is written.
+await P.ev(`(document.querySelector('#chat .mes[mesid="2"] .mes_edit')?.click(), 'ok')`);
+await until(() => P.ev(`!!document.querySelector('#chat .edit_textarea')`), 5000);
+const c1 = sha(chatPath);
+await propose({ op: 'edit_message', index: 3, set: 'Not while editing.', why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+await P.ev(`(document.querySelector('#chat .mes[mesid="2"] .mes_edit_cancel')?.click(), 'ok')`);
+await until(() => P.ev(`!document.querySelector('#chat .edit_textarea')`), 5000);
+check('refused while the user edits a message', /being edited/.test(pr?.err || '') && sha(chatPath) === c1, JSON.stringify(pr));
+await press('Reject');
+
+await propose({ op: 'delete_messages', indexes: [2, 3], why: 'Test.' });
+const delCard = (await lastProp())?.buttons || [];
+await press('Delete');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const afterDel = chatLines().length;
+await press('Undo');
+await waitProp(x => /Undone|Not/.test(x.state) || x.err);
+check('delete two messages; Undo puts them back byte for byte', delCard.includes('Delete') && pr?.state === 'Applied.' && afterDel === l8.length - 2 && sha(chatPath) === c1, JSON.stringify({ delCard, pr, afterDel }));
+
+await propose({ op: 'hide_messages', indexes: [5], why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const hidden = chatLines()[6].is_system === true && await P.ev(`document.querySelector('#chat .mes[mesid="5"]')?.getAttribute('is_system')`) === 'true';
+await press('Undo');
+await waitProp(x => /Undone|Not/.test(x.state) || x.err);
+check('hide a message; Undo', pr?.state === 'Applied.' && hidden && sha(chatPath) === c1, JSON.stringify({ pr, hidden }));
+
+await propose({ op: 'add_message', after: 1, isUser: false, text: 'A line added by the co-pilot.', why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const added8 = chatLines()[3]?.mes === 'A line added by the co-pilot.' && chatLines()[3].name === 'Seraphina';
+await press('Undo');
+const u8 = await waitProp(x => /Undone|Not/.test(x.state) || x.err || x.conflict);
+check('add a message in the middle; Undo takes it out', pr?.state === 'Applied.' && added8 && sha(chatPath) === c1, JSON.stringify({ pr, added8, u8 }));
+
+// ---- Personas (Batch 8) ----
+const setPath = path.join(CLONE, 'data', 'default-user', 'settings.json');
+const puNow = () => JSON.parse(fs.readFileSync(setPath, 'utf8')).power_user;
+const inUse8 = await P.ev(`(await import('/scripts/personas.js')).user_avatar`);
+const pdesc0 = String(puNow().persona_descriptions?.[inUse8]?.description ?? '');
+await propose({ op: 'edit_persona', avatar: null, set: 'Persona text from the co-pilot test.', why: 'Test.' });
+const target8 = (await Q.ev(`[...document.querySelectorAll('#log .proposal')].at(-1)?.querySelector('.target')?.textContent || ''`));
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const personaBox = await P.ev(`document.querySelector('#persona_description')?.value`);
+const personaSet = pr?.state === 'Applied.' && puNow().persona_descriptions[inUse8].description === 'Persona text from the co-pilot test.' && personaBox === 'Persona text from the co-pilot test.';
+await press('Undo');
+pr = await waitProp(x => /Undone|Not/.test(x.state) || x.err);
+check('edit the persona in use; Undo puts the description back', target8.includes(inUse8) && personaSet && pr?.state === 'Undone.' && String(puNow().persona_descriptions[inUse8].description ?? '') === pdesc0, JSON.stringify({ target8, personaSet, pr }));
+
+await propose({ op: 'create_persona', name: 'Desktop co-pilot persona', description: 'Made by the co-pilot test.', why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const madeId = Object.keys(puNow().personas).find(k => puNow().personas[k] === 'Desktop co-pilot persona');
+const madePic = madeId && fs.existsSync(path.join(CLONE, 'data', 'default-user', 'User Avatars', madeId));
+await press('Undo');
+await waitProp(x => /Undone|Not/.test(x.state) || x.err);
+check('create a persona (own picture, not switched to); Undo removes it', pr?.state === 'Applied.' && !!madeId && madePic && !Object.values(puNow().personas).includes('Desktop co-pilot persona') && !fs.existsSync(path.join(CLONE, 'data', 'default-user', 'User Avatars', madeId)) && await P.ev(`(await import('/scripts/personas.js')).user_avatar`) === inUse8, JSON.stringify({ pr, madeId, madePic }));
+
+// ---- Chat completion presets (Batch 8) ----
+const presetDir = path.join(CLONE, 'data', 'default-user', 'OpenAI Settings');
+const pfile = n => path.join(presetDir, `${n}.json`);
+const pread = n => JSON.parse(fs.readFileSync(pfile(n), 'utf8'));
+const TP = 'Desktop test preset';
+const selectedNow = () => P.ev(`(await import('/scripts/openai.js')).oai_settings.preset_settings_openai`);
+const selectPreset = async n => { await P.ev(`await (async () => { const pm = SillyTavern.getContext().getPresetManager('openai'); await pm.selectPreset(pm.findPreset(${JSON.stringify(n)})); return 'ok'; })()`); await until(async () => (await selectedNow()) === n, 10000); await sleep(1000); };
+const orig = await selectedNow();
+await propose({ op: 'create_preset', name: TP, from: orig, why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const createChange = pr;
+const listedPreset = await P.ev(`Object.hasOwn((await import('/scripts/openai.js')).openai_setting_names, ${JSON.stringify(TP)})`);
+check('create a preset: a copy, listed in SillyTavern, not selected', pr?.state === 'Applied.' && fs.existsSync(pfile(TP)) && JSON.stringify(pread(TP)) === JSON.stringify(pread(orig)) && listedPreset && (await selectedNow()) === orig, JSON.stringify({ pr, listedPreset }));
+const createCardIdx = await Q.ev(`[...document.querySelectorAll('#log .proposal')].length - 1`);
+const tp0 = sha(pfile(TP));
+
+await propose({ op: 'edit_preset_setting', name: TP, key: 'temperature', value: 1.3, why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const memTemp = await P.ev(`await import('/scripts/openai.js').then(O => O.openai_settings[O.openai_setting_names[${JSON.stringify(TP)}]].temperature)`);
+const setOk = pr?.state === 'Applied.' && pread(TP).temperature === 1.3 && memTemp === 1.3;
+await press('Undo');
+pr = await waitProp(x => /Undone|Not/.test(x.state) || x.err || x.conflict);
+check('a setting of a preset that is not selected; Undo byte for byte', setOk && pr?.state === 'Undone.' && sha(pfile(TP)) === tp0, JSON.stringify({ setOk, memTemp, pr }));
+
+await propose({ op: 'edit_preset_setting', name: TP, key: 'reverse_proxy', value: 'http://example.invalid', why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+check('a connection setting is refused', /can change/.test(pr?.err || '') && sha(pfile(TP)) === tp0, JSON.stringify(pr));
+await press('Reject');
+
+await propose({ op: 'add_preset_prompt', name: TP, prompt: { identifier: 'desktopTest', name: 'Desktop test prompt', content: 'Added by the co-pilot test.' }, why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const ord = pread(TP).prompt_order.find(e => String(e.character_id) === '100001');
+const addOk = pr?.state === 'Applied.' && pread(TP).prompts.some(x => x.identifier === 'desktopTest') && ord?.order.at(-1)?.identifier === 'desktopTest';
+await press('Undo');
+pr = await waitProp(x => /Undone|Not/.test(x.state) || x.err || x.conflict);
+check('add a prompt to the order Chat Completion uses; Undo', addOk && pr?.state === 'Undone.' && sha(pfile(TP)) === tp0, JSON.stringify({ addOk, pr }));
+
+// The selected preset: SillyTavern's controls and working copy follow; an unsaved edit there is kept.
+await selectPreset(TP);
+await propose({ op: 'edit_preset_setting', name: TP, key: 'temperature', value: 0.55, why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const ui = await P.ev(`await (async () => { const O = await import('/scripts/openai.js'); return { control: document.querySelector('#temp_openai')?.value, working: O.oai_settings.temp_openai }; })()`);
+const selOk = pr?.state === 'Applied.' && pread(TP).temperature === 0.55 && Number(ui.control) === 0.55 && ui.working === 0.55;
+await press('Undo');
+pr = await waitProp(x => /Undone|Not/.test(x.state) || x.err || x.conflict);
+const ui2 = await P.ev(`await (async () => { const O = await import('/scripts/openai.js'); return O.oai_settings.temp_openai; })()`);
+check('a setting of the selected preset: the control and working copy follow; Undo', selOk && pr?.state === 'Undone.' && sha(pfile(TP)) === tp0 && ui2 === pread(TP).temperature, JSON.stringify({ selOk, ui, pr, ui2 }));
+const savedTemp = pread(TP).temperature;
+await P.ev(`(window.$('#temp_openai').val(1.75).trigger('input'), 'ok')`);
+await propose({ op: 'edit_preset_setting', name: TP, key: 'temperature', value: 0.4, why: 'Test.' });
+await press('Apply');
+pr = await waitProp(x => /Applied|Not applied/.test(x.state));
+const kept = await P.ev(`await (async () => (await import('/scripts/openai.js')).oai_settings.temp_openai)()`);
+check('refused while the selected preset has an unsaved edit in that setting; the edit stays', /unsaved/.test(pr?.err || '') && kept === 1.75 && sha(pfile(TP)) === tp0, JSON.stringify({ pr, kept }));
+await press('Reject');
+await P.ev(`(window.$('#temp_openai').val(${JSON.stringify(String(savedTemp))}).trigger('input'), 'ok')`);
+await selectPreset(orig);
+
+// Undo the new preset: deleted (it isn't selected any more).
+await Q.ev(`(() => { const c = [...document.querySelectorAll('#log .proposal')][${createCardIdx}]; const b = [...c.querySelectorAll('button')].find(b => b.textContent === 'Undo'); b?.click(); return 'ok'; })()`);
+await until(async () => !fs.existsSync(pfile(TP)), 15000);
+const goneFromList = !(await P.ev(`Object.hasOwn((await import('/scripts/openai.js')).openai_setting_names, ${JSON.stringify(TP)})`));
+check('Undo of the new preset deletes it', !fs.existsSync(pfile(TP)) && goneFromList && (await selectedNow()) === orig, JSON.stringify({ goneFromList, createChange }));
+
 
 const before6 = fake.requests.length;
 for (let i = 0; i < 6; i++) fake.reply({ text: J(`Step ${i}.`, { lookups: [{ tool: 'list_presets' }] }) });

@@ -55,6 +55,7 @@ textarea { flex: 1; resize: none; padding: 6px 8px; min-height: 44px; max-height
 .proposal { margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; background: var(--bg); white-space: pre-wrap; }
 .proposal .target { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .proposal .del { color: var(--bad); text-decoration: line-through; font-size: 13px; }
+.proposal .msgline { font-size: 13px; color: var(--muted); }
 .proposal .add { color: #8fcf8f; font-size: 13px; }
 .proposal .why, .proposal .later, .proposal .note { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .ask { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

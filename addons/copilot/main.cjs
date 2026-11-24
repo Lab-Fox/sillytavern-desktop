@@ -165,6 +165,10 @@ async function send(text) {
     saveSession(s);
     setOpen(s.id);
     const dir = sessionsDir();
+    // What the model reads this turn: the chat open now and the persona in use
+    // now. Cards are checked against these, not against whatever is open when
+    // the reply ends.
+    const turn = {};
     const ctl = new AbortController();
     busy = { sessionId: s.id, text: '', ctl };
     let saveError = '';
@@ -193,6 +197,8 @@ async function send(text) {
         let last = { role: 'assistant', content: '' };
         let read = 0;
         try {
+            try { turn.chatId = (await page('context')).chatId || null; } catch { /* no page */ }
+            try { turn.persona = (await page('personaState', {})).current || null; } catch { /* no page */ }
             for (let step = 1; step <= MAX_STEPS; step++) {
                 const messages = await requestFor(readSession(s.id, dir) || s);
                 let r = await generate(messages);
@@ -218,7 +224,7 @@ async function send(text) {
                 // Nothing is applied without a click.
                 if (proposals.length) last.proposals = await Promise.all(proposals.map(async x => {
                     const fields = proposalFields(x);
-                    const shown = await applier.currentOf(api, fields);
+                    const shown = await applier.currentOf(api, fields, turn);
                     return { ...fields, ...(shown ? { shown } : {}), id: crypto.randomBytes(4).toString('hex'), state: 'pending' };
                 }));
                 if (ask) last.ask = ask;

@@ -20,7 +20,8 @@ const assemble = p => `${p.head}\n${p.pieces.map(fence).join('\n')}\n</data>`;
 const json = v => JSON.stringify(v, null, 1);
 
 // Only what a preset says about prompts and generation, not UI state.
-const PRESET_KEYS = ['temperature', 'frequency_penalty', 'presence_penalty', 'top_p', 'top_k', 'top_a', 'min_p', 'repetition_penalty', 'openai_max_context', 'openai_max_tokens', 'stream_openai', 'names_behavior', 'wrap_in_quotes', 'impersonation_prompt', 'new_chat_prompt', 'new_group_chat_prompt', 'new_example_chat_prompt', 'continue_nudge_prompt', 'wi_format', 'scenario_format', 'personality_format', 'group_nudge_prompt', 'assistant_prefill', 'squash_system_messages', 'seed', 'n'];
+// The preset settings the model sees: the ones it may change (never connection, proxy or key settings).
+const PRESET_KEYS = Object.keys(require('./apply-preset.cjs').SETTINGS);
 function trimPreset(p) {
     const out = {};
     for (const k of PRESET_KEYS) if (p[k] !== undefined) out[k] = p[k];

@@ -2,7 +2,7 @@
 
 An assistant in a side panel of the SillyTavern window, for SillyTavern Desktop. It will help with chat completion presets, character cards, personas, lorebooks and chats.
 
-**This is an early version.** It can look things up in your SillyTavern by itself (cards, chats, presets, personas, lorebooks; each lookup shows as a line in the conversation), ask you when something is unclear, and propose changes, shown as cards. Changes to **character cards and lorebooks** can be applied with a click, and each one has Undo; changes to chats, personas and presets are shown only, for now.
+**This is an early version.** It can look things up in your SillyTavern by itself (cards, chats, presets, personas, lorebooks; each lookup shows as a line in the conversation), ask you when something is unclear, and propose changes, shown as cards. Changes to **character cards, lorebooks, the open chat, personas and chat completion presets** can be applied with a click, and each one has Undo.
 
 ## Use it
 
@@ -15,6 +15,8 @@ An assistant in a side panel of the SillyTavern window, for SillyTavern Desktop.
 ## What to know
 
 - Nothing changes until you click Apply (or Delete). Before each change the co-pilot keeps a copy of the file it touches. Undo puts the file back exactly as it was when nothing else changed it since; otherwise it puts back just that item, and if you changed that item too it shows both versions and lets you choose. Undoing a card the co-pilot made deletes the card but keeps any chats you had with it. Apply also refuses when the item changed after the co-pilot's card showed it.
+- **Chats:** changes go to the chat open in SillyTavern. They wait while SillyTavern writes a reply, while you edit a message, or when another chat is open, and Undo puts back just those messages, so you can keep chatting in between.
+- **Personas and presets:** SillyTavern keeps these in its settings and saves them often, so Undo puts back just that persona or preset change, never the whole settings file. A new persona gets SillyTavern's default picture and isn't switched to. For the selected preset, a change is refused when SillyTavern has unsaved edits in that setting or prompt, and SillyTavern's controls show the change at once. The co-pilot can only change settings that shape the reply: never the connection, model, address, proxy, tools or the preset's regex scripts.
 - A change it can't apply cleanly (the text it wanted to replace is gone, the entry isn't there) is refused, and nothing is written.
 
 - Your messages go to the AI provider of the profile you picked, from your own SillyTavern. What is sent: a short instruction for the co-pilot, what you ticked (read fresh each time), and the conversation in the panel. Your preset's prompts are only sent when you add that preset yourself; its sampler settings are always used.
