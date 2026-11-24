@@ -2,7 +2,7 @@
 
 An assistant in a side panel of the SillyTavern window, for SillyTavern Desktop. It will help with chat completion presets, character cards, personas, lorebooks and chats.
 
-**This is an early version: it reads what you pick and talks, but changes nothing yet.** Changes come in the next versions, each one shown first, applied only when you click, and undoable.
+**This is an early version: it reads and proposes, but changes nothing yet.** It can look things up in your SillyTavern by itself (cards, chats, presets, personas, lorebooks; each lookup shows as a line in the conversation), ask you when something is unclear, and propose changes, which it shows as cards. Applying them comes in the next versions, each one with a click and undoable.
 
 ## Use it
 

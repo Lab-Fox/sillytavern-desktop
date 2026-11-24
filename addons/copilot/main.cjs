@@ -7,13 +7,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const ctx = require('./context.cjs');
+const protocol = require('./protocol.cjs');
+const lookups = require('./lookups.cjs');
 
-const SYSTEM_PROMPT = [
-    'You are the co-pilot inside SillyTavern Desktop, an app around SillyTavern.',
-    'You help the user with SillyTavern: chat completion presets, character cards, personas, lorebooks and chats.',
-    'You see only the material the user ticked for you, in <data> blocks. For now you can\'t change anything in SillyTavern: say so if asked to, and show the user what to change instead.',
-    'Answer briefly and plainly.',
-].join('\n');
+const SYSTEM_PROMPT = protocol.systemPrompt();
+const MAX_STEPS = 6;
+const READ_BUDGET = 80000; // characters of lookup results in one turn
 const MAX_TOKENS = 2048;
 
 let api = null;
@@ -97,7 +96,9 @@ const push = message => api.sidepanel.send(message);
 
 // What the model is sent: the system prompt, the material the user ticked
 // (read fresh), and the conversation. Replies that failed aren't part of it.
-const talk = s => s.messages.filter(m => !m.error && m.content).map(m => ({ role: m.role, content: m.content }));
+// The conversation as the model sees it (protocol.history: older lookup
+// results only as their summary, failed replies left out).
+const talk = s => protocol.history(s.messages);
 async function requestFor(s, extra = null) {
     const c = await page('context').catch(() => null);
     const blocks = [];
@@ -149,6 +150,9 @@ function changeContext(fn) {
     return true;
 }
 
+// One user message: ask, check the reply (one retry when it's not in the
+// format), run its lookups and ask again with their results, up to
+// MAX_STEPS requests. Nothing a reply proposes is applied here.
 async function send(text) {
     text = String(text || '').trim();
     if (!text) throw new Error('Write a message first.');
@@ -162,33 +166,82 @@ async function send(text) {
     const dir = sessionsDir();
     const ctl = new AbortController();
     busy = { sessionId: s.id, text: '', ctl };
-    (async () => {
-        const reply = { role: 'assistant', content: '', at: Date.now() };
-        let saveError = '';
+    let saveError = '';
+    // Saved to the session's own folder (a profile switch doesn't move it).
+    const append = msg => {
         try {
-            const r = await api.sillytavern.page('generate', { profileId: perFolder('profile'), messages: await requestFor(s), maxTokens: MAX_TOKENS, stream: true }, {
-                signal: ctl.signal,
-                onChunk: c => { busy.text = c.text; push({ type: 'turn', sessionId: s.id, text: c.text, done: false }); },
-            });
-            reply.content = r.text;
-            if (r.fallback) reply.fallback = true;
-        } catch (e) {
-            reply.content = busy.text;
-            if (ctl.signal.aborted) reply.stopped = true;
-            else reply.error = e.message || String(e);
-        }
-        try {
-            const latest = readSession(s.id, dir); // renamed meanwhile? keep that
-            if (latest) {
-                latest.messages.push(reply);
-                saveSession(latest, dir);
-            }
+            const latest = readSession(s.id, dir);
+            if (latest) { latest.messages.push(msg); saveSession(latest, dir); }
+            return latest;
         } catch (e) {
             saveError = `The reply couldn't be saved: ${e.message || e}`;
+            throw Object.assign(new Error(saveError), { saveFailed: true });
+        }
+    };
+    const generate = async messages => {
+        busy.text = '';
+        return api.sillytavern.page('generate', { profileId: perFolder('profile'), messages, maxTokens: MAX_TOKENS, stream: true }, {
+            signal: ctl.signal,
+            onChunk: c => {
+                const say = protocol.partialSay(c.text);
+                if (say !== busy.text) { busy.text = say; push({ type: 'turn', sessionId: s.id, text: say, done: false }); }
+            },
+        });
+    };
+    (async () => {
+        let last = { role: 'assistant', content: '' };
+        let read = 0;
+        try {
+            for (let step = 1; step <= MAX_STEPS; step++) {
+                const messages = await requestFor(readSession(s.id, dir) || s);
+                let r = await generate(messages);
+                let parsed = protocol.parse(r.text);
+                if (!parsed.ok) {
+                    // One more try, told what was wrong; the bad reply isn't kept.
+                    // (an empty reply is sent back as a placeholder: some providers refuse empty messages)
+                    const again = await generate([...messages, { role: 'assistant', content: r.text || '(empty reply)' }, { role: 'user', content: protocol.retryMessage(parsed.error) }]);
+                    const p2 = protocol.parse(again.text);
+                    if (!p2.ok) {
+                        append({ role: 'assistant', content: '', raw: again.text, invalid: true, error: `The model couldn't produce a valid reply: ${p2.error}`, at: Date.now() });
+                        break;
+                    }
+                    r = again;
+                    parsed = p2;
+                }
+                const { say, lookups: wanted, proposals, ask } = parsed.reply;
+                last = { role: 'assistant', content: say, raw: r.text, at: Date.now() };
+                if (r.fallback) last.fallback = true;
+                if (wanted.length) last.lookups = wanted;
+                if (proposals.length) last.proposals = proposals;
+                if (ask) last.ask = ask;
+                append(last);
+                busy.text = ''; // saved: a stop from here on doesn't save it twice
+                if (!wanted.length) break;
+                if (step === MAX_STEPS) {
+                    append({ role: 'assistant', content: '', note: `Stopped after ${MAX_STEPS} steps of looking things up. Ask again to go on.`, at: Date.now() });
+                    break;
+                }
+                push({ type: 'step', sessionId: s.id });
+                // Too much read in this turn: the model answers with what it has.
+                const found = read >= READ_BUDGET
+                    ? { content: `<lookup_results>\nERROR: too much was read in this turn (over ${READ_BUDGET} characters). Answer with what you have, or ask the user to narrow it down.\n</lookup_results>`, summary: ['Stopped looking things up: too much read in one go'] }
+                    : await lookups.run(api, wanted, ctl.signal);
+                read += found.content.length;
+                if (ctl.signal.aborted) throw new Error('stopped');
+                append({ role: 'lookup', content: found.content, summary: found.summary, at: Date.now() });
+                push({ type: 'step', sessionId: s.id });
+            }
+        } catch (e) {
+            if (!e.saveFailed) {
+                const msg = { role: 'assistant', content: busy?.text || '', at: Date.now() };
+                if (ctl.signal.aborted) msg.stopped = true;
+                else msg.error = e.message || String(e);
+                try { append(msg); } catch { /* saveError says it */ }
+            }
         } finally {
             // Whatever happened, the co-pilot is free again.
             busy = null;
-            push({ type: 'turn', sessionId: s.id, text: reply.content, done: true, stopped: !!reply.stopped, error: reply.error || '', saveError });
+            push({ type: 'turn', sessionId: s.id, done: true, saveError });
         }
     })();
     return { ok: true, sessionId: s.id };
@@ -231,6 +284,8 @@ module.exports = {
             return state(tab);
         });
         h('send', text => send(text));
+        // A click on one of the co-pilot's choices: sent as the user's answer to that question.
+        h('answer', (question, choice) => send(protocol.answerText(question, choice)));
         h('stop', () => { busy?.ctl.abort(); return true; });
         for (const ev of ['server-started', 'server-stopped', 'profile-switched']) api.on(ev, () => push({ type: 'state' }));
     },

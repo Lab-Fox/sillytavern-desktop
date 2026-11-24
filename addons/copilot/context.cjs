@@ -141,4 +141,4 @@ async function measure(page, item, count, ctx) {
 
 const material = blocks => (blocks.length ? `${MATERIAL_RULE}\n\n${blocks.join('\n\n')}` : '');
 
-module.exports = { KINDS, defaults, itemFrom, choices, resolve, measure, counter, material, MATERIAL_RULE };
+module.exports = { KINDS, defaults, itemFrom, choices, resolve, measure, counter, material, trimPreset, MATERIAL_RULE };

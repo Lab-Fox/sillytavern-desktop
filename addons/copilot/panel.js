@@ -56,7 +56,9 @@ function render() {
     // Conversation
     const log = $('#log');
     const msgs = st.current?.messages || [];
-    const items = msgs.map(m => message(m));
+    // The question of the latest reply can be answered with a click.
+    const lastAsk = !st.busy && msgs.length && msgs.at(-1).role === 'assistant' && msgs.at(-1).ask ? msgs.length - 1 : -1;
+    const items = msgs.map((m, i) => message(m, false, i === lastAsk));
     if (st.busy && st.busy.sessionId === st.current?.id) items.push(message({ role: 'assistant', content: st.busy.text }, true));
     if (!items.length) items.push(el('div', 'empty', 'Ask about a preset, a card, a persona, a lorebook or a chat.'));
     log.replaceChildren(...items);
@@ -69,14 +71,65 @@ function render() {
     $('#input').disabled = !st.available;
 }
 
-function message(m, pending = false) {
-    const d = el('div', `msg${pending ? ' pending' : ''}${m.stopped ? ' stopped' : ''}`);
+function message(m, pending = false, askable = false) {
+    // What the co-pilot looked up: one quiet line per lookup.
+    if (m.role === 'lookup') {
+        const d = el('div', 'step');
+        d.dataset.role = 'lookup';
+        for (const line of m.summary || []) d.append(el('div', null, line));
+        return d;
+    }
+    const d = el('div', `msg${pending ? ' pending' : ''}${m.stopped ? ' stopped' : ''}${m.invalid ? ' invalid' : ''}`);
     d.dataset.role = m.role;
     d.append(el('span', 'text', m.content || ''));
+    if (m.lookups?.length && !m.content) d.querySelector('.text').textContent = 'Looking things up…';
+    for (const p of m.proposals || []) d.append(proposal(p));
+    if (m.ask) {
+        const a = el('div', 'ask');
+        a.append(el('div', 'q', m.ask.question));
+        for (const c of m.ask.choices || []) {
+            const b = el('button', 'choice', c);
+            b.disabled = !askable;
+            // Sent as an answer to the question; what is typed in the box stays.
+            b.addEventListener('click', () => P.invoke('answer', m.ask.question, c).then(refresh, showError));
+            a.append(b);
+        }
+        d.append(a);
+    }
+    if (m.invalid && m.raw) { const r = el('details', 'raw'); r.append(el('summary', null, 'What the model wrote'), el('pre', null, m.raw)); d.append(r); }
+    if (m.note) d.append(el('span', 'note', m.note));
     if (m.stopped) d.append(el('span', 'note', 'Stopped.'));
     if (m.fallback) d.append(el('span', 'note', 'Sent through SillyTavern\'s current connection (no Connection Profile).'));
     if (m.error) d.append(el('span', 'err', m.error));
     return d;
+}
+
+// A proposed change, shown only: applying comes in the next version.
+const TARGET = {
+    edit_card: p => `Card ${p.avatar}: ${p.field}`, create_card: p => `New card "${p.name}"`,
+    create_lorebook: p => `New lorebook "${p.name}"`, add_lorebook_entry: p => `Lorebook ${p.book}: new entry`,
+    edit_lorebook_entry: p => `Lorebook ${p.book}, entry ${p.uid}: ${p.field}`, delete_lorebook_entry: p => `Lorebook ${p.book}: delete entry ${p.uid}`,
+    edit_message: p => `Message #${p.index}`, add_message: p => `New message after #${p.after}`,
+    delete_messages: p => `Delete messages ${p.indexes.join(', ')}`, hide_messages: p => `Hide messages ${p.indexes.join(', ')}`, unhide_messages: p => `Unhide messages ${p.indexes.join(', ')}`,
+    create_persona: p => `New persona "${p.name}"`, edit_persona: p => `Persona ${p.avatar ?? 'in use'}`,
+    create_preset: p => `New preset "${p.name}"`, edit_preset_setting: p => `Preset ${p.name}: ${p.key}`,
+    edit_preset_prompt: p => `Preset ${p.name}, prompt ${p.identifier}`, add_preset_prompt: p => `Preset ${p.name}: new prompt`,
+    remove_preset_prompt: p => `Preset ${p.name}: remove prompt ${p.identifier}`, reorder_preset_prompts: p => `Preset ${p.name}: prompt order`,
+};
+const show = v => (typeof v === 'string' ? v : JSON.stringify(v, null, 1));
+function proposal(p) {
+    const c = el('div', 'proposal');
+    c.append(el('div', 'target', (TARGET[p.op] || (() => p.op))(p)));
+    if ('find' in p) { c.append(el('div', 'del', show(p.find)), el('div', 'add', show(p.replace))); }
+    else if ('set' in p) c.append(el('div', 'add', show(p.set)));
+    else if ('value' in p) c.append(el('div', 'add', show(p.value)));
+    else if (p.text != null) c.append(el('div', 'add', show(p.text)));
+    else if (p.entry || p.fields || p.prompt) c.append(el('div', 'add', show(p.entry || p.fields || p.prompt)));
+    else if (p.description != null) c.append(el('div', 'add', show(p.description)));
+    else if (p.order) c.append(el('div', 'add', p.order.join(' → ')));
+    c.append(el('div', 'why', p.why));
+    c.append(el('div', 'later', 'Applying comes in the next version.'));
+    return c;
 }
 
 function renderProfiles() {
@@ -162,6 +215,7 @@ $('#input').addEventListener('keydown', e => {
 // Pushed by the main part: a reply streaming in, or a state change.
 P.onMessage(m => {
     if (m?.type === 'state') { profiles = null; refresh(); return; }
+    if (m?.type === 'step') { refresh(); return; }
     if (m?.type !== 'turn' || !st) return;
     if (m.done) { refresh().then(() => { if (m.saveError) showError(m.saveError); }); return; }
     if (m.sessionId !== st.current?.id) return;
@@ -217,6 +271,7 @@ function renderTray(v) {
 
 // Adding: a kind, then "last N" / a range for messages, or a pick from a list.
 let addItems = [];
+let addJob = 0; // a late answer for a kind no longer chosen is dropped
 const ACTIVE = '__in-use__';
 $('#btnAdd').addEventListener('click', () => {
     $('#addBox').hidden = false;
@@ -230,9 +285,13 @@ $('#addKind').addEventListener('change', async () => {
     $('#addRange').hidden = kind !== 'messages';
     $('#addPick').hidden = !kind || kind === 'messages';
     $('#btnAddOk').disabled = true;
+    addItems = [];
+    $('#addList').replaceChildren();
     if (!kind) return;
+    const job = ++addJob;
     try {
         const c = await P.invoke('contextChoices', kind);
+        if (job !== addJob) return;
         if (kind === 'messages') {
             $('#addTotal').textContent = c.chatId ? `This chat has ${fmt(c.total)} messages (0 is the first).` : 'Open a chat first.';
             $('#addTo').value = String(Math.max(0, (c.total || 1) - 1));

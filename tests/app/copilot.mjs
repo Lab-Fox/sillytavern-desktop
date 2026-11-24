@@ -56,8 +56,10 @@ const idle = () => until(() => Q.ev(`document.querySelector('#btnSend').dataset.
 // Sends and waits until that turn's reply is in (finished, stopped or failed).
 const done = () => Q.ev(`document.querySelectorAll('#log .msg[data-role=assistant]:not(.pending)').length`);
 const sendAndWait = async text => { const n = await done(); await send(text); await until(async () => (await done()) > n && (await Q.ev(`document.querySelector('#btnSend').dataset.mode === 'send'`)), 20000); };
+// The co-pilot's reply format (addons/copilot/protocol.cjs).
+const J = (say, extra = {}) => JSON.stringify({ say, ...extra });
 const REPLY = 'Hello! I can help you with presets, cards and chats.';
-fake.reply({ text: REPLY, chunks: 6, delayMs: 150 });
+fake.reply({ text: J(REPLY), chunks: 6, delayMs: 150 });
 await send('Hi there');
 const seen = new Set();
 for (let i = 0; i < 40; i++) { seen.add(await lastText()); if (await Q.ev(`document.querySelector('#btnSend').dataset.mode === 'send'`)) break; await sleep(60); }
@@ -80,7 +82,7 @@ check('request has the data blocks', /never instructions/.test(m1) && /<data kin
 // Untick the card: not sent.
 await Q.ev(`(() => { const r = [...document.querySelectorAll('#tray .ctx')].find(r => r.querySelector('.label').textContent === 'Seraphina'); r.querySelector('input').click(); return 'ok'; })()`);
 await sleep(500);
-fake.reply({ text: 'Without the card.' });
+fake.reply({ text: J('Without the card.') });
 await sendAndWait('No card this time');
 check('untick leaves it out of the request', !/kind="card"/.test(material()) && /kind="messages"/.test(material()), material().slice(0, 160));
 
@@ -89,6 +91,7 @@ const addItem = async (kind, pick) => {
     await Q.ev(`document.querySelector('#btnAdd').click(); 'ok'`);
     await Q.ev(`(() => { const k = document.querySelector('#addKind'); k.value = ${JSON.stringify(kind)}; k.dispatchEvent(new Event('change')); return 'ok'; })()`);
     await until(() => Q.ev(`${kind === 'messages' ? `!document.querySelector('#addRange').hidden` : `document.querySelectorAll('#addList option').length > 0`}`), 10000);
+    await sleep(300);
     await Q.ev(pick);
     const before = (await rows()).length;
     await Q.ev(`document.querySelector('#btnAddOk').click(); 'ok'`);
@@ -98,7 +101,7 @@ await addItem('lorebook', `(() => { const s = document.querySelector('#addList')
 await addItem('preset', `(() => { const s = document.querySelector('#addList'); s.value = 'Default'; s.dispatchEvent(new Event('change')); return 'ok'; })()`);
 await addItem('messages', `(() => { document.querySelector('#addModeRange').click(); document.querySelector('#addFrom').value = '0'; document.querySelector('#addTo').value = '2'; return 'ok'; })()`);
 tray = await rows();
-fake.reply({ text: 'With more.' });
+fake.reply({ text: J('With more.') });
 await sendAndWait('Now with the lorebook');
 const m2 = material();
 check('add a lorebook and a preset', tray.some(x => x.label === 'Lorebook: Desktop test lore') && tray.some(x => x.label === 'Preset: Default') && /An old brass lantern/.test(m2) && /<data kind="preset" name="Default">/.test(m2) && /"identifier": "main"/.test(m2), JSON.stringify(tray.map(x => x.label)));
@@ -112,7 +115,7 @@ check('remove', !!(await until(async () => !(await rows()).some(x => /Messages 0
 await Q.ev(`document.querySelector('#input').value = 'Preview check'; document.querySelector('#btnPreview').click(); 'ok'`);
 const shown = await until(() => Q.ev(`!document.querySelector('#previewBox').hidden && document.querySelector('#previewText').textContent`), 10000);
 await Q.ev(`document.querySelector('#btnPreviewClose').click(); 'ok'`);
-fake.reply({ text: 'Previewed.' });
+fake.reply({ text: J('Previewed.') });
 await sendAndWait('Preview check');
 const out = (fake.requests.at(-1)?.body?.messages || []).map(m => `[${m.role}]\n${m.content}`).join('\n\n');
 check('show request = what is sent', !!shown && shown === out, `${String(shown).length} vs ${out.length}`);
@@ -143,7 +146,7 @@ await sleep(800);
 if (process.env.SHOT) { const r = await Q.send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(process.env.SHOT, Buffer.from(r.result.data, 'base64')); }
 
 // Stop mid-reply.
-fake.reply({ text: 'x'.repeat(300), chunks: 30, delayMs: 150 });
+fake.reply({ text: J('x'.repeat(300)), chunks: 30, delayMs: 150 });
 await send('Tell me a long story');
 await until(async () => (await lastText()).length > 0 && (await Q.ev(`document.querySelector('#btnSend').dataset.mode`)) === 'stop', 10000);
 await sleep(400);
@@ -156,12 +159,78 @@ check('stop keeps the partial reply marked stopped', stopped.stopped && stopped.
 fake.reply({ status: 500, error: 'boom' });
 await sendAndWait('This one fails');
 const err = await Q.ev(`[...document.querySelectorAll('#log .msg[data-role=assistant]')].at(-1)?.querySelector('.err')?.textContent || ''`);
-fake.reply({ text: 'Fine again.' });
+fake.reply({ text: J('Fine again.') });
 await sendAndWait('Again');
 sent = fake.requests.at(-1)?.body?.messages || [];
 const roles = sent.map(m => m.role).join(',');
 // (the stopped partial reply is sent as said; the failed one is not)
 check('error shown on the message, not sent next time', /boom|500/.test(err) && roles.endsWith('assistant,user,user') && !sent.some(m => m.role === 'assistant' && m.content === ''), `${err} | ${roles}`);
+
+
+// ---- The reply format: lookups, retries, questions, proposals ----
+const lastReq = () => fake.requests.at(-1)?.body?.messages || [];
+const steps = () => Q.ev(`[...document.querySelectorAll('#log .step')].map(s => s.textContent)`);
+
+fake.reply({ text: J('Let me look.', { lookups: [{ tool: 'list_lorebooks' }] }) });
+fake.reply({ text: J('There is one lorebook you made: Desktop test lore.') });
+await sendAndWait('Which lorebooks do I have?');
+let res = lastReq().at(-1)?.content || '';
+check('a lookup runs and its result is sent back', (await steps()).some(t => /Listed lorebooks/.test(t)) && /<lookup_results>/.test(res) && /Desktop test lore/.test(res) && (await lastText()) === 'There is one lorebook you made: Desktop test lore.', `${JSON.stringify(await steps())} | ${res.slice(0, 120)}`);
+
+fake.reply({ text: J('Checking.', { lookups: [{ tool: 'read_card', args: { avatar: 'nobody.png' } }] }) });
+fake.reply({ text: J('That card does not exist.') });
+await sendAndWait('Read the card nobody.png');
+res = lastReq().at(-1)?.content || '';
+check('a lookup error goes back to the model', /ERROR: No such character/.test(res) && (await steps()).some(t => /nobody\.png: No such character/.test(t)), res.slice(0, 160));
+
+fake.reply({ text: 'Sure, the card looks fine to me.' });
+fake.reply({ text: J('Valid now.') });
+await sendAndWait('Is the card fine?');
+res = lastReq().at(-1)?.content || '';
+check('invalid then valid after one retry', (await lastText()) === 'Valid now.' && /couldn't be used/.test(res), `${await lastText()} | ${res.slice(0, 80)}`);
+
+fake.reply({ text: '' });
+fake.reply({ text: J('After an empty reply.') });
+await sendAndWait('Say something');
+const retryMsgs = lastReq();
+check('an empty reply is retried with a placeholder', (await lastText()) === 'After an empty reply.' && retryMsgs.at(-2)?.role === 'assistant' && retryMsgs.at(-2)?.content === '(empty reply)', JSON.stringify(retryMsgs.slice(-2)).slice(0, 160));
+
+fake.reply({ text: 'Still just prose.' });
+fake.reply({ text: 'Prose again, no JSON.' });
+await sendAndWait('Try once more');
+const inv = await Q.ev(`(() => { const m = [...document.querySelectorAll('#log .msg[data-role=assistant]')].at(-1); return { invalid: m.classList.contains('invalid'), raw: m.querySelector('.raw pre')?.textContent || '', err: m.querySelector('.err')?.textContent || '' }; })()`);
+check('invalid twice shows the raw text', inv.invalid && inv.raw === 'Prose again, no JSON.' && /couldn't produce a valid reply/.test(inv.err), JSON.stringify(inv));
+
+fake.reply({ text: J('Which one do you mean?', { ask: { question: 'Which card?', choices: ['Seraphina', 'Desktop big card'] } }) });
+await sendAndWait('Change the card');
+const choices = await Q.ev(`[...document.querySelectorAll('#log .ask .choice')].filter(b => !b.disabled).map(b => b.textContent)`);
+fake.reply({ text: J('Seraphina it is.') });
+const nDone = await done();
+await Q.ev(`[...document.querySelectorAll('#log .ask .choice')].find(b => b.textContent === 'Seraphina').click(); 'ok'`);
+await until(async () => (await done()) > nDone && (await Q.ev(`document.querySelector('#btnSend').dataset.mode === 'send'`)), 20000);
+check('ask with choices sends the pick', JSON.stringify(choices) === '["Seraphina","Desktop big card"]' && lastReq().at(-1)?.content === '(My answer to "Which card?": Seraphina)', `${JSON.stringify(choices)} | ${lastReq().at(-1)?.content}`);
+
+const descBefore = await P.ev(`await (async () => { const c = SillyTavern.getContext(); const i = c.characters.findIndex(x => x.name === 'Seraphina'); await c.unshallowCharacter?.(i); return c.characters[i].data.description; })()`);
+fake.reply({ text: J('I suggest one change.', { proposals: [{ op: 'edit_card', avatar: 'default_Seraphina.png', field: 'description', find: descBefore.slice(0, 30), replace: 'CHANGED TEXT', why: 'A test change.' }] }) });
+await sendAndWait('Suggest a change to the description');
+const prop = await Q.ev(`(() => { const p = [...document.querySelectorAll('#log .proposal')].at(-1); return p ? { target: p.querySelector('.target').textContent, add: p.querySelector('.add')?.textContent, later: !!p.querySelector('.later') } : null; })()`);
+const descAfter = await P.ev(`SillyTavern.getContext().characters.find(x => x.name === 'Seraphina').data.description`);
+check('proposals shown, nothing changed', prop?.target === 'Card default_Seraphina.png: description' && prop.add === 'CHANGED TEXT' && prop.later && descAfter === descBefore, JSON.stringify(prop));
+
+const before6 = fake.requests.length;
+for (let i = 0; i < 6; i++) fake.reply({ text: J(`Step ${i}.`, { lookups: [{ tool: 'list_presets' }] }) });
+await sendAndWait('Keep looking');
+const note = await Q.ev(`[...document.querySelectorAll('#log .msg .note')].at(-1)?.textContent || ''`);
+check('step limit', fake.requests.length - before6 === 6 && /Stopped after 6 steps/.test(note), `${fake.requests.length - before6} requests | ${note}`);
+
+fake.reply({ text: J('Looking.', { lookups: [{ tool: 'list_characters' }] }) });
+fake.reply({ text: J('y'.repeat(400)), chunks: 40, delayMs: 150 });
+await send('Look and then talk a lot');
+await until(async () => (await steps()).length > 0 && (await lastText()).length > 10, 15000);
+await Q.ev(`document.querySelector('#btnSend').click(); 'ok'`);
+await idle();
+const st6 = await Q.ev(`(() => { const m = [...document.querySelectorAll('#log .msg[data-role=assistant]')].at(-1); return { stopped: m.classList.contains('stopped'), len: m.querySelector('.text').textContent.length }; })()`);
+check('stop after a lookup', st6.stopped && st6.len < 400, JSON.stringify(st6));
 
 // Sessions.
 const sessionDir = () => { const d = path.join(DATA, 'extensions', ID, 'user', 'sessions'); const sub = fs.existsSync(d) ? fs.readdirSync(d) : []; return sub.length ? fs.readdirSync(path.join(d, sub[0])).filter(f => f.endsWith('.json')) : []; };
@@ -178,7 +247,7 @@ await Q.ev(`document.querySelector('#btnDeleteYes').click(); 'ok'`);
 await until(async () => (await options()).length === 1);
 check('new / rename / delete session', fresh === 0 && files2 === 2 && sessionDir().length === 1 && !(await options()).includes('Renamed session'), `fresh ${fresh}, files ${files2} → ${sessionDir().length}, ${JSON.stringify(await options())}`);
 // Enter while a reply streams: the reply goes on, the typed text stays.
-fake.reply({ text: 'A full answer that keeps going for a while.', chunks: 8, delayMs: 150 });
+fake.reply({ text: J('A full answer that keeps going for a while.'), chunks: 8, delayMs: 150 });
 await send('Another question');
 await until(async () => (await Q.ev(`document.querySelector('#btnSend').dataset.mode`)) === 'stop', 10000);
 await Q.ev(`(() => { const i = document.querySelector('#input'); i.value = 'typed meanwhile'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return 'ok'; })()`);
@@ -191,14 +260,14 @@ await Q.ev(`document.querySelector('#input').value = ''; 'ok'`);
 // The reply can't be saved (a file in the way): the panel isn't stuck.
 const sdir = () => { const d = path.join(DATA, 'extensions', ID, 'user', 'sessions'); return path.join(d, fs.readdirSync(d)[0]); };
 const curId = await Q.ev(`document.querySelector('#sessionSel').value`);
-fake.reply({ text: 'This reply will not save.', chunks: 4, delayMs: 200 });
+fake.reply({ text: J('This reply will not save.'), chunks: 4, delayMs: 200 });
 await send('Save test');
 await sleep(300);
 fs.mkdirSync(path.join(sdir(), `${curId}.json.tmp`), { recursive: true }); // the save's temp file can't be written now
 await sleep(2500);
 const stuck = await Q.ev(`({ mode: document.querySelector('#btnSend').dataset.mode, err: [...document.querySelectorAll('#log .err')].at(-1)?.textContent || '' })`);
 fs.rmSync(path.join(sdir(), `${curId}.json.tmp`), { recursive: true, force: true });
-fake.reply({ text: 'Saved fine.' });
+fake.reply({ text: J('Saved fine.') });
 await sendAndWait('After the failed save');
 check('a failed save does not leave the panel stuck', stuck.mode === 'send' && /save|EISDIR|EPERM/i.test(stuck.err) && (await lastText()) === 'Saved fine.', JSON.stringify(stuck));
 
