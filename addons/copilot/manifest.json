@@ -1,8 +1,8 @@
 {
     "name": "Co-pilot",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "author": "Lab-Fox",
-    "description": "An assistant in a side panel of the SillyTavern window for presets, character cards, personas, lorebooks and chats. You pick the Connection Profile it uses and what it sees; this version changes nothing yet.",
+    "description": "An assistant in a side panel of the SillyTavern window that makes and fixes chat completion presets, character cards, personas, lorebooks and chat messages through your own AI connection. Every change waits for your click and can be undone.",
     "minAppVersion": "1.8.1",
     "main": "main.cjs",
     "sidepanel": "panel.html",
