@@ -74,3 +74,27 @@ textarea { flex: 1; resize: none; padding: 6px 8px; min-height: 44px; max-height
 .proposal .conflict .q { color: var(--warn); font-size: 13px; margin-bottom: 4px; }
 .proposal .conflict .label { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .proposal .conflict .now, .proposal .conflict .before { font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Batch 9: the guard's note, Apply all, changes in this session */
+.proposal .outside { color: var(--warn); font-size: 12px; margin: 2px 0 4px; }
+.applyall { margin-top: 8px; }
+.applyall .confirm { border: 1px solid var(--accent); border-radius: 6px; padding: 6px 8px; background: var(--bg); }
+.applyall .confirm .q { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.applyall .confirm .item { font-size: 12px; padding-left: 8px; overflow-wrap: anywhere; }
+.applyall .confirm .item.left { color: var(--muted); }
+.applyall .confirm .label { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.step details.read { margin-top: 2px; }
+.step details.read summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.step details.read pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font: 11px/1.35 Consolas, monospace; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px; margin: 4px 0 0; }
+.msg.info { color: var(--muted); font-size: 12px; }
+#changesBox { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 8px 14px; z-index: 5; overflow: auto; }
+#changesBox .row strong { flex: 1; }
+#changesList { display: flex; flex-direction: column; gap: 4px; }
+#changesList .change { display: flex; gap: 6px; align-items: center; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-size: 12px; }
+#changesList .change .label { flex: 1; overflow-wrap: anywhere; }
+#changesList .change .when, #changesList .change .state { color: var(--muted); white-space: nowrap; }
+#changesList .change.undone { opacity: .7; }
+#changesBox .keep { margin-top: auto; border-top: 1px solid var(--border); padding-top: 6px; font-size: 12px; }
+#changesBox .keep input { width: 64px; }
+#changesNote { font-size: 12px; color: var(--muted); }
+#changesNote.err, #changesList .change .err { color: var(--bad); }

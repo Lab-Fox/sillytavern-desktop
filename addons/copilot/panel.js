@@ -76,7 +76,9 @@ function message(m, pending = false, askable = false) {
     if (m.role === 'lookup') {
         const d = el('div', 'step');
         d.dataset.role = 'lookup';
-        for (const line of m.summary || []) d.append(el('div', null, line));
+        for (const line of m.summary || []) d.append(el('div', null, cut(line, 160)));
+        // Exactly what went back to the model.
+        if (m.content) { const r = el('details', 'read'); r.append(el('summary', null, 'Show what it read'), el('pre', null, m.content)); d.append(r); }
         return d;
     }
     const d = el('div', `msg${pending ? ' pending' : ''}${m.stopped ? ' stopped' : ''}${m.invalid ? ' invalid' : ''}`);
@@ -84,6 +86,7 @@ function message(m, pending = false, askable = false) {
     d.append(el('span', 'text', m.content || ''));
     if (m.lookups?.length && !m.content) d.querySelector('.text').textContent = 'Looking things up…';
     for (const p of m.proposals || []) d.append(proposal(p));
+    if ((m.proposals || []).length > 1) applyAllRow(d, m.proposals);
     if (m.ask) {
         const a = el('div', 'ask');
         a.append(el('div', 'q', m.ask.question));
@@ -117,16 +120,73 @@ const TARGET = {
     remove_preset_prompt: p => `Preset ${p.name}: remove prompt ${p.identifier}`, reorder_preset_prompts: p => `Preset ${p.name}: prompt order`,
 };
 const show = v => (typeof v === 'string' ? v : JSON.stringify(v, null, 1));
+const cut = (t, n) => (String(t).length > n ? `${String(t).slice(0, n)}…` : String(t));
+const targetOf = p => cut((TARGET[p.op] || (() => p.op))(p), 100);
+const isOpen = p => p.state === 'pending' || (p.state === 'failed' && !p.change);
+
+// Apply all: the reply's open cards that are not deletes and were part of
+// what the user asked; it lists them (and what is left out) and asks once.
+// What a change touches (as the main part counts it): a second change to the
+// same thing would find it changed since its card was shown.
+const keyOf = p => ({ edit_card: `card:${p.avatar}:${p.field}`, edit_lorebook_entry: `entry:${p.book}:${p.uid}`, delete_lorebook_entry: `entry:${p.book}:${p.uid}`,
+    edit_message: `message:${p.index}`, edit_persona: `persona:${p.avatar ?? p.shown?.avatar}`, edit_preset_setting: `preset:${p.name}:${p.key}`,
+    edit_preset_prompt: `prompt:${p.name}:${p.identifier}`, add_preset_prompt: `order:${p.name}`, remove_preset_prompt: `order:${p.name}`, reorder_preset_prompts: `order:${p.name}` }[p.op] || null);
+function applyAllRow(d, proposals) {
+    const open = proposals.filter(p => p.id && isOpen(p) && APPLIES.has(p.op));
+    const seen = new Set();
+    const why = new Map();
+    for (const p of open) {
+        const k = keyOf(p);
+        if (DELETES.has(p.op)) why.set(p, 'a delete');
+        else if (p.outside) why.set(p, 'not part of what you asked');
+        else if (k && seen.has(k)) why.set(p, 'changes the same thing as an earlier one');
+        if (k) seen.add(k);
+    }
+    const take = open.filter(p => !why.has(p));
+    if (take.length < 2) return;
+    const row = el('div', 'applyall');
+    const b = el('button', 'primary', `Apply all (${take.length})…`);
+    row.append(b);
+    b.addEventListener('click', () => {
+        const box = el('div', 'confirm');
+        box.append(el('div', 'q', `Apply these ${take.length} changes?`));
+        for (const p of take) box.append(el('div', 'item', targetOf(p)));
+        const left = open.filter(p => !take.includes(p));
+        if (left.length) {
+            box.append(el('div', 'label', 'Left out (each needs its own click):'));
+            for (const p of left) box.append(el('div', 'item left', `${targetOf(p)}: ${why.get(p)}`));
+        }
+        const go = el('button', 'primary', `Apply these ${take.length}`), no = el('button', null, 'Cancel');
+        const r = el('div', 'actions');
+        r.append(go, no);
+        box.append(r);
+        row.replaceChildren(box);
+        no.addEventListener('click', () => refresh());
+        go.addEventListener('click', async () => {
+            go.disabled = no.disabled = true;
+            go.textContent = `Applying ${take.length} changes…`;
+            try {
+                const res = await P.invoke('applyAll', take.map(p => p.id));
+                const bad = res.filter(x => !x.ok);
+                await refresh();
+                if (bad.length) showError(`Applied ${res.length - bad.length} of ${res.length}. ${bad.map(x => x.error).join(' ')}`);
+            } catch (e) { showError(e); await refresh(); }
+        });
+    });
+    d.append(row);
+}
 // The kinds of change this version can apply; the others are shown only.
 const APPLIES = new Set(['edit_card', 'create_card', 'create_lorebook', 'add_lorebook_entry', 'edit_lorebook_entry', 'delete_lorebook_entry',
     'edit_message', 'add_message', 'delete_messages', 'hide_messages', 'unhide_messages', 'create_persona', 'edit_persona',
     'create_preset', 'edit_preset_setting', 'edit_preset_prompt', 'add_preset_prompt', 'remove_preset_prompt', 'reorder_preset_prompts']);
 const DELETES = new Set(['delete_lorebook_entry', 'delete_messages', 'remove_preset_prompt']);
-const STATE_TEXT = { applied: 'Applied.', rejected: 'Rejected.', undone: 'Undone.', failed: 'Not applied.' };
+const STATE_TEXT = { applied: 'Applied.', rejected: 'Rejected.', undone: 'Undone.', failed: 'Not applied.', kept: 'Applied, kept as it is now.', expired: 'Applied; its backup is gone.' };
 function proposal(p) {
     const c = el('div', `proposal ${p.state || 'pending'}${DELETES.has(p.op) ? ' delete' : ''}`);
     c.dataset.id = p.id || '';
-    c.append(el('div', 'target', (TARGET[p.op] || (() => p.op))(p)));
+    c.append(el('div', 'target', targetOf(p)));
+    // Not pointed at by the user's message (perhaps an instruction in what it read).
+    if (p.outside && isOpen(p)) c.append(el('div', 'outside', `${p.outside} Check it before you apply it.`));
     // What goes (as read when the reply came) and what comes.
     const now = p.shown && 'current' in p.shown ? p.shown.current : undefined;
     if ('find' in p) { c.append(el('div', 'del', show(p.find)), el('div', 'add', show(p.replace))); }
@@ -147,7 +207,17 @@ function proposal(p) {
     c.append(el('div', 'why', p.why));
     if (!p.id) return c;
     if (!APPLIES.has(p.op)) { c.append(el('div', 'later', 'Applying this kind of change comes in the next version.')); return c; }
-    const act = (label, cls, fn) => { const b = el('button', cls, label); b.addEventListener('click', async () => { b.disabled = true; try { const r = await fn(); if (r && r.ok === false && r.error) showError(r.error); } catch (e) { showError(e); } await refresh(); }); return b; };
+    const BUSY = { Apply: 'Applying…', Delete: 'Deleting…', Undo: 'Undoing…' };
+    const act = (label, cls, fn) => {
+        const b = el('button', cls, label);
+        b.addEventListener('click', async () => {
+            b.disabled = true;
+            if (BUSY[label]) b.textContent = BUSY[label];
+            try { const r = await fn(); if (r && r.ok === false && r.error) showError(r.error); } catch (e) { showError(e); }
+            await refresh();
+        });
+        return b;
+    };
     const row = el('div', 'actions');
     if (STATE_TEXT[p.state]) row.append(el('span', 'state', STATE_TEXT[p.state]));
     // (a failure after writing has a change: that one is undone, not applied again)
@@ -210,6 +280,11 @@ function renderWhere() {
 async function act(fn) {
     try { st = await fn(); render(); } catch (e) { showError(e); }
 }
+function showNote(text) {
+    const log = $('#log');
+    log.append(el('div', 'msg info', text));
+    log.scrollTop = log.scrollHeight;
+}
 function showError(e) {
     const log = $('#log');
     log.append(el('div', 'msg err', String(e.message || e)));
@@ -248,6 +323,7 @@ $('#profileSel').addEventListener('change', async e => {
     try { await P.invoke('setProfile', e.target.value || null); st.profileId = e.target.value || null; } catch (err) { showError(err); }
 });
 
+let sending = false; // a second Send while the first is on its way does nothing
 async function sendOrStop({ fromKey = false } = {}) {
     if (st?.busy) {
         if (!fromKey) await P.invoke('stop').catch(showError); // Enter never stops a reply
@@ -255,12 +331,16 @@ async function sendOrStop({ fromKey = false } = {}) {
     }
     const input = $('#input');
     const text = input.value.trim();
-    if (!text) return;
+    if (!text || sending) return;
+    sending = true;
+    input.value = ''; // taken now: what is typed from here on stays
     try {
         await P.invoke('send', text);
-        input.value = '';
         await refresh();
-    } catch (e) { showError(e); }
+    } catch (e) {
+        if (!input.value) input.value = text;
+        showError(e);
+    } finally { sending = false; }
 }
 $('#btnSend').addEventListener('click', sendOrStop);
 $('#input').addEventListener('keydown', e => {
@@ -360,8 +440,11 @@ $('#addKind').addEventListener('change', async () => {
 });
 function fillList() {
     const q = $('#addSearch').value.trim().toLowerCase();
+    // Characters with the same name are told apart by their file name.
+    const seen = {};
+    for (const x of addItems) seen[x.label] = (seen[x.label] || 0) + 1;
     $('#addList').replaceChildren(...addItems.filter(x => !q || x.label.toLowerCase().includes(q)).slice(0, 500).map(x => {
-        const o = el('option', null, x.label);
+        const o = el('option', null, seen[x.label] > 1 && x.value ? `${x.label} (${x.value})` : x.label);
         o.value = x.value ?? ACTIVE;
         return o;
     }));
@@ -393,3 +476,76 @@ $('#btnPreview').addEventListener('click', async () => {
     } catch (e) { showError(e); }
 });
 $('#btnPreviewClose').addEventListener('click', () => { $('#previewBox').hidden = true; });
+
+// ---- Changes in this session: newest first, Undo each or all, how long backups are kept ----
+function changesOf() {
+    const out = [];
+    for (const m of st?.current?.messages || []) for (const p of m.proposals || []) if (p.change) out.push({ p, at: parseInt(String(p.change.journal).split('-')[0], 36) || m.at });
+    return out.sort((a, b) => b.at - a.at);
+}
+const STATE_LIST = { applied: 'Applied', failed: 'Partly applied', undone: 'Undone', kept: 'Kept as it is now', expired: 'Backup gone' };
+const changesNote = (text, bad = false) => { const n = $('#changesNote'); n.textContent = text; n.classList.toggle('err', bad); n.hidden = !text; };
+function renderChanges() {
+    const list = changesOf();
+    $('#changesList').replaceChildren(...(list.length ? list.map(({ p, at }) => {
+        const row = el('div', `change ${p.state}`);
+        row.dataset.id = p.id;
+        row.append(el('span', 'label', targetOf(p)), el('span', 'when', at ? new Date(at).toLocaleString() : ''));
+        if (p.conflict) {
+            const b = el('button', null, 'Needs your choice');
+            b.addEventListener('click', () => { $('#changesBox').hidden = true; document.querySelector(`#log .proposal[data-id="${p.id}"]`)?.scrollIntoView({ block: 'center' }); });
+            row.append(b);
+        } else if (['applied', 'failed'].includes(p.state)) {
+            const b = el('button', null, 'Undo');
+            b.addEventListener('click', async () => {
+                b.disabled = true; b.textContent = 'Undoing…';
+                let r = null;
+                try { r = await P.invoke('undo', p.id); } catch (e) { r = { ok: false, error: String(e.message || e) }; }
+                await refresh(); renderChanges();
+                if (r?.conflict) changesNote('It changed after the co-pilot\'s change: its card shows both versions.', true);
+                else if (r && r.ok === false) changesNote(r.error, true);
+            });
+            row.append(b);
+        } else row.append(el('span', 'state', STATE_LIST[p.state] || p.state));
+        if (p.undoError && p.state !== 'undone') row.append(el('span', 'err', p.undoError));
+        return row;
+    }) : [el('div', 'empty', 'Nothing has been changed in this session.')]));
+    const undoable = list.filter(({ p }) => p.change && ['applied', 'failed'].includes(p.state) && !p.conflict).length;
+    $('#btnUndoAll').disabled = !undoable;
+    $('#undoAllAsk').hidden = true;
+    $('#undoAllRow').hidden = false;
+    $('#undoAllQ').textContent = `Undo ${undoable} change${undoable === 1 ? '' : 's'}, newest first?`;
+    changesNote('');
+}
+async function loadKeep() {
+    try {
+        const b = await P.invoke('backups');
+        $('#keepDays').value = String(b.days);
+        $('#keepCount').value = String(b.keep);
+        $('#keepSize').textContent = `Backups of changes use ${(b.size / 1048576).toFixed(1)} MB.`;
+    } catch (e) { $('#keepSize').textContent = String(e.message || e); }
+}
+$('#btnChanges').addEventListener('click', () => { renderChanges(); loadKeep(); $('#changesBox').hidden = false; });
+$('#btnChangesClose').addEventListener('click', () => { $('#changesBox').hidden = true; });
+$('#btnUndoAll').addEventListener('click', () => { $('#undoAllRow').hidden = true; $('#undoAllAsk').hidden = false; });
+$('#btnUndoAllNo').addEventListener('click', () => renderChanges());
+$('#btnUndoAllYes').addEventListener('click', async () => {
+    $('#btnUndoAllYes').disabled = $('#btnUndoAllNo').disabled = true;
+    try {
+        const r = await P.invoke('undoAll');
+        await refresh();
+        renderChanges();
+        const said = [`Undid ${r.undone} change${r.undone === 1 ? '' : 's'}.`];
+        if (r.stopped) said.push('One changed after the co-pilot\'s change: its card shows both versions. Undo stopped there.');
+        if (r.waiting) said.push(`${r.waiting} already wait for your choice on their cards.`);
+        for (const f of r.failed || []) said.push(f.error);
+        changesNote(said.join(' '), !!(r.stopped || (r.failed || []).length));
+    } catch (e) { showError(e); }
+    $('#btnUndoAllYes').disabled = $('#btnUndoAllNo').disabled = false;
+});
+$('#btnKeepSave').addEventListener('click', async () => {
+    try {
+        await P.invoke('retentionSet', Number($('#keepDays').value), Number($('#keepCount').value));
+        await loadKeep();
+    } catch (e) { $('#keepSize').textContent = String(e.message || e); }
+});

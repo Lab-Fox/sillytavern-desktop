@@ -267,7 +267,7 @@ async function deleteEntry(api, folder, p) {
 // 'file' (put the whole file back as it was), 'keep' (leave it as it is now).
 async function undoChange(api, change, { choice } = {}) {
     const e = api.changes.get(change.journal);
-    if (!e) return fail('The backup of this change is gone (backups are kept 30 days).');
+    if (!e) return fail('Its backup is gone (old backups are removed after a while: see ↺ Changes), so it can\'t be undone.', { gone: true });
     if (choice === 'keep') return { ok: true, how: 'kept' };
     // Page-held kinds: per item only (the page saves those files whole).
     if (chat.OPS.has(change.op)) {

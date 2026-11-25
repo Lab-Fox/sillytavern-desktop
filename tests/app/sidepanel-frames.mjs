@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
-import { launch, check, finish, sleep, RUNS, TEST_SETTINGS } from './lib.mjs';
+import { launch, check, finish, sleep, RUNS, ROOT, TEST_SETTINGS } from './lib.mjs';
 
 const REAL = process.env.ST_REAL;
 if (!REAL) { console.log('Set ST_REAL to the SillyTavern folder to measure.'); process.exit(1); }
@@ -34,7 +34,10 @@ fs.mkdirSync(dir, { recursive: true });
 fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ name: 'Panel test', version: '1.0.0', main: 'main.cjs', sidepanel: 'panel.html' }));
 fs.writeFileSync(path.join(dir, 'main.cjs'), `module.exports = { activate() {} };`);
 fs.writeFileSync(path.join(dir, 'panel.html'), `<!doctype html><meta charset="utf-8"><body style="background:#222;color:#ddd;font:14px sans-serif">Panel<p>${'Some text. '.repeat(200)}</p>`);
-fs.writeFileSync(path.join(DATA, 'settings.json'), JSON.stringify({ ...TEST_SETTINGS, sillytavernPath: REAL, profiles: [], desktopExtensions: { 'panel-test': true } }));
+// PANEL=copilot: measure with the co-pilot's own panel (it reads SillyTavern's page but writes nothing there).
+const PANEL = process.env.PANEL === 'copilot' ? 'copilot' : 'panel-test';
+if (PANEL === 'copilot') fs.cpSync(path.join(ROOT, 'addons', 'copilot'), path.join(DATA, 'extensions', 'copilot'), { recursive: true, filter: src => !/[\\/](user|downloads)$|data\.json$/.test(src) });
+fs.writeFileSync(path.join(DATA, 'settings.json'), JSON.stringify({ ...TEST_SETTINGS, sillytavernPath: REAL, profiles: [], desktopExtensions: { [PANEL]: true } }));
 
 let a;
 try {
@@ -85,7 +88,7 @@ try {
     for (let r = 0; r < ROUNDS * 3 / 2; r++) {
         const kind = kinds[r % 3];
         const isOpen = await bar.ev(`document.querySelector('#btnPanel').classList.contains('on')`);
-        if (isOpen !== (kind === 'open')) await bar.ev(`bar.action('side-panel', { id: 'panel-test' }); 'ok'`);
+        if (isOpen !== (kind === 'open')) await bar.ev(`bar.action('side-panel', { id: '${PANEL}' }); 'ok'`);
         await setWidth(kind === 'narrow' ? W0 - 380 : W0);
         await sleep(2500);
         const m = await measure();

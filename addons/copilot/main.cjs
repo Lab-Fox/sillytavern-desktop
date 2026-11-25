@@ -10,6 +10,7 @@ const ctx = require('./context.cjs');
 const protocol = require('./protocol.cjs');
 const lookups = require('./lookups.cjs');
 const applier = require('./apply.cjs');
+const guard = require('./guard.cjs');
 
 const SYSTEM_PROMPT = protocol.systemPrompt();
 const MAX_STEPS = 6;
@@ -154,14 +155,30 @@ function changeContext(fn) {
 // One user message: ask, check the reply (one retry when it's not in the
 // format), run its lookups and ask again with their results, up to
 // MAX_STEPS requests. Nothing a reply proposes is applied here.
-async function send(text) {
+// What the user asked this turn: the last message they typed themselves. The
+// answers they picked to the co-pilot's questions don't add to it: both the
+// question and its choices were written by the model.
+function askedText(messages) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m.role === 'user' && !m.answer) return String(m.content || '');
+    }
+    return '';
+}
+// The items the user ticked in the tray, as the guard names them.
+const tickedOf = (context, persona) => (context || []).filter(i => i.on).map(i => ({
+    kind: i.kind,
+    key: i.kind === 'messages' ? i.ref?.chatId : i.kind === 'card' ? i.ref?.avatar : i.kind === 'persona' ? (i.ref?.avatar ?? persona) : i.ref?.name,
+}));
+
+async function send(text, { choice } = {}) {
     text = String(text || '').trim();
     if (!text) throw new Error('Write a message first.');
     if (busy) throw new Error('The co-pilot is still answering.');
     if (!api.sillytavern.info().running) throw new Error('SillyTavern isn\'t running.');
     const s = currentSession() || await newSession();
     if (!s.messages.length && s.name === 'New session') s.name = text.replace(/\s+/g, ' ').slice(0, 40);
-    s.messages.push({ role: 'user', content: text, at: Date.now() });
+    s.messages.push({ role: 'user', content: text, at: Date.now(), ...(choice !== undefined ? { answer: true, choice: String(choice) } : {}) });
     saveSession(s);
     setOpen(s.id);
     const dir = sessionsDir();
@@ -197,8 +214,11 @@ async function send(text) {
         let last = { role: 'assistant', content: '' };
         let read = 0;
         try {
-            try { turn.chatId = (await page('context')).chatId || null; } catch { /* no page */ }
+            try { const c = await page('context'); turn.chatId = c.chatId || null; turn.avatar = c.characterAvatar || null; } catch { /* no page */ }
             try { turn.persona = (await page('personaState', {})).current || null; } catch { /* no page */ }
+            try { turn.preset = (await page('presetState', { name: '' })).selected || null; } catch { /* no page */ }
+            turn.text = askedText(s.messages);
+            turn.ticked = tickedOf(s.context, turn.persona);
             for (let step = 1; step <= MAX_STEPS; step++) {
                 const messages = await requestFor(readSession(s.id, dir) || s);
                 let r = await generate(messages);
@@ -222,10 +242,15 @@ async function send(text) {
                 // Each proposal gets an id, a state and the value it replaces as
                 // read now (Apply refuses if that changes before the click).
                 // Nothing is applied without a click.
+                // A proposal the user's message doesn't point at gets a note (and stays out of Apply all).
+                let names = { characters: [], personas: [] };
+                if (proposals.length) { try { names = await page('lists'); } catch { /* names unknown: only kinds count */ } }
                 if (proposals.length) last.proposals = await Promise.all(proposals.map(async x => {
                     const fields = proposalFields(x);
                     const shown = await applier.currentOf(api, fields, turn);
-                    return { ...fields, ...(shown ? { shown } : {}), id: crypto.randomBytes(4).toString('hex'), state: 'pending' };
+                    const out = guard.outside({ ...fields, shown }, { text: turn.text, ticked: turn.ticked, names,
+                        current: { chatId: turn.chatId, avatar: turn.avatar, persona: turn.persona, preset: turn.preset } });
+                    return { ...fields, ...(shown ? { shown } : {}), ...(out ? { outside: out } : {}), id: crypto.randomBytes(4).toString('hex'), state: 'pending' };
                 }));
                 if (ask) last.ask = ask;
                 append(last);
@@ -289,7 +314,7 @@ async function oneAtATime(id, fn) {
     try { return await fn(); } finally { applying = null; }
 }
 // What the model proposed, without anything only the co-pilot sets.
-const proposalFields = p => { const { id, state, change, error, conflict, undoError, undoNote, shown, ...rest } = p; return rest; };
+const proposalFields = p => { const { id, state, change, error, conflict, undoError, undoNote, shown, outside, ...rest } = p; return rest; };
 // Still open: never decided, or failed before anything was written (a
 // failure after writing has a change, which is undone, not applied again).
 const open = p => p.state === 'pending' || (p.state === 'failed' && !p.change);
@@ -305,8 +330,81 @@ async function applyOne(id) {
             if (r.change) x.change = r.change;
             delete x.conflict;
         });
+        if (r.change) prune({ throttle: true });
         return r.ok ? { ok: true } : { ok: false, error: r.error };
     });
+}
+
+// ---- Apply all, Undo everything, how long backups are kept ----
+// Deletes always need their own click, and so does anything the user's
+// message didn't point at.
+const DELETE_OPS = new Set(['delete_lorebook_entry', 'delete_messages', 'remove_preset_prompt']);
+const leftOut = p => (!open(p) ? 'already decided' : DELETE_OPS.has(p.op) ? 'a delete needs its own click' : p.outside ? 'not part of what you asked' : null);
+// What a change touches: two changes to the same thing can't both apply
+// (the second would find it changed since its card was shown).
+function targetKey(p) {
+    switch (p.op) {
+        case 'edit_card': return `card:${p.avatar}:${p.field}`;
+        case 'edit_lorebook_entry': case 'delete_lorebook_entry': return `entry:${p.book}:${p.uid}`;
+        case 'edit_message': return `message:${p.index}`;
+        case 'edit_persona': return `persona:${p.avatar ?? p.shown?.avatar}`;
+        case 'edit_preset_setting': return `preset:${p.name}:${p.key}`;
+        case 'edit_preset_prompt': return `prompt:${p.name}:${p.identifier}`;
+        case 'add_preset_prompt': case 'remove_preset_prompt': case 'reorder_preset_prompts': return `order:${p.name}`;
+        default: return null;
+    }
+}
+// Applies the given proposals of the open session one at a time (new
+// messages last: they move the ones after them); a failure doesn't stop the rest.
+async function applyAll(ids) {
+    const out = [], seen = new Set(), list = [];
+    for (const id of (Array.isArray(ids) ? ids : []).map(String)) {
+        let p = null, why = null;
+        try { p = locate(id).p; why = leftOut(p); } catch (e) { why = e.message; }
+        const key = p && targetKey(p);
+        if (!why && key && seen.has(key)) why = 'it changes the same thing as an earlier change: apply it on its own';
+        if (key) seen.add(key);
+        if (why) out.push({ id, ok: false, error: why, skipped: true }); else list.push({ id, last: p.op === 'add_message' });
+    }
+    for (const { id } of [...list.filter(x => !x.last), ...list.filter(x => x.last)]) {
+        try { out.push({ id, ...(await applyOne(id)) }); } catch (e) { out.push({ id, ok: false, error: e.message || String(e) }); }
+    }
+    prune();
+    return out;
+}
+// When a change was made (its journal entry), for newest-first order.
+const madeAt = p => api.changes.get(p.change.journal)?.at || parseInt(String(p.change.journal).split('-')[0], 36) || 0;
+// Undoes this session's changes, newest first by when they were made; stops
+// at the first one that needs the user's choice (its card shows both
+// versions). Changes already waiting for a choice are passed over and counted.
+async function undoAll() {
+    const s = currentSession();
+    if (!s) throw new Error('No session.');
+    const all = s.messages.flatMap(m => m.proposals || []).filter(x => x.change && ['applied', 'failed'].includes(x.state));
+    const waiting = all.filter(x => x.conflict).length;
+    const ids = all.filter(x => !x.conflict).sort((a, b) => madeAt(b) - madeAt(a)).map(x => x.id);
+    const done = [], failed = [];
+    for (const id of ids) {
+        let r;
+        try { r = await undoOne(id); } catch (e) { r = { ok: false, error: e.message || String(e) }; }
+        if (r?.conflict) return { undone: done.length, stopped: id, failed, waiting };
+        if (r?.ok) done.push(id); else failed.push({ id, error: r?.error || 'Undo failed.' });
+    }
+    return { undone: done.length, stopped: null, failed, waiting };
+}
+const RETENTION = { days: 30, keep: 200 };
+const retention = () => {
+    const r = api.storage.get('retention', {}) || {};
+    const n = (v, d, min, max) => (Number.isInteger(v) && v >= min && v <= max ? v : d);
+    return { days: n(r.days, RETENTION.days, 1, 3650), keep: n(r.keep, RETENTION.keep, 10, 100000) };
+};
+// Backups older than the days AND beyond the newest count go. Never while
+// another change is being recorded; after an apply at most once a minute.
+let lastPrune = 0;
+function prune({ throttle = false } = {}) {
+    if (throttle && Date.now() - lastPrune < 60000) return;
+    lastPrune = Date.now();
+    try { api.changes.prune(retention()); } catch { /* next time */ }
 }
 function rejectOne(id) {
     if (applying === id) throw new Error('That proposal is being applied: wait a moment.');
@@ -325,7 +423,8 @@ async function undoOne(id, choice) {
         withProposal(at, id, x => {
             if (r.conflict) { x.conflict = { ...r.conflict, noMine: !!r.noMine }; return; }
             delete x.conflict;
-            if (r.ok && r.how !== 'kept') { x.state = 'undone'; x.undoError = ''; x.undoNote = r.note || ''; } else if (!r.ok) x.undoError = r.error;
+            // Kept as it is now: decided, no Undo any more. Backup gone: it can't be undone.
+            if (r.ok && r.how === 'kept') { x.state = 'kept'; x.undoError = ''; } else if (r.ok) { x.state = 'undone'; x.undoError = ''; x.undoNote = r.note || ''; } else if (r.gone) { x.state = 'expired'; x.undoError = r.error; } else x.undoError = r.error;
         });
         return r;
     });
@@ -335,6 +434,7 @@ module.exports = {
     activate(a) {
         api = a;
         count = ctx.counter(page);
+        prune();
         const h = (name, fn) => api.sidepanel.handle(name, fn);
         h('state', tab => state(tab));
         h('profiles', async () => {
@@ -350,7 +450,13 @@ module.exports = {
         h('context', () => contextView());
         h('contextToggle', (id, on) => changeContext(list => list.map(i => (i.id === id ? { ...i, on: !!on } : i))));
         h('contextRemove', id => changeContext(list => list.filter(i => i.id !== id)));
-        h('contextAdd', async spec => { const item = await ctx.itemFrom(page, spec); changeContext(list => [...list, item]); return item; });
+        h('contextAdd', async spec => {
+            const item = await ctx.itemFrom(page, spec);
+            // The same item twice would be sent twice.
+            if ((currentSession()?.context || []).some(i => i.kind === item.kind && JSON.stringify(i.ref) === JSON.stringify(item.ref))) throw new Error('That is in the list already.');
+            changeContext(list => [...list, item]);
+            return item;
+        });
         h('contextChoices', kind => ctx.choices(page, String(kind)));
         // The exact messages the next request would send (with the text being written).
         h('preview', async text => { const s = currentSession(); return s ? requestFor(s, String(text || '').trim() || null) : []; });
@@ -369,10 +475,21 @@ module.exports = {
         });
         h('send', text => send(text));
         h('apply', id => applyOne(String(id)));
+        h('applyAll', ids => applyAll(ids));
+        h('undoAll', () => undoAll());
+        h('backups', () => ({ ...retention(), size: api.changes.size() }));
+        h('retentionSet', (days, keep) => {
+            if (applying) throw new Error('A change is being applied: try again in a moment.');
+            const r = { days: Math.floor(Number(days)), keep: Math.floor(Number(keep)) };
+            if (!(r.days >= 1 && r.days <= 3650) || !(r.keep >= 10 && r.keep <= 100000)) throw new Error('Keep backups 1 to 3650 days, and at least the last 10 changes.');
+            api.storage.set('retention', r);
+            prune();
+            return { ...retention(), size: api.changes.size() };
+        });
         h('reject', id => rejectOne(String(id)));
         h('undo', (id, choice) => undoOne(String(id), choice));
         // A click on one of the co-pilot's choices: sent as the user's answer to that question.
-        h('answer', (question, choice) => send(protocol.answerText(question, choice)));
+        h('answer', (question, choice) => send(protocol.answerText(question, choice), { choice }));
         h('stop', () => { busy?.ctl.abort(); return true; });
         for (const ev of ['server-started', 'server-stopped', 'profile-switched']) api.on(ev, () => push({ type: 'state' }));
     },

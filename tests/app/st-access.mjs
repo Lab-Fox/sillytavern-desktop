@@ -325,6 +325,22 @@ if (ONLY !== 'requests') {
     r = await call('page', 'personaApply', { op: 'remove', avatar: pid });
     check('personaApply remove: picture and entries gone', !r.err && !fs.existsSync(picFile) && !(pid in pu().personas) && !(pid in pu().persona_descriptions) && pu().persona_descriptions[inUse].description === inUseText, JSON.stringify(r));
 
+    // ---- Batch 9: a group chat (members, a message by a member, in the group's own file) ----
+    const grp = (await call('req', 'POST', '/api/groups/create', { name: 'Desktop test group', members: ['default_Seraphina.png'] })).ok;
+    await P.ev(`await (async () => { const g = await import('/scripts/group-chats.js'); await SillyTavern.getContext().getCharacters(); await g.openGroupById(${JSON.stringify(grp?.id)}); await new Promise(r => setTimeout(r, 1500)); return 'ok'; })()`);
+    let gs = (await call('page', 'chatState', { indexes: [0] })).ok;
+    const gFile = gs?.file ? path.join(CLONE, 'data', 'default-user', gs.file) : '';
+    const gLen = gs?.length ?? -1;
+    r = await call('page', 'chatApply', { chatId: gs?.chatId, ops: [{ kind: 'insert', index: gLen, prev: gs?.messages?.[gLen - 1]?.message ?? (gLen === 0 ? null : undefined), make: { isUser: false, name: 'Seraphina', text: 'Said in the test group.' } }] });
+    const gMade = r.ok?.made?.[0];
+    const gLines = gFile && fs.existsSync(gFile) ? fs.readFileSync(gFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
+    const gOk = !!grp?.id && gs?.groupId === grp.id && JSON.stringify(gs.members) === JSON.stringify(['Seraphina']) && /^group chats\//.test(gs.file) && gMade?.name === 'Seraphina' && gLines.at(-1)?.mes === 'Said in the test group.';
+    r = await call('page', 'chatApply', { chatId: gs?.chatId, ops: [{ kind: 'remove', index: gLen, expect: gMade }] });
+    gs = (await call('page', 'chatState')).ok;
+    check('a group chat: its members, a member\'s message in the group\'s own file, and out again', gOk && !r.ok?.refused && gs.length === gLen, JSON.stringify({ id: grp?.id, groupId: gs?.groupId, members: gs?.members, file: gs?.file, made: gMade?.name, last: gLines.at(-1)?.mes, r }).slice(0, 300));
+    await openTestChat(P);
+    await call('req', 'POST', '/api/groups/delete', { id: grp?.id });
+
     const TEXT = 'The quick brown fox jumps over the lazy dog near the old tavern.';
     fake.reply({ text: TEXT, chunks: 5, delayMs: 80 });
     r = await call('gen', args());
@@ -386,19 +402,29 @@ if (ONLY !== 'requests') {
     check('reload mid-request', /reloaded/i.test(r.err || ''), JSON.stringify(r).slice(0, 200));
 
     // Connection Manager off: the current connection (pointed at the fake model) is used.
-    const P2 = await a.page('localhost:8123/', 240);
-    await until(() => P2.ev(`!!window.SillyTavern?.getContext && !!SillyTavern.getContext().extensionSettings?.connectionManager`).catch(() => false), 90000);
-    await sleep(3000);
-    await P2.ev(`(() => { const c = SillyTavern.getContext(); const s = c.chatCompletionSettings;
+    // After the reload above: the page the app's calls run in, loaded and ready
+    // (the first page found can be the one being replaced, or still loading).
+    await until(async () => (await call('page', 'profiles')).ok?.available === true, 90000);
+    const ready = async () => { const p = await a.page('localhost:8123/', 240); return (await p.ev(`await import('/script.js').then(s => s.settingsReady === true)`).catch(() => false)) && p; };
+    let P2 = await until(ready, 90000);
+    await sleep(1000);
+    const cmOff = `(() => { const c = SillyTavern.getContext(); const s = c.chatCompletionSettings;
         $('#main_api').val('openai').trigger('change');
         s.chat_completion_source = 'custom'; s.custom_url = '${fake.url}'; s.custom_model = 'fake-model';
-        c.extensionSettings.disabledExtensions.push('connection-manager'); return 'ok'; })()`);
-    await sleep(1000);
+        if (!c.extensionSettings.disabledExtensions.includes('connection-manager')) c.extensionSettings.disabledExtensions.push('connection-manager'); return 'ok'; })()`;
+    await P2.ev(cmOff);
+    // Until the app's page says so: if not, the page found was another one.
+    for (let i = 0; i < 10 && (await call('page', 'profiles')).ok?.available !== false; i++) {
+        await sleep(500);
+        P2 = (await until(ready, 20000)) || P2;
+        await P2.ev(cmOff).catch(() => {});
+    }
     fake.reply({ text: 'From the current connection.' });
     r = await call('gen', args({ stream: false }));
     check('no Connection Manager', r.ok?.result?.text === 'From the current connection.' && r.ok.result.fallback === true, JSON.stringify(r).slice(0, 200));
-    await P2.ev(`(() => { const c = SillyTavern.getContext(); c.extensionSettings.disabledExtensions = c.extensionSettings.disabledExtensions.filter(x => x !== 'connection-manager'); c.saveSettingsDebounced(); return 'ok'; })()`);
-    await sleep(1500);
+    // Back on, saved at once (a debounced save can be lost when the app quits right after).
+    await P2.ev(`await (async () => { const c = SillyTavern.getContext(); c.extensionSettings.disabledExtensions = c.extensionSettings.disabledExtensions.filter(x => x !== 'connection-manager'); await (await import('/script.js')).saveSettings(); return 'ok'; })()`);
+    await sleep(500);
     P.close(); P2.close(); bar.close();
     await a.quit();
     await fake.close();

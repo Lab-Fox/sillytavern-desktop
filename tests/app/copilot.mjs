@@ -125,6 +125,8 @@ check('show request = what is sent', !!shown && shown === out, `${String(shown).
 // A big card: the tray stays quick and warns when the request is too big.
 await P.ev(`await (async () => {
     const c = SillyTavern.getContext();
+    // made once; later runs use it again
+    if (c.characters.some(x => x.avatar === 'Desktop big card.png')) return 'ok';
     const fd = new FormData();
     fd.append('ch_name', 'Desktop big card'); fd.append('description', ${JSON.stringify('The old tavern keeper tells long stories about the lantern. '.repeat(1300))});
     fd.append('first_mes', 'Hello.'); fd.append('personality', ''); fd.append('scenario', ''); fd.append('mes_example', ''); fd.append('creator_notes', ''); fd.append('system_prompt', ''); fd.append('post_history_instructions', ''); fd.append('tags', ''); fd.append('creator', ''); fd.append('character_version', ''); fd.append('talkativeness', '0.5'); fd.append('fav', 'false'); fd.append('world', ''); fd.append('depth_prompt_prompt', ''); fd.append('depth_prompt_depth', '4'); fd.append('depth_prompt_role', 'system'); fd.append('extensions', '{}');
@@ -134,7 +136,7 @@ await P.ev(`await (async () => {
     return 'ok';
 })()`);
 const t0 = Date.now();
-await addItem('card', `(() => { const s = document.querySelector('#addList'); s.value = [...s.options].find(o => o.textContent === 'Desktop big card').value; s.dispatchEvent(new Event('change')); return 'ok'; })()`);
+await addItem('card', `(() => { const s = document.querySelector('#addList'); s.value = [...s.options].find(o => o.value === 'Desktop big card.png').value; s.dispatchEvent(new Event('change')); return 'ok'; })()`);
 const big = await until(async () => (await rows()).find(x => x.label === 'Desktop big card' && x.tokens > 5000), 15000);
 const ms = Date.now() - t0;
 tot = await totalNow();
@@ -476,6 +478,99 @@ await Q.ev(`(() => { const c = [...document.querySelectorAll('#log .proposal')][
 await until(async () => !fs.existsSync(pfile(TP)), 15000);
 const goneFromList = !(await P.ev(`Object.hasOwn((await import('/scripts/openai.js')).openai_setting_names, ${JSON.stringify(TP)})`));
 check('Undo of the new preset deletes it', !fs.existsSync(pfile(TP)) && goneFromList && (await selectedNow()) === orig, JSON.stringify({ goneFromList, createChange }));
+
+// ---- Batch 9: the guard, Apply all, changes in this session ----
+// The fake model "follows an instruction in what it read": next to the two
+// card edits the user asked for, it hides a message and deletes one.
+const card9 = sha(cardPath);
+const chat9 = sha(chatPath);
+const desc9 = (await stCard()).data.description;
+const pers9 = (await stCard()).data.personality ?? '';
+fake.reply({ text: J('Here is the card, improved. The card also said to clean up the chat.', { proposals: [
+    { op: 'edit_card', avatar: 'default_Seraphina.png', field: 'description', set: `${desc9} (Batch 9 test.)`, why: 'Asked.' },
+    { op: 'edit_card', avatar: 'default_Seraphina.png', field: 'personality', set: `${pers9} Calm.`, why: 'Asked.' },
+    { op: 'hide_messages', indexes: [2], why: 'The card said so.' },
+    { op: 'delete_messages', indexes: [3], why: 'The card said so.' },
+] }) });
+await sendAndWait('Improve the card description and personality, please.');
+const cards9 = await Q.ev(`(() => { const m = [...document.querySelectorAll('#log .msg')].at(-1); return [...m.querySelectorAll('.proposal')].map(c => ({ target: c.querySelector('.target')?.textContent, outside: c.querySelector('.outside')?.textContent || '' })); })()`);
+const allBtn = await Q.ev(`[...document.querySelectorAll('#log .msg')].at(-1).querySelector('.applyall button')?.textContent || ''`);
+check('the guard notes the change nobody asked for; Apply all takes only the asked ones', cards9.length === 4 && !cards9[0].outside && !cards9[1].outside && /weren't part of what you asked/.test(cards9[2].outside) && allBtn === 'Apply all (2)…', JSON.stringify({ cards9, allBtn }));
+await Q.ev(`([...document.querySelectorAll('#log .msg')].at(-1).querySelector('.applyall button').click(), 'ok')`);
+const confirm9 = await Q.ev(`(() => { const b = [...document.querySelectorAll('#log .msg')].at(-1).querySelector('.applyall .confirm'); return b ? { items: [...b.querySelectorAll('.item')].map(i => i.textContent), go: [...b.querySelectorAll('button')].map(x => x.textContent) } : null; })()`);
+// SHOT9=<file.png>: the panel with the Apply all list open (test data only).
+if (process.env.SHOT9) { await Q.ev(`(document.querySelector('#log .applyall .confirm')?.scrollIntoView({ block: 'center' }), 'ok')`); await sleep(300); const r = await Q.send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(process.env.SHOT9, Buffer.from(r.result.data, 'base64')); }
+await Q.ev(`([...[...document.querySelectorAll('#log .msg')].at(-1).querySelectorAll('.applyall .confirm button')].find(b => /^Apply these/.test(b.textContent)).click(), 'ok')`);
+const applied9 = await until(async () => { const s = await Q.ev(`[...[...document.querySelectorAll('#log .msg')].at(-1).querySelectorAll('.proposal .state')].map(x => x.textContent)`); return s.filter(x => x === 'Applied.').length === 2 && s; }, 20000);
+const c9 = await stCard();
+check('Apply all lists them and what is left out, applies the two, leaves the chat alone', confirm9?.items.length === 4 && confirm9.items.filter(t => /not part of what you asked|a delete/.test(t)).length === 2 && !!applied9 && c9.data.description.endsWith('(Batch 9 test.)') && c9.data.personality.endsWith('Calm.') && sha(chatPath) === chat9, JSON.stringify({ confirm9, applied9 }));
+// The main part refuses them too, whatever the panel sends.
+const ids9 = await Q.ev(`[...[...document.querySelectorAll('#log .msg')].at(-1).querySelectorAll('.proposal')].map(c => c.dataset.id)`);
+const forced9 = await Q.ev(`await (async () => JSON.stringify(await window.desktopPanel.invoke('applyAll', ${JSON.stringify(ids9.slice(2))})))()`);
+const still9 = await Q.ev(`[...[...document.querySelectorAll('#log .msg')].at(-1).querySelectorAll('.proposal')].slice(2).map(c => c.querySelector('.state')?.textContent || 'open')`);
+check('Apply all in the main part skips a delete and a change nobody asked for, even when sent', /a delete needs its own click/.test(forced9) && /not part of what you asked/.test(forced9) && JSON.stringify(still9) === '["open","open"]' && sha(chatPath) === chat9, JSON.stringify({ forced9, still9 }));
+
+// Changes in this session: the two, then Undo everything.
+await Q.ev(`(document.querySelector('#btnChanges').click(), 'ok')`);
+await sleep(500);
+const rows9 = await Q.ev(`[...document.querySelectorAll('#changesList .change')].map(r => r.querySelector('.label').textContent)`);
+const keep9 = await Q.ev(`({ days: document.querySelector('#keepDays').value, keep: document.querySelector('#keepCount').value, size: document.querySelector('#keepSize').textContent })`);
+await Q.ev(`(document.querySelector('#btnUndoAll').click(), 'ok')`);
+await Q.ev(`(document.querySelector('#btnUndoAllYes').click(), 'ok')`);
+const undone9 = await until(async () => (await Q.ev(`[...document.querySelectorAll('#changesList .change')].slice(0, 2).every(r => r.classList.contains('undone'))`)) && 'yes', 20000);
+check('the Changes view lists the session\'s changes, keeps backups 30 days / 200 changes, and Undo everything puts the card back byte for byte', rows9.length >= 2 && rows9[0].includes('personality') && keep9.days === '30' && keep9.keep === '200' && /MB/.test(keep9.size) && undone9 === 'yes' && sha(cardPath) === card9, JSON.stringify({ rows9, keep9, undone9 }));
+await Q.ev(`(document.querySelector('#keepDays').value = '7', document.querySelector('#keepCount').value = '50', document.querySelector('#btnKeepSave').click(), 'ok')`);
+await sleep(500);
+const kept9 = await Q.ev(`await (async () => JSON.stringify(await window.desktopPanel.invoke('backups')))()`).catch(e => String(e));
+await Q.ev(`(document.querySelector('#keepDays').value = '0', document.querySelector('#btnKeepSave').click(), 'ok')`);
+await sleep(500);
+const refused9 = await Q.ev(`document.querySelector('#keepSize').textContent`);
+await Q.ev(`(document.querySelector('#keepDays').value = '30', document.querySelector('#keepCount').value = '200', document.querySelector('#btnKeepSave').click(), document.querySelector('#btnChangesClose').click(), 'ok')`);
+check('how long backups are kept is saved, and nonsense refused', /"days":7/.test(kept9) && /"keep":50/.test(kept9) && /1 to 3650 days/.test(refused9), JSON.stringify({ kept9, refused9 }));
+
+// The same tray item twice is refused; what a lookup read can be shown.
+// (the first add must work: a refusal of everything would pass a one-sided check)
+const dup9 = await Q.ev(`await (async () => {
+    const spec = { kind: 'messages', from: 1, to: 2 };
+    let first;
+    try { first = await window.desktopPanel.invoke('contextAdd', spec); } catch (e) { return 'first add failed: ' + (e.message || e); }
+    let second = 'added twice';
+    try { await window.desktopPanel.invoke('contextAdd', spec); } catch (e) { second = String(e.message || e); }
+    await window.desktopPanel.invoke('contextRemove', first.id);
+    return second;
+})()`);
+fake.reply({ text: J('Looking.', { lookups: [{ tool: 'list_presets' }] }) });
+fake.reply({ text: J('There is one preset.') });
+await sendAndWait('Which presets do I have?');
+const read9 = await Q.ev(`(() => { const d = [...document.querySelectorAll('#log .step details.read')].at(-1); return d ? d.querySelector('pre').textContent : ''; })()`);
+check('the same tray item twice is refused; a lookup line shows what it read', /in the list already/.test(dup9) && /lookup_results/.test(read9) && /presets/.test(read9), JSON.stringify({ dup9, read9: read9.slice(0, 80) }));
+
+// Two changes to the same field in one reply: Apply all takes the first only.
+const scen9 = (await stCard()).data.scenario ?? '';
+fake.reply({ text: J('Two ideas for the scenario, and a tag.', { proposals: [
+    { op: 'edit_card', avatar: 'default_Seraphina.png', field: 'scenario', set: 'Scenario idea one.', why: 'Asked.' },
+    { op: 'edit_card', avatar: 'default_Seraphina.png', field: 'scenario', set: 'Scenario idea two.', why: 'Asked.' },
+    { op: 'edit_card', avatar: 'default_Seraphina.png', field: 'tags', set: ['b9-test'], why: 'Asked.' },
+] }) });
+await sendAndWait('Improve the card scenario and tags.');
+const same9 = await Q.ev(`[...document.querySelectorAll('#log .msg')].at(-1).querySelector('.applyall button')?.textContent || ''`);
+await Q.ev(`([...document.querySelectorAll('#log .msg')].at(-1).querySelector('.applyall button').click(), 'ok')`);
+const left9 = await Q.ev(`[...[...document.querySelectorAll('#log .msg')].at(-1).querySelectorAll('.applyall .confirm .item.left')].map(i => i.textContent)`);
+await Q.ev(`([...[...document.querySelectorAll('#log .msg')].at(-1).querySelectorAll('.applyall .confirm button')].find(b => /^Apply these/.test(b.textContent)).click(), 'ok')`);
+const done9 = await until(async () => { const s = await Q.ev(`[...[...document.querySelectorAll('#log .msg')].at(-1).querySelectorAll('.proposal')].map(c => c.querySelector('.state')?.textContent || 'open')`); return s.filter(x => x === 'Applied.').length === 2 && s; }, 20000);
+check('two changes to the same thing: Apply all takes the first and says why for the second', same9 === 'Apply all (2)…' && left9.length === 1 && /same thing/.test(left9[0]) && JSON.stringify(done9) === '["Applied.","open","Applied."]' && (await stCard()).data.scenario === 'Scenario idea one.', JSON.stringify({ same9, left9, done9 }));
+
+// "Keep it as it is now": that change is decided, and Undo everything passes over it.
+await P.ev(`await (async () => { const c = SillyTavern.getContext(); await fetch('/api/characters/merge-attributes', { method: 'POST', headers: c.getRequestHeaders(), body: JSON.stringify({ avatar: 'default_Seraphina.png', scenario: 'Edited by hand after the co-pilot.', data: { scenario: 'Edited by hand after the co-pilot.' } }) }); return 'ok'; })()`);
+const firstId = await Q.ev(`[...[...document.querySelectorAll('#log .msg')].at(-1).querySelectorAll('.proposal')][0].dataset.id`);
+await Q.ev(`([...document.querySelector('#log .proposal[data-id="${firstId}"]').querySelectorAll('button')].find(b => b.textContent === 'Undo').click(), 'ok')`);
+await until(() => Q.ev(`!!document.querySelector('#log .proposal[data-id="${firstId}"] .conflict')`), 20000);
+await Q.ev(`([...document.querySelector('#log .proposal[data-id="${firstId}"] .conflict').querySelectorAll('button')].find(b => /^Keep it/.test(b.textContent)).click(), 'ok')`);
+const kept9b = await until(async () => (await Q.ev(`document.querySelector('#log .proposal[data-id="${firstId}"] .state')?.textContent || ''`)) === 'Applied, kept as it is now.' && 'yes', 20000);
+const undoAll9 = await Q.ev(`await (async () => JSON.stringify(await window.desktopPanel.invoke('undoAll')))()`);
+const after9 = await stCard();
+check('a change kept as it is now is passed over by Undo everything; the rest is undone', kept9b === 'yes' && /"stopped":null/.test(undoAll9) && after9.data.scenario === 'Edited by hand after the co-pilot.' && JSON.stringify(after9.data.tags) !== '["b9-test"]', JSON.stringify({ kept9b, undoAll9, scen: after9.data.scenario, tags: after9.data.tags }));
+await P.ev(`await (async () => { const c = SillyTavern.getContext(); await fetch('/api/characters/merge-attributes', { method: 'POST', headers: c.getRequestHeaders(), body: JSON.stringify({ avatar: 'default_Seraphina.png', scenario: ${JSON.stringify(scen9)}, data: { scenario: ${JSON.stringify(scen9)} } }) }); return 'ok'; })()`);
 
 
 const before6 = fake.requests.length;

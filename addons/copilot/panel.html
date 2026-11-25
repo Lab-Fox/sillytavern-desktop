@@ -13,6 +13,7 @@
       <button id="btnNew" class="icon" title="New session">+</button>
       <button id="btnRename" class="icon" title="Rename">✎</button>
       <button id="btnDelete" class="icon" title="Delete">🗑</button>
+      <button id="btnChanges" class="icon" title="Changes made in this session">↺</button>
     </div>
     <div class="row" id="renameBox" hidden><input id="renameInput" maxlength="80"><button id="btnRenameOk">Save</button></div>
     <div class="row warn" id="deleteBox" hidden><span>Delete this session?</span><button id="btnDeleteYes">Delete</button><button id="btnDeleteNo">Keep</button></div>
@@ -57,6 +58,17 @@
   <div id="previewBox" hidden>
     <div class="row"><strong>The next request</strong><button id="btnPreviewClose">Close</button></div>
     <pre id="previewText"></pre>
+  </div>
+  <div id="changesBox" hidden>
+    <div class="row"><strong>Changes in this session</strong><button id="btnChangesClose">Close</button></div>
+    <div id="changesList"></div>
+    <div id="changesNote" class="note" hidden></div>
+    <div class="row" id="undoAllRow"><button id="btnUndoAll">Undo everything from this session</button></div>
+    <div class="row warn" id="undoAllAsk" hidden><span id="undoAllQ"></span><button id="btnUndoAllYes">Undo them</button><button id="btnUndoAllNo">Keep</button></div>
+    <div class="keep">
+      <div class="row">Keep backups for <input id="keepDays" type="number" min="1" max="3650"> days or the last <input id="keepCount" type="number" min="10" max="100000"> changes <button id="btnKeepSave">Save</button></div>
+      <div class="where" id="keepSize"></div>
+    </div>
   </div>
   <footer>
     <textarea id="input" rows="3" placeholder="Ask the co-pilot…"></textarea>

@@ -103,7 +103,10 @@ async function parts(page, item, ctx) {
             const got = await page('chatMessages', { from: a, to: Math.min(to, a + 499) });
             // Another chat opened meanwhile: nothing of it goes under this label.
             if (got.chatId !== r.chatId) throw new Error('Not the open chat any more.');
-            for (const m of got.messages) pieces.push(`#${m.index} ${m.name}${m.isUser ? ' (user)' : m.isSystem ? ' (system)' : ''}: ${m.text}`);
+            // A message's later lines are indented (every kind of line break), and a name stays on
+            // one line: a message can't start a line that looks like another message.
+            const BREAKS = /\r\n|[\r\n\u000b\u000c\u0085\u2028\u2029]/g;
+            for (const m of got.messages) pieces.push(`#${m.index} ${String(m.name).replace(BREAKS, ' ')}${m.isUser ? ' (user)' : m.isSystem ? ' (system)' : ''}: ${String(m.text).replace(BREAKS, '\n  ')}`);
         }
         return { head: head('messages', `${c.characterName || 'chat'}: messages ${from}–${to}`), pieces };
     }

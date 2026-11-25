@@ -74,6 +74,8 @@ function checkFile(folder, file) {
     const below = root ? relParts.slice(root.length) : [];
     if (!root || !below.length) throw outside();
     const rel = relParts.join('/');
+    // SillyTavern's API keys: a copy would sit in the add-on's folder.
+    if (root[0] === 'data' && below.length === 2 && below[1].toLowerCase() === 'secrets.json') throw new Error(`${rel} holds SillyTavern's API keys: it is never copied.`);
     for (const part of below) {
         if (part.includes(':') || /[. ]$/.test(part) || RESERVED.test(part)) throw new Error(`${rel}: that name can't be used on Windows.`);
     }
@@ -219,7 +221,11 @@ export function openJournal(addonDir) {
             }
             let names = [];
             try { names = fs.readdirSync(blobs); } catch { /* none */ }
-            for (const name of names) if (!used.has(name)) fs.rmSync(blobOf(name), { force: true });
+            // (a copy written in the last hour may belong to a record that is still being written)
+            for (const name of names) {
+                if (used.has(name)) continue;
+                try { if (Date.now() - fs.statSync(blobOf(name)).mtimeMs > ORPHAN_MS) fs.rmSync(blobOf(name), { force: true }); } catch { /* gone */ }
+            }
             return n;
         },
         // Bytes the copies take on disk.

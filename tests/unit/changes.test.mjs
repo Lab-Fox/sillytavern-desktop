@@ -70,6 +70,10 @@ test('refuses outside data/public', async () => {
     await j.record({ folder: root, kind: 'x', target: 'x', files: [path.join(root, 'public', 'scripts', 'extensions', 'third-party', 'my-ext', 'index.js')] });
     // odd Windows names
     for (const f of ['settings.json:stream', 'x.json.', 'x.json ', 'CON', 'nul.json']) await assert.rejects(() => j.record({ folder: root, kind: 'x', target: 'x', files: [path.join(user, f)] }), /name/i, f);
+    // The API keys file is never copied into an add-on's folder.
+    for (const f of ['secrets.json', 'SECRETS.JSON']) await assert.rejects(() => j.record({ folder: root, kind: 'x', target: 'x', files: [path.join(user, f)] }), /keys/i, f);
+    // A lorebook of the user's own that happens to be called "secrets" is fine.
+    await j.record({ folder: root, kind: 'x', target: 'x', files: [path.join(user, 'worlds', 'secrets.json')] });
 });
 
 test('refuses links and junctions', async () => {
@@ -231,6 +235,12 @@ test('the same file content is stored once', async () => {
     assert.equal(j.size(), fs.statSync(f).size);
     j.prune({ days: 0, keep: 1 }); // a goes, b keeps the copy
     assert.ok(fs.existsSync(j.safetyCopy(b, f)));
+    const copy = j.safetyCopy(b, f);
+    j.prune({ days: 0, keep: 0 });
+    // A copy from the last hour may belong to a record still being written: it stays a while.
+    assert.ok(fs.existsSync(copy), 'a fresh unused copy stays for now');
+    const old = new Date(Date.now() - 2 * 3600 * 1000);
+    fs.utimesSync(copy, old, old);
     j.prune({ days: 0, keep: 0 });
     assert.equal(j.size(), 0);
 });

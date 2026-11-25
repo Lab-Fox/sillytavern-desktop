@@ -59,8 +59,11 @@ export function skipWelcome(clone) {
     const file = path.join(clone, 'data', 'default-user', 'settings.json');
     try {
         const s = JSON.parse(fs.readFileSync(file, 'utf8'));
-        if (s.firstRun === false) return;
+        // Connection Manager on (a test that turns it off may not have saved turning it back on).
+        const off = s.extension_settings?.disabledExtensions || [];
+        if (s.firstRun === false && !off.includes('connection-manager')) return;
         s.firstRun = false;
+        if (s.extension_settings) s.extension_settings.disabledExtensions = off.filter(x => x !== 'connection-manager');
         fs.writeFileSync(file, JSON.stringify(s, null, 4));
     } catch { /* no settings yet: SillyTavern makes them */ }
 }

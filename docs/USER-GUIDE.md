@@ -76,6 +76,7 @@ Only **Windows 10 or 11**. SillyTavern needs [Node.js](https://nodejs.org/) 20 o
 **A better SillyTavern window**
 - Tabs for pages that SillyTavern or its extensions open: drag them into any order, or out into a window of their own. Plus full screen (**F11**), **always on top**, or **stay in background**.
 - **Writing helper** (an add-on from **Get add-ons**): a dictionary with adult and roleplay words, your own words and your characters' names; word suggestions above the text box; autocorrect that Backspace undoes. Stays on your PC.
+- **Co-pilot** (an add-on from **Get add-ons**): an assistant in a side panel that makes and fixes presets, cards, personas, lorebooks and chat messages for you, through your own AI connection. Every change waits for your click and can be undone.
 - **Chrome extensions** from the Chrome Web Store, such as LanguageTool for spelling and grammar, with their buttons in the top bar.
 - A **right-click menu** like a browser's: cut, copy, paste, paste as plain text, spelling suggestions, open links and images in a new tab, save or copy images, search the web for selected text.
 - Several SillyTavern at once, including a **read-only copy** to browse chats and presets without changing anything, and other installs on your PC side by side.
@@ -303,6 +304,18 @@ An add-on made with this app's extension system: install it from **Extensions �
 - Prefer Windows' own suggestions? Switch it to **Windows** in its panel.
 
 Details: [addons/writing-helper](../addons/writing-helper/README.md).
+
+#### Co-pilot
+
+An assistant in a side panel of the SillyTavern window that helps with presets, cards, personas, lorebooks and chats: install it from **Extensions → Desktop add-ons → Get add-ons**, turn it on, then click the panel button in the window's top bar.
+
+- **It uses your own AI connection:** pick one of SillyTavern's **Connection Profiles** in the panel; the line under it says where your messages go. Your preset's sampler settings are used; its prompts are only sent when you add that preset yourself.
+- **You choose what it sees:** a session starts with the last 20 messages of the open chat, its character's card and your persona; **+ Add** puts in other cards, chats, presets, personas or lorebooks; each line shows its size in tokens. **Show request** shows exactly what the next message sends. It can look more up by itself; every lookup is a line in the conversation, and **Show what it read** shows what went back to the AI.
+- **Nothing changes without your click:** each change is a card with what goes and what comes, and **Apply** / **Reject**. **Apply all** takes a reply's changes at once after listing them; deletes and anything your message didn't ask for ("not part of what you asked", for example an instruction hidden in a card) always need their own click.
+- **Everything can be undone:** before each change it keeps a copy, and **Undo** puts back just that item, even after you kept chatting. If you changed the item too, it shows both versions and lets you choose. **↺ Changes** lists the session's changes, with **Undo everything from this session**. Copies are kept 30 days or for the last 200 changes (you can change that there).
+- It works on this PC's SillyTavern, the one the launcher uses.
+
+Details: [addons/copilot](../addons/copilot/README.md).
 
 #### Chrome extensions
 
